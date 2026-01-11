@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useMemo, useState, useTransition } from 'react'
+import React, { useMemo, useState, useTransition, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { moveLeadToStageAction } from './actions'
 
@@ -31,11 +31,13 @@ function LeadCard({
   lead, 
   isDragging, 
   disabled, 
+  isOptimistic,
   onFinalize 
 }: { 
   lead: LeadRow; 
   isDragging?: boolean; 
   disabled?: boolean;
+  isOptimistic?: boolean;
   onFinalize?: (leadId: string, status: 'won' | 'lost') => void;
 }) {
   function formatDate(value: string | null) {
@@ -48,14 +50,28 @@ function LeadCard({
   return (
     <div
       style={{
-        border: '1px solid #eee',
+        border: isOptimistic ? '1px dashed #3b82f6' : '1px solid #eee',
         borderRadius: 10,
         padding: 10,
         background: '#fff',
         boxShadow: isDragging ? '0 5px 15px rgba(0,0,0,0.1)' : 'none',
-        opacity: disabled ? 0.6 : 1,
+        opacity: disabled || isOptimistic ? 0.6 : 1,
+        position: 'relative',
+        transition: 'all 0.2s ease',
       }}
     >
+      {isOptimistic && (
+        <div style={{
+          position: 'absolute',
+          top: 4,
+          right: 4,
+          width: 8,
+          height: 8,
+          borderRadius: '50%',
+          background: '#3b82f6',
+          animation: 'pulse 1.5s infinite'
+        }} />
+      )}
       <div style={{ fontWeight: 600 }}>{lead.title}</div>
 
       <div style={{ fontSize: 12, opacity: 0.7, marginTop: 4 }}>
@@ -66,7 +82,7 @@ function LeadCard({
         <div style={{ display: 'flex', gap: 6, marginTop: 10 }}>
           <button
             type="button"
-            disabled={disabled}
+            disabled={disabled || isOptimistic}
             style={{
               flex: 1,
               background: '#16a34a',
@@ -74,9 +90,9 @@ function LeadCard({
               border: 'none',
               borderRadius: 6,
               padding: '6px 8px',
-              cursor: disabled ? 'not-allowed' : 'pointer',
+              cursor: (disabled || isOptimistic) ? 'not-allowed' : 'pointer',
               fontSize: 12,
-              opacity: disabled ? 0.8 : 1,
+              opacity: (disabled || isOptimistic) ? 0.8 : 1,
             }}
             onClick={(e) => {
               e.preventDefault()
@@ -89,7 +105,7 @@ function LeadCard({
 
           <button
             type="button"
-            disabled={disabled}
+            disabled={disabled || isOptimistic}
             style={{
               flex: 1,
               background: '#dc2626',
@@ -97,9 +113,9 @@ function LeadCard({
               border: 'none',
               borderRadius: 6,
               padding: '6px 8px',
-              cursor: disabled ? 'not-allowed' : 'pointer',
+              cursor: (disabled || isOptimistic) ? 'not-allowed' : 'pointer',
               fontSize: 12,
-              opacity: disabled ? 0.8 : 1,
+              opacity: (disabled || isOptimistic) ? 0.8 : 1,
             }}
             onClick={(e) => {
               e.preventDefault()
@@ -111,6 +127,13 @@ function LeadCard({
           </button>
         </div>
       )}
+      <style>{`
+        @keyframes pulse {
+          0% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(59, 130, 246, 0.7); }
+          70% { transform: scale(1); box-shadow: 0 0 0 5px rgba(59, 130, 246, 0); }
+          100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(59, 130, 246, 0); }
+        }
+      `}</style>
     </div>
   )
 }
@@ -185,6 +208,12 @@ export function KanbanBoard({ pipelines, stages, leads, defaultPipelineId }: Pro
   const router = useRouter()
   const [isPending, startTransition] = useTransition()
   const [activeId, setActiveId] = useState<string | null>(null)
+  const [localLeads, setLocalLeads] = useState<LeadRow[]>(leads)
+
+  // Sync with server leads when they change (prop updates)
+  useEffect(() => {
+    setLocalLeads(leads)
+  }, [leads])
 
   const [pipelineId, setPipelineId] = useState<string>(
     defaultPipelineId ?? pipelines?.[0]?.id ?? ''
@@ -197,8 +226,8 @@ export function KanbanBoard({ pipelines, stages, leads, defaultPipelineId }: Pro
   }, [stages, pipelineId])
 
   const pipelineLeads = useMemo(() => {
-    return leads.filter((l) => l.pipeline_id === pipelineId && l.status === 'open')
-  }, [leads, pipelineId])
+    return localLeads.filter((l) => l.pipeline_id === pipelineId && l.status === 'open')
+  }, [localLeads, pipelineId])
 
   const activeLead = useMemo(() => {
     return pipelineLeads.find(l => l.id === activeId) || null
@@ -232,13 +261,24 @@ export function KanbanBoard({ pipelines, stages, leads, defaultPipelineId }: Pro
     if (lead.stage_id === toStageId) return
     if (!columns.some((c) => c.id === toStageId)) return
 
+    const originalStageId = lead.stage_id
+
+    // Optimistic Update: move in local state
+    setLocalLeads(prev => prev.map(l => 
+      l.id === leadId ? { ...l, stage_id: toStageId } : l
+    ))
+
     startTransition(async () => {
       try {
         await moveLeadToStageAction({ leadId, pipelineId, toStageId })
         router.refresh()
       } catch (err: any) {
         console.error('[onDragEnd] error:', err)
-        alert(err?.message ?? 'Erro ao mover lead. Veja o console/terminal.')
+        // Rollback on error
+        setLocalLeads(prev => prev.map(l => 
+          l.id === leadId ? { ...l, stage_id: originalStageId } : l
+        ))
+        alert(err?.message ?? 'Erro ao mover lead. A alteração foi revertida.')
       }
     })
   }
@@ -309,7 +349,12 @@ export function KanbanBoard({ pipelines, stages, leads, defaultPipelineId }: Pro
                 <SortableContext items={items.map(i => i.id)} strategy={verticalListSortingStrategy}>
                   {items.map((l) => (
                     <DraggableCard key={l.id} id={l.id} disabled={isPending || l.status !== 'open'}>
-                      <LeadCard lead={l} disabled={isPending || l.status !== 'open'} onFinalize={onFinalizeLead} />
+                      <LeadCard 
+                        lead={l} 
+                        disabled={isPending || l.status !== 'open'} 
+                        isOptimistic={isPending && activeId === null && leads.find(sl => sl.id === l.id)?.stage_id !== l.stage_id}
+                        onFinalize={onFinalizeLead} 
+                      />
                     </DraggableCard>
                   ))}
                 </SortableContext>
