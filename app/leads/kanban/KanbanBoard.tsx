@@ -102,6 +102,8 @@ function LeadCard({
               cursor: (disabled || isOptimistic) ? 'not-allowed' : 'pointer',
               fontSize: 12,
             }}
+            onPointerDown={(e) => e.stopPropagation()}
+            onMouseDown={(e) => e.stopPropagation()}
             onClick={(e) => {
               e.preventDefault()
               e.stopPropagation()
@@ -123,6 +125,8 @@ function LeadCard({
               cursor: (disabled || isOptimistic) ? 'not-allowed' : 'pointer',
               fontSize: 12,
             }}
+            onPointerDown={(e) => e.stopPropagation()}
+            onMouseDown={(e) => e.stopPropagation()}
             onClick={(e) => {
               e.preventDefault()
               e.stopPropagation()
