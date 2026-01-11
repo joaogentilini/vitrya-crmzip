@@ -108,9 +108,10 @@ function LeadCard({
               opacity: (disabled || isOptimistic) ? 0.8 : 1,
             }}
             onClick={(e) => {
+              console.log('Ganhar clicked for lead:', lead.id)
               e.preventDefault()
               e.stopPropagation()
-              onFinalize(lead.id, 'won')
+              if (onFinalize) onFinalize(lead.id, 'won')
             }}
           >
             Ganhar
@@ -131,9 +132,10 @@ function LeadCard({
               opacity: (disabled || isOptimistic) ? 0.8 : 1,
             }}
             onClick={(e) => {
+              console.log('Perder clicked for lead:', lead.id)
               e.preventDefault()
               e.stopPropagation()
-              onFinalize(lead.id, 'lost')
+              if (onFinalize) onFinalize(lead.id, 'lost')
             }}
           >
             Perder
