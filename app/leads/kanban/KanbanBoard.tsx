@@ -40,10 +40,23 @@ function LeadCard({
   isOptimistic?: boolean;
   onFinalize?: (leadId: string, status: 'won' | 'lost') => void;
 }) {
+  const [mounted, setMounted] = React.useState(false)
+
+  React.useEffect(() => {
+    setMounted(true)
+  }, [])
+
   function formatDate(value: string | null) {
     if (!value) return '—'
     const d = new Date(value)
     if (Number.isNaN(d.getTime())) return '—'
+    
+    // Fix hydration mismatch: render deterministic output on server
+    // and locale string only on client
+    if (!mounted) {
+      return d.toISOString().split('T')[0] // or simply '...'
+    }
+    
     return d.toLocaleString()
   }
 
