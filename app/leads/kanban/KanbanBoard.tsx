@@ -40,9 +40,9 @@ function LeadCard({
   isOptimistic?: boolean;
   onFinalize?: (leadId: string, status: 'won' | 'lost') => void;
 }) {
-  const [mounted, setMounted] = React.useState(false)
+  const [mounted, setMounted] = useState(false)
 
-  React.useEffect(() => {
+  useEffect(() => {
     setMounted(true)
   }, [])
 
@@ -51,12 +51,8 @@ function LeadCard({
     const d = new Date(value)
     if (Number.isNaN(d.getTime())) return '—'
     
-    // Fix hydration mismatch: render deterministic output on server
-    // and locale string only on client
-    if (!mounted) {
-      return d.toISOString().split('T')[0] // or simply '...'
-    }
-    
+    // Determinístico no servidor (ISO) e local no cliente
+    if (!mounted) return d.toISOString().split('T')[0]
     return d.toLocaleString()
   }
 
@@ -105,18 +101,15 @@ function LeadCard({
               padding: '6px 8px',
               cursor: (disabled || isOptimistic) ? 'not-allowed' : 'pointer',
               fontSize: 12,
-              opacity: (disabled || isOptimistic) ? 0.8 : 1,
             }}
             onClick={(e) => {
-              console.log('Ganhar clicked for lead:', lead.id)
               e.preventDefault()
               e.stopPropagation()
-              if (onFinalize) onFinalize(lead.id, 'won')
+              onFinalize(lead.id, 'won')
             }}
           >
             Ganhar
           </button>
-
           <button
             type="button"
             disabled={disabled || isOptimistic}
@@ -129,13 +122,11 @@ function LeadCard({
               padding: '6px 8px',
               cursor: (disabled || isOptimistic) ? 'not-allowed' : 'pointer',
               fontSize: 12,
-              opacity: (disabled || isOptimistic) ? 0.8 : 1,
             }}
             onClick={(e) => {
-              console.log('Perder clicked for lead:', lead.id)
               e.preventDefault()
               e.stopPropagation()
-              if (onFinalize) onFinalize(lead.id, 'lost')
+              onFinalize(lead.id, 'lost')
             }}
           >
             Perder
@@ -213,7 +204,6 @@ function DroppableColumn({
         <strong style={{ color: isOver ? '#1d4ed8' : 'inherit' }}>{title}</strong>
         <span style={{ opacity: 0.7 }}>{count}</span>
       </div>
-
       <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>{children}</div>
     </div>
   )
@@ -225,7 +215,6 @@ export function KanbanBoard({ pipelines, stages, leads, defaultPipelineId }: Pro
   const [activeId, setActiveId] = useState<string | null>(null)
   const [localLeads, setLocalLeads] = useState<LeadRow[]>(leads)
 
-  // Sync with server leads when they change (prop updates)
   useEffect(() => {
     setLocalLeads(leads)
   }, [leads])
@@ -271,29 +260,19 @@ export function KanbanBoard({ pipelines, stages, leads, defaultPipelineId }: Pro
     const toStageId = String(over.id)
 
     const lead = pipelineLeads.find((l) => l.id === leadId)
-    if (!lead) return
-    if (lead.status !== 'open') return
-    if (lead.stage_id === toStageId) return
+    if (!lead || lead.status !== 'open' || lead.stage_id === toStageId) return
     if (!columns.some((c) => c.id === toStageId)) return
 
     const originalStageId = lead.stage_id
-
-    // Optimistic Update: move in local state
-    setLocalLeads(prev => prev.map(l => 
-      l.id === leadId ? { ...l, stage_id: toStageId } : l
-    ))
+    setLocalLeads(prev => prev.map(l => l.id === leadId ? { ...l, stage_id: toStageId } : l))
 
     startTransition(async () => {
       try {
         await moveLeadToStageAction({ leadId, pipelineId, toStageId })
         router.refresh()
       } catch (err: any) {
-        console.error('[onDragEnd] error:', err)
-        // Rollback on error
-        setLocalLeads(prev => prev.map(l => 
-          l.id === leadId ? { ...l, stage_id: originalStageId } : l
-        ))
-        alert(err?.message ?? 'Erro ao mover lead. A alteração foi revertida.')
+        setLocalLeads(prev => prev.map(l => l.id === leadId ? { ...l, stage_id: originalStageId } : l))
+        alert(err?.message || 'Erro ao mover lead.')
       }
     })
   }
@@ -301,22 +280,16 @@ export function KanbanBoard({ pipelines, stages, leads, defaultPipelineId }: Pro
   function onFinalizeLead(leadId: string, status: 'won' | 'lost') {
     startTransition(async () => {
       try {
-        const msg = status === 'won' ? 'Marcar lead como GANHO?' : 'Marcar lead como PERDIDO?'
-        if (!confirm(msg)) return
-
+        if (!confirm(`Marcar como ${status === 'won' ? 'ganho' : 'perdido'}?`)) return
         const resp = await fetch('/api/leads/finalize', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ leadId, status }),
         })
-
-        const json = await resp.json()
-        if (!resp.ok) throw new Error(json?.error ?? 'Erro ao finalizar lead')
-
+        if (!resp.ok) throw new Error('Erro ao finalizar lead')
         router.refresh()
       } catch (err: any) {
-        console.error('[onFinalizeLead] error:', err)
-        alert(err?.message ?? 'Erro ao finalizar lead. Veja o console/terminal.')
+        alert(err?.message || 'Erro ao finalizar lead.')
       }
     })
   }
@@ -324,73 +297,32 @@ export function KanbanBoard({ pipelines, stages, leads, defaultPipelineId }: Pro
   return (
     <div style={{ marginTop: 16 }}>
       <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-        <div style={{ fontSize: 14, opacity: 0.8 }}>Pipeline:</div>
-        <select
-          value={pipelineId}
-          onChange={(e) => setPipelineId(e.target.value)}
-          disabled={isPending || pipelines.length === 0}
-          style={{ padding: 8, minWidth: 260 }}
-        >
-          {pipelines.map((p) => (
-            <option key={p.id} value={p.id}>
-              {p.name}
-            </option>
-          ))}
+        <span>Pipeline:</span>
+        <select value={pipelineId} onChange={(e) => setPipelineId(e.target.value)} disabled={isPending}>
+          {pipelines.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
         </select>
-        {isPending && <span style={{ fontSize: 12, opacity: 0.7 }}>Atualizando...</span>}
       </div>
 
-      <DndContext 
-        collisionDetection={closestCenter} 
-        onDragStart={onDragStart}
-        onDragEnd={onDragEnd}
-      >
-        <div
-          style={{
-            display: 'flex',
-            gap: 12,
-            marginTop: 16,
-            overflowX: 'auto',
-            paddingBottom: 8,
-          }}
-        >
+      <DndContext collisionDetection={closestCenter} onDragStart={onDragStart} onDragEnd={onDragEnd}>
+        <div style={{ display: 'flex', gap: 12, marginTop: 16, overflowX: 'auto', paddingBottom: 8 }}>
           {columns.map((col) => {
-            const items = (leadsByStage.get(col.id) ?? []).sort((a, b) =>
-              (b.created_at ?? '').localeCompare(a.created_at ?? '')
-            )
-
+            const items = (leadsByStage.get(col.id) ?? []).sort((a, b) => (b.created_at ?? '').localeCompare(a.created_at ?? ''))
             return (
               <DroppableColumn key={col.id} id={col.id} title={col.name} count={items.length}>
                 <SortableContext items={items.map(i => i.id)} strategy={verticalListSortingStrategy}>
                   {items.map((l) => (
-                    <DraggableCard key={l.id} id={l.id} disabled={isPending || l.status !== 'open'}>
-                      <LeadCard 
-                        lead={l} 
-                        disabled={isPending || l.status !== 'open'} 
-                        isOptimistic={isPending && activeId === null && leads.find(sl => sl.id === l.id)?.stage_id !== l.stage_id}
-                        onFinalize={onFinalizeLead} 
-                      />
+                    <DraggableCard key={l.id} id={l.id} disabled={isPending}>
+                      <LeadCard lead={l} disabled={isPending} isOptimistic={isPending && activeId === null && leads.find(sl => sl.id === l.id)?.stage_id !== l.stage_id} onFinalize={onFinalizeLead} />
                     </DraggableCard>
                   ))}
                 </SortableContext>
-
                 {!items.length && <div style={{ fontSize: 12, opacity: 0.6 }}>Sem leads</div>}
               </DroppableColumn>
             )
           })}
         </div>
-        <DragOverlay dropAnimation={{
-          sideEffects: defaultDropAnimationSideEffects({
-            styles: {
-              active: {
-                opacity: '0.5',
-              },
-            },
-          }),
-        }}>
-          {activeLead ? (
-            <LeadCard lead={activeLead} isDragging />
-          ) : null}
+        <DragOverlay dropAnimation={{ sideEffects: defaultDropAnimationSideEffects({ styles: { active: { opacity: '0.5' } } }) }}>
+          {activeLead ? <LeadCard lead={activeLead} isDragging /> : null}
         </DragOverlay>
       </DndContext>
     </div>

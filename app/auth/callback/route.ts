@@ -10,10 +10,11 @@ export async function GET(request: Request) {
     const supabase = await createClient()
     const { error } = await supabase.auth.exchangeCodeForSession(code)
     if (!error) {
+      // Redireciona para a rota desejada (ex: /leads ou /auth/reset)
       return NextResponse.redirect(`${origin}${next}`)
     }
   }
 
-  // Return the user to an error page with instructions
+  // Fallback em caso de erro no exchange
   return NextResponse.redirect(`${origin}/auth/auth-code-error`)
 }

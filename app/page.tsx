@@ -1,46 +1,60 @@
-"use client";
+'use client'
 
-import { useEffect, useState } from "react";
-import { supabase } from "../lib/supabaseClient";
+import { useEffect, useState } from 'react'
+import { supabase } from '../lib/supabaseClient'
 
 export default function HomePage() {
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [userEmail, setUserEmail] = useState<string | null>(null);
-  const [status, setStatus] = useState("");
+  const [email, setEmail] = useState('')
+  const [password, setPassword] = useState('')
+  const [userEmail, setUserEmail] = useState<string | null>(null)
+  const [status, setStatus] = useState('')
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => {
-      setUserEmail(data.session?.user?.email ?? null);
-    });
+      setUserEmail(data.session?.user?.email ?? null)
+    })
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      setUserEmail(session?.user?.email ?? null);
-    });
+      setUserEmail(session?.user?.email ?? null)
+    })
 
     return () => {
-      subscription.unsubscribe();
-    };
-  }, []);
+      subscription.unsubscribe()
+    }
+  }, [])
 
   async function signIn() {
-    setStatus("Entrando...");
+    setStatus('Entrando...')
     const { error } = await supabase.auth.signInWithPassword({
       email,
       password,
-    });
+    })
     
     if (!error) {
-      setStatus("Logado com sucesso. Redirecionando...");
-      window.location.href = "/leads";
+      setStatus('Logado com sucesso. Sincronizando sessão...')
+      // Forçamos o reload para o callback/leads para garantir que o middleware/cookies SSR funcionem
+      window.location.href = '/leads'
     } else {
-      setStatus(`Erro: ${error.message}`);
+      setStatus(`Erro: ${error.message}`)
     }
   }
 
+  async function resetPassword() {
+    if (!email) {
+      setStatus('Informe o email para recuperar a senha.')
+      return
+    }
+    setStatus('Enviando link...')
+    const { error } = await supabase.auth.resetPasswordForEmail(email, {
+      redirectTo: `${window.location.origin}/auth/callback?next=/auth/reset`,
+    })
+    if (error) setStatus(`Erro: ${error.message}`)
+    else setStatus('Link de recuperação enviado para o email.')
+  }
+
   async function signOut() {
-    await supabase.auth.signOut();
-    setUserEmail(null);
+    await supabase.auth.signOut()
+    setUserEmail(null)
   }
 
   if (userEmail) {
@@ -53,11 +67,11 @@ export default function HomePage() {
           Sair
         </button>
 
-        <hr style={{ margin: "24px 0" }} />
+        <hr style={{ margin: '24px 0' }} />
 
         <a href="/leads">Ir para Leads</a>
       </main>
-    );
+    )
   }
 
   return (
@@ -68,7 +82,7 @@ export default function HomePage() {
         placeholder="Email"
         value={email}
         onChange={(e) => setEmail(e.target.value)}
-        style={{ width: "100%", padding: 10, marginBottom: 12 }}
+        style={{ width: '100%', padding: 10, marginBottom: 12 }}
       />
 
       <input
@@ -76,14 +90,19 @@ export default function HomePage() {
         type="password"
         value={password}
         onChange={(e) => setPassword(e.target.value)}
-        style={{ width: "100%", padding: 10, marginBottom: 12 }}
+        style={{ width: '100%', padding: 10, marginBottom: 12 }}
       />
 
-      <button onClick={signIn} style={{ width: "100%", padding: 10 }}>
-        Entrar
-      </button>
+      <div style={{ display: 'flex', gap: 8 }}>
+        <button onClick={signIn} style={{ flex: 1, padding: 10 }}>
+          Entrar
+        </button>
+        <button onClick={resetPassword} style={{ flex: 1, padding: 10, background: '#f3f4f6', border: '1px solid #ccc' }}>
+          Esqueci Senha
+        </button>
+      </div>
 
       <p style={{ marginTop: 12 }}>{status}</p>
     </main>
-  );
+  )
 }

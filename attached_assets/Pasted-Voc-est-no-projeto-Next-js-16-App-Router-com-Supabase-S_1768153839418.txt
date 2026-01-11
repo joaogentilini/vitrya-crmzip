@@ -1,0 +1,62 @@
+Você está no projeto Next.js 16 (App Router) com Supabase SSR. O app está no Replit e roda em:
+DEV URL (spock): https://922b1465-19cc-4a06-8409-2f63c03ac2d0-00-3mrljbh8zid2i.spock.replit.dev:5000
+e também pode existir URL deploy: https://vitrya-crmzip--joaovitryaimove.replit.app
+
+Objetivo: deixar o projeto 100% testável no Replit (login, /leads, criar lead, kanban, ganhar/perder) sem erros:
+- corrigir "Invalid Server Actions request"
+- corrigir inconsistência de sessão (home logado mas /leads não)
+- corrigir fluxo de reset password/magic link que está caindo em "Não encontrado"
+- manter melhorias do Kanban sem quebrar hidratação/eventos
+
+Regras:
+- NÃO mudar schema do banco
+- NÃO adicionar dependências
+- NÃO remover router.refresh(), apenas complementar se necessário
+- mudanças incrementais; sempre explicar o que fez e onde
+- atualizar next.config corretamente para Replit
+
+Checklist técnico para executar:
+1) GARANTIR que só existe UM Next dev rodando:
+   - identificar processos "next dev" e finalizar o extra
+   - limpar cache com "rm -rf .next"
+   - subir novamente com "npm run dev -- -p 5000"
+   - confirmar que não aparece "Unable to acquire lock ... .next/dev/lock"
+
+2) Corrigir Server Actions invalid request:
+   - configurar next.config.ts com:
+     experimental.serverActions.allowedOrigins contendo os HOSTS corretos (sem path) para:
+       922b1465-...spock.replit.dev
+       vitrya-crmzip--joaovitryaimove.replit.app
+     - configurar allowedDevOrigins com os mesmos hosts
+   - verificar se a navegação está usando host consistente (não misturar localhost, spock e replit.app no mesmo teste)
+   - se necessário, definir NEXT_SERVER_ACTIONS_ENCRYPTION_KEY no .env.local para estabilizar IDs das actions entre restarts (sem libs novas)
+
+3) Corrigir autenticação SSR de vez:
+   - garantir que existe app/auth/callback/route.ts com code exchange (PKCE) e set de cookies
+   - garantir que o login do app/page.tsx redireciona para /auth/callback (ou para /leads após callback) e não deixa a sessão só no client
+   - no /leads, supabaseServer.createClient deve ler cookies corretamente (já existe), validar que getUser retorna user
+
+4) Corrigir Reset Password/Magic Link (evitar "Não encontrado"):
+   - criar rotas/pages necessárias para o retorno do Supabase:
+     a) /auth/callback (já acima)
+     b) /auth/reset (página client) que:
+        - lê tokens da URL (hash/query conforme o retorno)
+        - permite definir nova senha via supabase.auth.updateUser({ password })
+        - após sucesso, redireciona para /leads
+   - garantir que o Supabase redirectUrl usado nas chamadas aponta para:
+     DEV: https://922b1465-...spock.replit.dev:5000/auth/callback (e/ou /auth/reset para recovery)
+     PROD: https://vitrya-crmzip--joaovitryaimove.replit.app/auth/callback
+
+5) Corrigir hydration mismatch restante no Kanban:
+   - remover render de datas em locale no server (render determinístico no server e formatar no client depois)
+   - evitar atributos variáveis no SSR que mudam por render (aria-describedby do dnd-kit é comum; mitigar com mount guard no trecho que depende do dnd-kit se necessário)
+
+6) Validar o CreateLead (sem quebrar):
+   - resolver "Invalid Server Actions request" ao clicar Criar Lead
+   - se pipeline/stage não atualizarem corretamente, ajustar o estado do stageId para sempre acompanhar pipelineId (useEffect ao mudar pipelineId para setar primeiro stage daquele pipeline)
+
+Entregáveis:
+- lista de arquivos alterados
+- como testar: login -> /leads -> criar lead -> kanban drag -> ganhar/perder
+- print/log do terminal confirmando endpoints e ausência de erros
+Antes de terminar, rode os testes manuais e confirme que cada passo funciona.
