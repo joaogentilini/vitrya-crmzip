@@ -73,4 +73,7 @@ The application uses a pipeline-based lead management system:
 - **Date Formatting**: Server renders ISO dates, client renders locale-formatted dates after mount to prevent hydration mismatches
 
 ### Configuration
-- **next.config.ts**: Configured `serverActions.allowedOrigins` for Replit deployment hosts
+- **next.config.ts**: Configured `allowedDevOrigins` and `serverActions.allowedOrigins` for Replit deployment hosts
+- **Auth Error Page**: Added `/auth/auth-code-error` for graceful error handling
+- **ClientDate Component**: Created `app/leads/ClientDate.tsx` for hydration-safe date rendering
+- **CRLF Line Endings**: Fixed Windows-style line endings in all source files
