@@ -14,12 +14,12 @@ export default function HomePage() {
       setUserEmail(data.session?.user?.email ?? null);
     });
 
-    const { data: sub } = supabase.auth.onAuthStateChange((_event, session) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       setUserEmail(session?.user?.email ?? null);
     });
 
     return () => {
-      sub.subscription.unsubscribe();
+      subscription.unsubscribe();
     };
   }, []);
 
@@ -29,7 +29,13 @@ export default function HomePage() {
       email,
       password,
     });
-    setStatus(error ? `Erro: ${error.message}` : "Logado com sucesso");
+    
+    if (!error) {
+      setStatus("Logado com sucesso. Redirecionando...");
+      window.location.href = "/leads";
+    } else {
+      setStatus(`Erro: ${error.message}`);
+    }
   }
 
   async function signOut() {
