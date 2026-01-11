@@ -4,9 +4,9 @@ import React, { useMemo, useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import { moveLeadToStageAction } from './actions'
 
-import { DndContext, closestCenter, DragEndEvent } from '@dnd-kit/core'
+import { DndContext, closestCenter, DragEndEvent, DragOverlay, DragStartEvent, defaultDropAnimationSideEffects } from '@dnd-kit/core'
 import { useDroppable } from '@dnd-kit/core'
-import { useSortable } from '@dnd-kit/sortable'
+import { useSortable, SortableContext, verticalListSortingStrategy } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
 
 type PipelineRow = { id: string; name: string }
@@ -27,6 +27,94 @@ type Props = {
   defaultPipelineId: string | null
 }
 
+function LeadCard({ 
+  lead, 
+  isDragging, 
+  disabled, 
+  onFinalize 
+}: { 
+  lead: LeadRow; 
+  isDragging?: boolean; 
+  disabled?: boolean;
+  onFinalize?: (leadId: string, status: 'won' | 'lost') => void;
+}) {
+  function formatDate(value: string | null) {
+    if (!value) return '—'
+    const d = new Date(value)
+    if (Number.isNaN(d.getTime())) return '—'
+    return d.toLocaleString()
+  }
+
+  return (
+    <div
+      style={{
+        border: '1px solid #eee',
+        borderRadius: 10,
+        padding: 10,
+        background: '#fff',
+        boxShadow: isDragging ? '0 5px 15px rgba(0,0,0,0.1)' : 'none',
+        opacity: disabled ? 0.6 : 1,
+      }}
+    >
+      <div style={{ fontWeight: 600 }}>{lead.title}</div>
+
+      <div style={{ fontSize: 12, opacity: 0.7, marginTop: 4 }}>
+        {formatDate(lead.created_at)}
+      </div>
+
+      {lead.status === 'open' && onFinalize && (
+        <div style={{ display: 'flex', gap: 6, marginTop: 10 }}>
+          <button
+            type="button"
+            disabled={disabled}
+            style={{
+              flex: 1,
+              background: '#16a34a',
+              color: '#fff',
+              border: 'none',
+              borderRadius: 6,
+              padding: '6px 8px',
+              cursor: disabled ? 'not-allowed' : 'pointer',
+              fontSize: 12,
+              opacity: disabled ? 0.8 : 1,
+            }}
+            onClick={(e) => {
+              e.preventDefault()
+              e.stopPropagation()
+              onFinalize(lead.id, 'won')
+            }}
+          >
+            Ganhar
+          </button>
+
+          <button
+            type="button"
+            disabled={disabled}
+            style={{
+              flex: 1,
+              background: '#dc2626',
+              color: '#fff',
+              border: 'none',
+              borderRadius: 6,
+              padding: '6px 8px',
+              cursor: disabled ? 'not-allowed' : 'pointer',
+              fontSize: 12,
+              opacity: disabled ? 0.8 : 1,
+            }}
+            onClick={(e) => {
+              e.preventDefault()
+              e.stopPropagation()
+              onFinalize(lead.id, 'lost')
+            }}
+          >
+            Perder
+          </button>
+        </div>
+      )}
+    </div>
+  )
+}
+
 function DraggableCard({
   id,
   disabled,
@@ -40,9 +128,9 @@ function DraggableCard({
     useSortable({ id, disabled: !!disabled })
 
   const style: React.CSSProperties = {
-    transform: CSS.Transform.toString(transform),
+    transform: CSS.Translate.toString(transform),
     transition,
-    opacity: isDragging ? 0.6 : disabled ? 0.6 : 1,
+    opacity: isDragging ? 0.3 : 1,
     cursor: disabled ? 'not-allowed' : 'grab',
   }
 
@@ -76,14 +164,15 @@ function DroppableColumn({
       ref={setNodeRef}
       style={{
         minWidth: 280,
-        border: '1px solid #e5e5e5',
+        border: isOver ? '2px solid #3b82f6' : '1px solid #e5e5e5',
         borderRadius: 10,
         padding: 12,
-        background: isOver ? '#f7f7f7' : '#fff',
+        background: isOver ? '#eff6ff' : '#f9fafb',
+        transition: 'all 0.2s ease',
       }}
     >
       <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 10 }}>
-        <strong>{title}</strong>
+        <strong style={{ color: isOver ? '#1d4ed8' : 'inherit' }}>{title}</strong>
         <span style={{ opacity: 0.7 }}>{count}</span>
       </div>
 
@@ -95,6 +184,7 @@ function DroppableColumn({
 export function KanbanBoard({ pipelines, stages, leads, defaultPipelineId }: Props) {
   const router = useRouter()
   const [isPending, startTransition] = useTransition()
+  const [activeId, setActiveId] = useState<string | null>(null)
 
   const [pipelineId, setPipelineId] = useState<string>(
     defaultPipelineId ?? pipelines?.[0]?.id ?? ''
@@ -106,10 +196,13 @@ export function KanbanBoard({ pipelines, stages, leads, defaultPipelineId }: Pro
       .sort((a, b) => a.position - b.position)
   }, [stages, pipelineId])
 
-  // 6.4: Filtrar por pipeline + status=open (não poluir o kanban)
   const pipelineLeads = useMemo(() => {
     return leads.filter((l) => l.pipeline_id === pipelineId && l.status === 'open')
   }, [leads, pipelineId])
+
+  const activeLead = useMemo(() => {
+    return pipelineLeads.find(l => l.id === activeId) || null
+  }, [pipelineLeads, activeId])
 
   const leadsByStage = useMemo(() => {
     const map = new Map<string, LeadRow[]>()
@@ -121,14 +214,12 @@ export function KanbanBoard({ pipelines, stages, leads, defaultPipelineId }: Pro
     return map
   }, [pipelineLeads])
 
-  function formatDate(value: string | null) {
-    if (!value) return '—'
-    const d = new Date(value)
-    if (Number.isNaN(d.getTime())) return '—'
-    return d.toLocaleString()
+  function onDragStart(event: DragStartEvent) {
+    setActiveId(String(event.active.id))
   }
 
   function onDragEnd(event: DragEndEvent) {
+    setActiveId(null)
     const { active, over } = event
     if (!over) return
 
@@ -194,7 +285,11 @@ export function KanbanBoard({ pipelines, stages, leads, defaultPipelineId }: Pro
         {isPending && <span style={{ fontSize: 12, opacity: 0.7 }}>Atualizando...</span>}
       </div>
 
-      <DndContext collisionDetection={closestCenter} onDragEnd={onDragEnd}>
+      <DndContext 
+        collisionDetection={closestCenter} 
+        onDragStart={onDragStart}
+        onDragEnd={onDragEnd}
+      >
         <div
           style={{
             display: 'flex',
@@ -211,80 +306,32 @@ export function KanbanBoard({ pipelines, stages, leads, defaultPipelineId }: Pro
 
             return (
               <DroppableColumn key={col.id} id={col.id} title={col.name} count={items.length}>
-                {items.map((l) => (
-                  <DraggableCard key={l.id} id={l.id} disabled={isPending || l.status !== 'open'}>
-                    <div
-                      style={{
-                        border: '1px solid #eee',
-                        borderRadius: 10,
-                        padding: 10,
-                        background: '#fff',
-                      }}
-                    >
-                      <div style={{ fontWeight: 600 }}>{l.title}</div>
-
-                      <div style={{ fontSize: 12, opacity: 0.7, marginTop: 4 }}>
-                        {formatDate(l.created_at)}
-                      </div>
-
-                      {l.status === 'open' && (
-                        <div style={{ display: 'flex', gap: 6, marginTop: 10 }}>
-                          <button
-                            type="button"
-                            disabled={isPending}
-                            style={{
-                              flex: 1,
-                              background: '#16a34a',
-                              color: '#fff',
-                              border: 'none',
-                              borderRadius: 6,
-                              padding: '6px 8px',
-                              cursor: isPending ? 'not-allowed' : 'pointer',
-                              fontSize: 12,
-                              opacity: isPending ? 0.8 : 1,
-                            }}
-                            onClick={(e) => {
-                              e.preventDefault()
-                              e.stopPropagation()
-                              onFinalizeLead(l.id, 'won')
-                            }}
-                          >
-                            Ganhar
-                          </button>
-
-                          <button
-                            type="button"
-                            disabled={isPending}
-                            style={{
-                              flex: 1,
-                              background: '#dc2626',
-                              color: '#fff',
-                              border: 'none',
-                              borderRadius: 6,
-                              padding: '6px 8px',
-                              cursor: isPending ? 'not-allowed' : 'pointer',
-                              fontSize: 12,
-                              opacity: isPending ? 0.8 : 1,
-                            }}
-                            onClick={(e) => {
-                              e.preventDefault()
-                              e.stopPropagation()
-                              onFinalizeLead(l.id, 'lost')
-                            }}
-                          >
-                            Perder
-                          </button>
-                        </div>
-                      )}
-                    </div>
-                  </DraggableCard>
-                ))}
+                <SortableContext items={items.map(i => i.id)} strategy={verticalListSortingStrategy}>
+                  {items.map((l) => (
+                    <DraggableCard key={l.id} id={l.id} disabled={isPending || l.status !== 'open'}>
+                      <LeadCard lead={l} disabled={isPending || l.status !== 'open'} onFinalize={onFinalizeLead} />
+                    </DraggableCard>
+                  ))}
+                </SortableContext>
 
                 {!items.length && <div style={{ fontSize: 12, opacity: 0.6 }}>Sem leads</div>}
               </DroppableColumn>
             )
           })}
         </div>
+        <DragOverlay dropAnimation={{
+          sideEffects: defaultDropAnimationSideEffects({
+            styles: {
+              active: {
+                opacity: '0.5',
+              },
+            },
+          }),
+        }}>
+          {activeLead ? (
+            <LeadCard lead={activeLead} isDragging />
+          ) : null}
+        </DragOverlay>
       </DndContext>
     </div>
   )
