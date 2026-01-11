@@ -57,3 +57,20 @@ The application uses a pipeline-based lead management system:
 
 ### UI Libraries
 - `@dnd-kit/core`, `@dnd-kit/sortable`, `@dnd-kit/utilities`: Drag-and-drop functionality for Kanban board
+
+## Recent Changes (January 2026)
+
+### UX Improvements
+- **Optimistic UI Updates**: Lead movements in Kanban board update instantly with automatic rollback on server failure
+- **DragOverlay**: Visual feedback showing the lead card being dragged
+- **Ganhar/Perder Buttons**: Fixed button clicks inside draggable cards by stopping pointer event propagation
+
+### Authentication Fixes
+- **Auth Callback Route**: Added `/auth/callback` route handler for Supabase code exchange (fixes SSR auth mismatch)
+- **Password Reset Flow**: Added `/auth/reset` page for password recovery
+
+### Hydration Fixes
+- **Date Formatting**: Server renders ISO dates, client renders locale-formatted dates after mount to prevent hydration mismatches
+
+### Configuration
+- **next.config.ts**: Configured `serverActions.allowedOrigins` for Replit deployment hosts
