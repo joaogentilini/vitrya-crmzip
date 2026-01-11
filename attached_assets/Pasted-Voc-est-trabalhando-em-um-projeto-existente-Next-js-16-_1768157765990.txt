@@ -1,0 +1,75 @@
+Você está trabalhando em um projeto existente Next.js 16 (App Router) + Supabase SSR (@supabase/ssr) rodando no Replit.
+Objetivo: deixar o app 100% testável no Replit (dev), corrigindo:
+1) "Invalid Server Actions request" ao criar lead / executar actions
+2) Sessão inconsistente (home mostra usuário, /leads às vezes vira não autenticado)
+3) Links de reset de senha retornando "Não encontrado"
+4) Hydration mismatch no Kanban (atributos aria e datas) que pode quebrar event handlers
+
+REGRAS (obrigatórias):
+- NÃO mudar schema do banco
+- NÃO adicionar dependências
+- NÃO reescrever arquitetura
+- Manter Supabase SSR via cookies (createServerClient + next/headers)
+- Manter router.refresh() nas telas (pode complementar, não remover)
+- Implementar mudanças incrementalmente com checkpoints
+- Antes de alterar algo: localizar arquivos relevantes e explicar rapidamente o porquê
+
+CONTEXTO DE AMBIENTE:
+- Dev server roda em: npm run dev -- -p 5000
+- URL principal (dev): https://922b1465-19cc-4a06-8409-2f63c03ac2d0-00-3mrljbh8zid2i.spock.replit.dev:5000/
+- Já existe next.config.ts com allowedDevOrigins e experimental.serverActions.allowedOrigins, mas o erro persiste.
+
+TAREFA A (Diagnóstico guiado - sem quebrar nada)
+1) Verifique quais Server Actions existem (createLeadAction, moveLeadToStageAction, finalize lead).
+2) Reproduza o erro "Invalid Server Actions request" criando um lead e capture:
+   - console do browser
+   - logs do server no shell
+3) Identifique se o problema é:
+   - allowedOrigins incorreto (com/sem porta)
+   - mismatch de host (x-forwarded-host / origin)
+   - basePath/headers do Replit
+   - conflito de múltiplos servers rodando
+4) Garanta que só existe 1 processo next dev rodando e que está na porta 5000.
+
+TAREFA B (Fix Server Actions - prioridade máxima)
+1) Ajuste next.config.ts para a forma correta para Next 16:
+   - allowedDevOrigins com host correto
+   - experimental.serverActions.allowedOrigins com host correto
+   - considerar incluir variações COM e SEM porta se necessário
+2) Reinicie o dev server.
+3) Teste novamente criar lead e finalizar lead. O erro deve sumir.
+
+TAREFA C (Fix Auth consistente entre / e /leads)
+1) Verifique app/auth/callback/route.ts:
+   - troca de code por session (PKCE) e grava cookie
+2) Garanta que o login redireciona para /auth/callback e depois /leads
+3) Em /leads, getUser deve funcionar sempre. Se não funcionar:
+   - revisar uso de cookies() em createClient
+   - checar se a URL usada no Supabase Auth URL Configuration está correta (site url + redirect urls)
+4) Validar:
+   - em aba normal e aba anônima
+   - refresh na página /leads mantém autenticado
+
+TAREFA D (Reset de senha sem "Não encontrado")
+1) Implementar/validar a rota de reset (ex: /auth/reset) e/ou /auth/callback para recovery.
+2) Ajustar o redirectTo do resetPassword e garantir que a rota existe no Next app.
+3) Confirmar que o link enviado por email abre uma página válida e permite setar nova senha.
+
+TAREFA E (Hydration mismatch no Kanban - estabilidade)
+1) Corrigir o que estiver causando:
+   - aria-describedby mudando por SSR
+   - toLocaleString mudando por locale/timezone
+2) A correção deve ser hydration-safe (render determinístico no server, melhorar no client com useEffect).
+
+TESTES OBRIGATÓRIOS (checklist final)
+- Login funciona (e persiste ao recarregar)
+- /leads sempre mostra userId (não "não autenticado")
+- Criar lead funciona (sem "Invalid Server Actions request")
+- Kanban abre sem hydration error crítico
+- Botões Ganhar/Perder funcionam e alteram status
+- Reset de senha abre rota válida e conclui troca de senha
+
+ENTREGÁVEL:
+- Descrever mudanças por arquivo (curto e objetivo)
+- Deixar 1 checkpoint depois de cada tarefa (B, C, D, E)
+- Ao final: "como testar em 5 passos"

@@ -3,6 +3,7 @@ export const revalidate = 0
 
 import { createClient } from '@/lib/supabaseServer'
 import { CreateLeadForm } from './CreateLeadForm'
+import { ClientDate } from './ClientDate'
 
 type LeadRow = {
   id: string
@@ -82,7 +83,7 @@ export default async function LeadsPage() {
               <li key={l.id}>
                 {l.title} — <span style={{ opacity: 0.7 }}>{l.status}</span>{' '}
                 <span style={{ opacity: 0.5, fontSize: 12 }}>
-                  ({new Date(l.created_at).toLocaleString()})
+                  (<ClientDate value={l.created_at} />)
                 </span>
               </li>
             ))}
