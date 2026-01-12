@@ -5,10 +5,11 @@ import { forwardRef, InputHTMLAttributes } from 'react'
 interface InputProps extends InputHTMLAttributes<HTMLInputElement> {
   error?: string
   label?: string
+  hint?: string
 }
 
 export const Input = forwardRef<HTMLInputElement, InputProps>(
-  ({ className = '', error, label, id, ...props }, ref) => {
+  ({ className = '', error, label, hint, id, ...props }, ref) => {
     const inputId = id || props.name
 
     return (
@@ -29,15 +30,25 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(
             flex h-10 w-full rounded-[var(--radius)] border bg-transparent
             px-3 py-2 text-sm
             placeholder:text-[var(--muted-foreground)]
-            focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)] focus-visible:ring-offset-2
+            focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--background)]
             disabled:cursor-not-allowed disabled:opacity-50
-            ${error ? 'border-[var(--destructive)]' : 'border-[var(--input)]'}
+            transition-colors
+            ${error ? 'border-[var(--destructive)] focus-visible:ring-[var(--destructive)]' : 'border-[var(--input)]'}
             ${className}
           `}
+          aria-invalid={error ? 'true' : undefined}
+          aria-describedby={error ? `${inputId}-error` : hint ? `${inputId}-hint` : undefined}
           {...props}
         />
+        {hint && !error && (
+          <p id={`${inputId}-hint`} className="mt-1.5 text-xs text-[var(--muted-foreground)]">
+            {hint}
+          </p>
+        )}
         {error && (
-          <p className="mt-1.5 text-sm text-[var(--destructive)]">{error}</p>
+          <p id={`${inputId}-error`} className="mt-1.5 text-sm text-[var(--destructive)]" role="alert">
+            {error}
+          </p>
         )}
       </div>
     )

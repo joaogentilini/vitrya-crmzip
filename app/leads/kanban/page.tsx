@@ -4,6 +4,9 @@ export const revalidate = 0
 import { createClient } from '@/lib/supabaseServer'
 import { KanbanBoard } from './KanbanBoard'
 import { LeadsAppShell } from '../LeadsAppShell'
+import { EmptyState, emptyStateIcons } from '@/components/ui/EmptyState'
+import Link from 'next/link'
+import { Button } from '@/components/ui/Button'
 
 export default async function LeadsKanbanPage() {
   const supabase = await createClient()
@@ -29,22 +32,39 @@ export default async function LeadsKanbanPage() {
     .order('created_at', { ascending: false })
     .limit(200)
 
+  const hasData = pipelines && pipelines.length > 0 && stages && stages.length > 0
+
   return (
-    <LeadsAppShell userEmail={userEmail}>
+    <LeadsAppShell userEmail={userEmail} pageTitle="Kanban">
       <div className="space-y-6">
         <div>
-          <h1 className="text-2xl font-bold text-[var(--foreground)]">Kanban</h1>
-          <p className="text-sm text-[var(--muted-foreground)]">
+          <h1 className="text-2xl font-bold tracking-tight text-[var(--foreground)]">
+            Kanban
+          </h1>
+          <p className="text-sm text-[var(--muted-foreground)] mt-1">
             Visualize e gerencie seus leads por etapas
           </p>
         </div>
 
-        <KanbanBoard
-          pipelines={pipelines ?? []}
-          stages={stages ?? []}
-          leads={leads ?? []}
-          defaultPipelineId={pipelineId}
-        />
+        {hasData ? (
+          <KanbanBoard
+            pipelines={pipelines ?? []}
+            stages={stages ?? []}
+            leads={leads ?? []}
+            defaultPipelineId={pipelineId}
+          />
+        ) : (
+          <EmptyState
+            title="Nenhum pipeline configurado"
+            description="Configure um pipeline com estágios para começar a usar o Kanban."
+            icon={emptyStateIcons.kanban}
+            action={
+              <Link href="/leads">
+                <Button>Ir para Leads</Button>
+              </Link>
+            }
+          />
+        )}
       </div>
     </LeadsAppShell>
   )

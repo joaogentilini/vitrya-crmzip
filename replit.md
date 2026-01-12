@@ -21,19 +21,22 @@ Preferred communication style: Simple, everyday language.
 ### Design System Components
 Located in `components/ui/`:
 - **Button**: Primary, secondary, ghost, outline, destructive, link variants with loading states
-- **Input**: Form input with label, error state, and accessibility support
+- **Input**: Form input with label, hint, error state, and accessibility support (aria-describedby)
 - **Select**: Styled select dropdown with label and error handling
 - **Card**: Container component with Header, Title, Description, Content, Footer sub-components
 - **Badge**: Status badges with success, warning, destructive, secondary variants
-- **Skeleton**: Loading placeholder components (CardSkeleton, TableRowSkeleton)
-- **EmptyState**: Zero-state display with icon, title, description, and action
+- **Skeleton**: Loading placeholder components (Skeleton, CardSkeleton, TableRowSkeleton, PageSkeleton, KanbanSkeleton)
+- **EmptyState**: Zero-state display with icon presets, title, description, and action/CTA
+- **InlineError**: Error state with retry button for data loading failures
 - **Toast**: Toast notification system with ToastProvider context (success, error, warning, info)
 
 ### App Shell Layout
 Located in `components/layout/AppShell.tsx`:
-- Responsive sidebar navigation with mobile hamburger menu
-- Header with branding and user info/logout
-- Navigation items: Leads list, Kanban board
+- Responsive sidebar navigation with mobile hamburger menu (Escape to close)
+- Header with branding, page title breadcrumb, "Novo Lead" primary action button, and user dropdown menu
+- Navigation items with active/parent-active states: Leads list, Kanban board
+- User menu with avatar initial, email display, and sign-out action
+- Full keyboard navigation support with focus-visible styles
 - Used by authenticated pages via `LeadsAppShell` wrapper
 
 ### Backend Architecture
@@ -64,16 +67,16 @@ The application uses a pipeline-based lead management system:
 
 ```
 app/
-  page.tsx              # Login page
+  page.tsx              # Login page with form accessibility
   layout.tsx            # Root layout with ToastProvider
-  globals.css           # Design tokens and Tailwind v4 theme
+  globals.css           # Design tokens, animations, and Tailwind v4 theme
   leads/
-    page.tsx            # Leads list page
-    CreateLeadForm.tsx  # Lead creation form
+    page.tsx            # Leads list page with AppShell
+    CreateLeadForm.tsx  # Lead creation form with validation
     LeadsAppShell.tsx   # App shell wrapper for leads pages
     ClientDate.tsx      # Hydration-safe date component
     kanban/
-      page.tsx          # Kanban board page
+      page.tsx          # Kanban board page with AppShell
       KanbanBoard.tsx   # Drag-and-drop Kanban component
   auth/
     callback/           # Supabase auth callback
@@ -85,17 +88,18 @@ app/
 
 components/
   ui/                   # Design system components
-    Button.tsx
-    Input.tsx
-    Select.tsx
-    Card.tsx
-    Badge.tsx
-    Skeleton.tsx
-    EmptyState.tsx
-    Toast.tsx
+    Button.tsx          # Button with variants and loading state
+    Input.tsx           # Input with label, hint, error, accessibility
+    Select.tsx          # Select dropdown with label and error
+    Card.tsx            # Card container with sub-components
+    Badge.tsx           # Status badges
+    Skeleton.tsx        # Loading skeletons (Page, Kanban, Card, TableRow)
+    EmptyState.tsx      # Empty state with icon presets
+    InlineError.tsx     # Error state with retry button
+    Toast.tsx           # Toast notification system
     index.ts            # Component exports
   layout/
-    AppShell.tsx        # Main navigation layout
+    AppShell.tsx        # Main navigation layout with user menu
 
 lib/
   supabaseClient.ts     # Browser Supabase client
@@ -122,24 +126,17 @@ lib/
 
 ## Recent Changes (January 2026)
 
-### Design System Implementation
-- **CSS Tokens**: Comprehensive design tokens in `globals.css` for colors, spacing, borders, with light/dark mode support via `prefers-color-scheme`
-- **Component Library**: Created reusable UI components (Button, Input, Select, Card, Badge, Skeleton, EmptyState, Toast)
-- **AppShell Layout**: Responsive navigation shell with sidebar and mobile hamburger menu
-- **Toast Notifications**: Context-based toast system with auto-dismiss (4 seconds)
+### Sprint 1: UX Consistency + Premium Design
+- **App Shell Refinements**: Enhanced header with page title breadcrumb, "Novo Lead" primary action button, user avatar dropdown menu with sign-out
+- **Sidebar Improvements**: Clear active/parent-active states, mobile-responsive with Escape key to close, full keyboard navigation
+- **State System**: Added PageSkeleton, KanbanSkeleton, InlineError components; improved EmptyState with icon presets
+- **Forms UX**: Added hint text to Input component, client-side validation with inline errors, loading state on submit buttons
+- **Accessibility**: Enhanced focus-visible styles across all interactive elements, ARIA attributes (aria-expanded, aria-current, aria-describedby)
+- **Typography/Spacing**: Consistent tracking-tight on headings, improved responsive padding, smooth scroll behavior
+- **CSS Enhancements**: Added animations (fade-in, slide-in), selection styling, prefers-reduced-motion support, autofill styling
 
-### Page Refactoring
-- **Login Page**: Refactored to use Card, Input, Button components with toast feedback
-- **Leads Page**: Updated with AppShell, Card, Badge, EmptyState components
-- **Kanban Board**: Polished with design system styling, toast notifications for actions
-
-### Production Hardening
-- **Health Endpoint**: Added `/api/health` returning JSON `{ status: 'ok', timestamp }` for monitoring
-
-### Previous Fixes
-- **Optimistic UI Updates**: Lead movements in Kanban board update instantly with automatic rollback on server failure
-- **DragOverlay**: Visual feedback showing the lead card being dragged
-- **Ganhar/Perder Buttons**: Fixed button clicks inside draggable cards by stopping pointer event propagation
-- **Auth Callback Route**: Added `/auth/callback` route handler for Supabase code exchange
-- **Password Reset Flow**: Added `/auth/reset` page for password recovery
-- **Date Formatting**: Server renders ISO dates, client renders locale-formatted dates after mount to prevent hydration mismatches
+### Previous Changes
+- **Design System Implementation**: CSS tokens, component library, AppShell layout, Toast notifications
+- **Health Endpoint**: `/api/health` returning JSON `{ status: 'ok', timestamp }` for monitoring
+- **Optimistic UI Updates**: Lead movements in Kanban board update instantly with automatic rollback
+- **Auth Fixes**: Auth callback route, password reset flow, hydration-safe date formatting

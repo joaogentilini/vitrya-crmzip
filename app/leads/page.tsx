@@ -7,7 +7,7 @@ import { ClientDate } from './ClientDate'
 import { LeadsAppShell } from './LeadsAppShell'
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/Card'
 import { Badge } from '@/components/ui/Badge'
-import { EmptyState } from '@/components/ui/EmptyState'
+import { EmptyState, emptyStateIcons } from '@/components/ui/EmptyState'
 
 type LeadRow = {
   id: string
@@ -72,13 +72,15 @@ export default async function LeadsPage() {
   const stages = (stagesRaw ?? []) as StageRow[]
 
   return (
-    <LeadsAppShell userEmail={userEmail}>
+    <LeadsAppShell userEmail={userEmail} pageTitle="Lista de Leads">
       <div className="space-y-6">
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
           <div>
-            <h1 className="text-2xl font-bold text-[var(--foreground)]">Leads</h1>
-            <p className="text-sm text-[var(--muted-foreground)]">
-              {leadsCount ?? 0} leads no total
+            <h1 className="text-2xl font-bold tracking-tight text-[var(--foreground)]">
+              Leads
+            </h1>
+            <p className="text-sm text-[var(--muted-foreground)] mt-1">
+              {leadsCount ?? 0} {leadsCount === 1 ? 'lead' : 'leads'} no total
             </p>
           </div>
         </div>
@@ -86,8 +88,8 @@ export default async function LeadsPage() {
         <CreateLeadForm pipelines={pipelines} stages={stages} />
 
         <Card>
-          <CardHeader>
-            <CardTitle>Últimos Leads</CardTitle>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base">Últimos Leads</CardTitle>
           </CardHeader>
           <CardContent>
             {leads.length > 0 ? (
@@ -95,13 +97,13 @@ export default async function LeadsPage() {
                 {leads.map((lead) => (
                   <div
                     key={lead.id}
-                    className="flex items-center justify-between py-3 first:pt-0 last:pb-0"
+                    className="flex items-center justify-between py-3 first:pt-0 last:pb-0 group"
                   >
                     <div className="flex-1 min-w-0">
-                      <p className="font-medium text-[var(--foreground)] truncate">
+                      <p className="font-medium text-[var(--foreground)] truncate group-hover:text-[var(--primary)] transition-colors">
                         {lead.title}
                       </p>
-                      <p className="text-xs text-[var(--muted-foreground)]">
+                      <p className="text-xs text-[var(--muted-foreground)] mt-0.5">
                         <ClientDate value={lead.created_at} />
                       </p>
                     </div>
@@ -115,11 +117,7 @@ export default async function LeadsPage() {
               <EmptyState
                 title="Nenhum lead encontrado"
                 description="Crie seu primeiro lead usando o formulário acima."
-                icon={
-                  <svg className="w-12 h-12" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" />
-                  </svg>
-                }
+                icon={emptyStateIcons.leads}
               />
             )}
           </CardContent>

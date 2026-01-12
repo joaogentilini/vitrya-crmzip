@@ -33,6 +33,7 @@ export function CreateLeadForm({ pipelines, stages }: Props) {
 
   const [pipelineId, setPipelineId] = useState<string>(pipelines?.[0]?.id ?? '')
   const [title, setTitle] = useState('')
+  const [titleError, setTitleError] = useState<string | undefined>()
 
   const stageOptions = useMemo(() => {
     return stages
@@ -50,19 +51,35 @@ export function CreateLeadForm({ pipelines, stages }: Props) {
     setStageId(first?.id ?? '')
   }
 
+  function validateForm(): boolean {
+    let isValid = true
+    setTitleError(undefined)
+
+    if (!title.trim()) {
+      setTitleError('O título é obrigatório')
+      isValid = false
+    } else if (title.trim().length < 3) {
+      setTitleError('O título deve ter pelo menos 3 caracteres')
+      isValid = false
+    }
+
+    if (!pipelineId) {
+      showError('Selecione um pipeline.')
+      isValid = false
+    }
+
+    if (!stageId) {
+      showError('Selecione um estágio.')
+      isValid = false
+    }
+
+    return isValid
+  }
+
   function onSubmit(e: React.FormEvent) {
     e.preventDefault()
     
-    if (!title.trim()) {
-      showError('Informe um título.')
-      return
-    }
-    if (!pipelineId) {
-      showError('Selecione um pipeline.')
-      return
-    }
-    if (!stageId) {
-      showError('Selecione um estágio.')
+    if (!validateForm()) {
       return
     }
 
@@ -70,6 +87,7 @@ export function CreateLeadForm({ pipelines, stages }: Props) {
       try {
         await createLeadAction({ title: title.trim(), pipelineId, stageId })
         setTitle('')
+        setTitleError(undefined)
         success('Lead criado com sucesso!')
         router.refresh()
       } catch (e: unknown) {
@@ -83,28 +101,39 @@ export function CreateLeadForm({ pipelines, stages }: Props) {
     <form
       ref={formRef}
       onSubmit={onSubmit}
-      className="flex flex-wrap items-end gap-3 p-4 bg-[var(--card)] rounded-[var(--radius-lg)] border border-[var(--border)]"
+      data-lead-form
+      className="flex flex-wrap items-end gap-3 p-4 bg-[var(--card)] rounded-[var(--radius-lg)] border border-[var(--border)] shadow-sm"
     >
       <div className="flex-1 min-w-[200px]">
         <Input
           name="title"
           label="Título do Lead"
           placeholder="Ex: Empresa XYZ - Projeto Web"
+          hint="Identifique o lead de forma clara"
           value={title}
-          onChange={(e) => setTitle(e.target.value)}
+          onChange={(e) => {
+            setTitle(e.target.value)
+            if (titleError) setTitleError(undefined)
+          }}
+          error={titleError}
           disabled={isPending}
+          autoComplete="off"
         />
       </div>
 
       <div className="min-w-[180px]">
-        <label className="block text-sm font-medium mb-1.5 text-[var(--foreground)]">
+        <label 
+          htmlFor="pipeline-select"
+          className="block text-sm font-medium mb-1.5 text-[var(--foreground)]"
+        >
           Pipeline
         </label>
         <select
+          id="pipeline-select"
           value={pipelineId}
           onChange={(e) => onChangePipeline(e.target.value)}
           disabled={isPending || pipelines.length === 0}
-          className="flex h-10 w-full rounded-[var(--radius)] border border-[var(--input)] bg-[var(--background)] px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)] disabled:cursor-not-allowed disabled:opacity-50"
+          className="flex h-10 w-full rounded-[var(--radius)] border border-[var(--input)] bg-[var(--background)] px-3 py-2 text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--background)] disabled:cursor-not-allowed disabled:opacity-50"
         >
           {pipelines.map((p) => (
             <option key={p.id} value={p.id}>
@@ -115,14 +144,18 @@ export function CreateLeadForm({ pipelines, stages }: Props) {
       </div>
 
       <div className="min-w-[160px]">
-        <label className="block text-sm font-medium mb-1.5 text-[var(--foreground)]">
+        <label 
+          htmlFor="stage-select"
+          className="block text-sm font-medium mb-1.5 text-[var(--foreground)]"
+        >
           Estágio
         </label>
         <select
+          id="stage-select"
           value={stageId}
           onChange={(e) => setStageId(e.target.value)}
           disabled={isPending || !pipelineId || stageOptions.length === 0}
-          className="flex h-10 w-full rounded-[var(--radius)] border border-[var(--input)] bg-[var(--background)] px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)] disabled:cursor-not-allowed disabled:opacity-50"
+          className="flex h-10 w-full rounded-[var(--radius)] border border-[var(--input)] bg-[var(--background)] px-3 py-2 text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--background)] disabled:cursor-not-allowed disabled:opacity-50"
         >
           {stageOptions.map((s) => (
             <option key={s.id} value={s.id}>
@@ -132,8 +165,8 @@ export function CreateLeadForm({ pipelines, stages }: Props) {
         </select>
       </div>
 
-      <Button type="submit" loading={isPending}>
-        Criar Lead
+      <Button type="submit" loading={isPending} disabled={isPending}>
+        {isPending ? 'Criando...' : 'Criar Lead'}
       </Button>
     </form>
   )
