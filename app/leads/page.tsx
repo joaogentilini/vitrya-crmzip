@@ -30,6 +30,13 @@ type StageRow = {
   position: number
 }
 
+export type LeadTaskStatus = {
+  lead_id: string
+  next_due_at: string | null
+  is_overdue: boolean
+  has_open_task: boolean
+}
+
 async function LeadsContent() {
   const supabase = await createClient()
 
@@ -59,6 +66,44 @@ async function LeadsContent() {
 
   const stages = (stagesRaw ?? []) as StageRow[]
 
+  const leadIds = leads.map(l => l.id)
+  let taskStatusMap: Map<string, LeadTaskStatus> = new Map()
+
+  if (leadIds.length > 0) {
+    const { data: tasksRaw } = await supabase
+      .from('tasks')
+      .select('lead_id, due_at')
+      .eq('status', 'open')
+      .in('lead_id', leadIds)
+      .order('due_at', { ascending: true })
+
+    if (tasksRaw) {
+      const now = new Date()
+      const tasksByLead = new Map<string, { due_at: string }[]>()
+      
+      for (const task of tasksRaw) {
+        const existing = tasksByLead.get(task.lead_id) || []
+        existing.push(task)
+        tasksByLead.set(task.lead_id, existing)
+      }
+
+      for (const leadId of leadIds) {
+        const leadTasks = tasksByLead.get(leadId) || []
+        const nextTask = leadTasks[0]
+        const isOverdue = nextTask ? new Date(nextTask.due_at) < now : false
+        
+        taskStatusMap.set(leadId, {
+          lead_id: leadId,
+          next_due_at: nextTask?.due_at || null,
+          is_overdue: isOverdue,
+          has_open_task: leadTasks.length > 0
+        })
+      }
+    }
+  }
+
+  const taskStatus = Array.from(taskStatusMap.values())
+
   return (
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
@@ -74,7 +119,7 @@ async function LeadsContent() {
 
       <CreateLeadForm pipelines={pipelines} stages={stages} />
 
-      <LeadsList leads={leads} pipelines={pipelines} stages={stages} />
+      <LeadsList leads={leads} pipelines={pipelines} stages={stages} taskStatus={taskStatus} />
     </div>
   )
 }

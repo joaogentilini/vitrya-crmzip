@@ -46,6 +46,19 @@ export type ActorProfile = {
   email: string | null
 }
 
+export type TaskRow = {
+  id: string
+  lead_id: string
+  title: string
+  type: 'call' | 'whatsapp' | 'visit' | 'proposal' | 'email' | 'other'
+  due_at: string
+  status: 'open' | 'done' | 'canceled'
+  notes: string | null
+  assigned_to: string
+  created_by: string
+  created_at: string
+}
+
 export default async function LeadDetailsPage({ 
   params 
 }: { 
@@ -83,6 +96,30 @@ export default async function LeadDetailsPage({
 
   const pipeline = pipelines.find(p => p.id === lead.pipeline_id)
   const stage = stages.find(s => s.id === lead.stage_id)
+
+  const { data: tasksRaw } = await supabase
+    .from('tasks')
+    .select('id, lead_id, title, type, due_at, status, notes, assigned_to, created_by, created_at')
+    .eq('lead_id', id)
+    .eq('status', 'open')
+    .order('due_at', { ascending: true })
+    .limit(10)
+
+  const tasks = (tasksRaw ?? []) as TaskRow[]
+
+  const { data: currentUserProfile } = await supabase
+    .from('profiles')
+    .select('role')
+    .single()
+
+  const isAdmin = currentUserProfile?.role === 'admin'
+
+  const { data: allProfilesRaw } = await supabase
+    .from('profiles')
+    .select('id, full_name, name, email')
+    .limit(100)
+
+  const allProfiles = (allProfilesRaw ?? []) as ActorProfile[]
 
   let auditLogs: AuditLogRow[] = []
   let actorProfiles: ActorProfile[] = []
@@ -150,6 +187,9 @@ export default async function LeadDetailsPage({
         stages={stages}
         auditLogs={auditLogs}
         actorProfiles={actorProfiles}
+        tasks={tasks}
+        allProfiles={allProfiles}
+        isAdmin={isAdmin}
       />
     </LeadsAppShell>
   )

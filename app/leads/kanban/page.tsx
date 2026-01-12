@@ -32,6 +32,43 @@ export default async function LeadsKanbanPage() {
     .order('created_at', { ascending: false })
     .limit(200)
 
+  const leadIds = (leads ?? []).map(l => l.id)
+  let taskStatusMap: Map<string, { lead_id: string; is_overdue: boolean; has_open_task: boolean }> = new Map()
+
+  if (leadIds.length > 0) {
+    const { data: tasksRaw } = await supabase
+      .from('tasks')
+      .select('lead_id, due_at')
+      .eq('status', 'open')
+      .in('lead_id', leadIds)
+      .order('due_at', { ascending: true })
+
+    if (tasksRaw) {
+      const now = new Date()
+      const tasksByLead = new Map<string, { due_at: string }[]>()
+      
+      for (const task of tasksRaw) {
+        const existing = tasksByLead.get(task.lead_id) || []
+        existing.push(task)
+        tasksByLead.set(task.lead_id, existing)
+      }
+
+      for (const leadId of leadIds) {
+        const leadTasks = tasksByLead.get(leadId) || []
+        const nextTask = leadTasks[0]
+        const isOverdue = nextTask ? new Date(nextTask.due_at) < now : false
+        
+        taskStatusMap.set(leadId, {
+          lead_id: leadId,
+          is_overdue: isOverdue,
+          has_open_task: leadTasks.length > 0
+        })
+      }
+    }
+  }
+
+  const taskStatus = Array.from(taskStatusMap.values())
+
   const hasData = pipelines && pipelines.length > 0 && stages && stages.length > 0
 
   return (
@@ -52,6 +89,7 @@ export default async function LeadsKanbanPage() {
             stages={stages ?? []}
             leads={leads ?? []}
             defaultPipelineId={pipelineId}
+            taskStatus={taskStatus}
           />
         ) : (
           <EmptyState

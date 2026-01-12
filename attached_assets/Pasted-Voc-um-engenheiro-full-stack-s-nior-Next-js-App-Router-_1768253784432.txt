@@ -1,0 +1,172 @@
+Você é um engenheiro full-stack sênior (Next.js App Router + TypeScript + Supabase) e designer de sistemas focado em CRM imobiliário. Trabalhe no repositório `vitrya-crm`. Objetivo: implementar ETAPA 4 (A) — **Tarefas / Próxima ação** por lead com data/hora, responsável e status, com UX premium, RLS forte e auditoria integrada à Timeline do lead.
+
+DECISÕES DE PRODUTO (já definidas)
+- Tipos de tarefa: call | whatsapp | visit | proposal | email | other
+- Regra de atribuição (B): usuário comum cria tarefas para si; admin/gestor pode atribuir tarefa para qualquer usuário
+- Múltiplas tarefas abertas por lead são permitidas, mas a UI deve destacar a tarefa aberta mais próxima (menor due_at)
+
+REGRAS CRÍTICAS (OBRIGATÓRIAS)
+1) NÃO refatore telas antigas. Mudanças mínimas e localizadas.
+2) Não enfraquecer RLS. Nada de service_role no client. Tudo sensível via `createClient()` server-side.
+3) Evitar hydration mismatch. Datas preferencialmente renderizadas no server; se no client, usar componente hydration-safe.
+4) Build deve passar.
+5) Toda ação de tarefa deve deixar rastro na Timeline do lead via `lead_audit_logs` (task_create/task_done/task_reschedule/task_cancel).
+
+CONTEXTO
+- `leads` com RLS (admin via `profiles.role='admin'` / `is_admin()`).
+- `lead_audit_logs` já existe e já aparece na Timeline em `/leads/[id]`.
+- `profiles` existe com: id, full_name, role, phone.
+- Timeline já resolve nome do actor via profiles (full_name).
+- ETAPA 3 move_stage já está implementada e deduplicação de update existe.
+
+ENTREGÁVEIS (OBRIGATÓRIOS)
+
+A) BANCO: criar tabela `public.tasks` + índices + RLS
+Criar tabela com:
+- id uuid PK default gen_random_uuid()
+- lead_id uuid not null references public.leads(id) on delete cascade
+- title text not null
+- type text not null check (type in ('call','whatsapp','visit','proposal','email','other'))
+- due_at timestamptz not null
+- status text not null default 'open' check (status in ('open','done','canceled'))
+- notes text null
+- assigned_to uuid not null default auth.uid() references auth.users(id)
+- created_by uuid not null default auth.uid() references auth.users(id)
+- created_at timestamptz not null default now()
+- updated_at timestamptz not null default now()
+
+Índices:
+- tasks_lead_id_idx (lead_id)
+- tasks_due_at_idx (due_at)
+- tasks_assigned_to_idx (assigned_to)
+- tasks_status_idx (status)
+
+RLS em tasks:
+- enable row level security
+- SELECT (authenticated):
+  is_admin()
+  OR assigned_to = auth.uid()
+  OR created_by = auth.uid()
+  OR exists (select 1 from leads l where l.id = tasks.lead_id and (l.user_id = auth.uid() OR l.assigned_to = auth.uid() OR is_admin()))
+- INSERT:
+  - Usuário comum: created_by = auth.uid() e assigned_to = auth.uid()
+  - Admin: pode inserir com assigned_to diferente
+  - Sempre exigir acesso ao lead via EXISTS em leads
+- UPDATE/DELETE:
+  is_admin() OR assigned_to = auth.uid() OR created_by = auth.uid()
+
+Atualização de updated_at:
+- Implementar trigger simples `set_updated_at` para tasks (se já existir no projeto, reutilizar).
+- Se não existir, criar function+trigger.
+
+B) AUDITORIA (rastro) integrado ao `lead_audit_logs`
+Sem criar tabela nova de audit.
+Para cada ação de tarefa, inserir em `lead_audit_logs`:
+- task_create
+- task_done
+- task_reschedule
+- task_cancel
+
+Formato de payload (after/before) mínimo:
+after/before = {
+  task_id,
+  title,
+  type,
+  due_at,
+  status,
+  assigned_to
+}
+
+As inserções no audit devem ser feitas no SERVIDOR via `createClient()` e respeitar RLS.
+
+C) SERVER ACTIONS (obrigatório)
+Criar arquivo: `app/leads/tasks/actions.ts` (ou pasta equivalente), com:
+1) createTaskAction({ leadId, title, type, dueAt, notes?, assignedTo? })
+   - Se usuário NÃO for admin, ignorar assignedTo e usar auth.uid()
+   - Inserir task
+   - Inserir audit task_create no lead_audit_logs
+   - Revalidate: `/leads`, `/leads/kanban` (se existir), `/leads/${leadId}`
+2) completeTaskAction({ taskId })
+   - Marcar status='done'
+   - Buscar lead_id da task (select mínimo)
+   - Inserir audit task_done
+   - Revalidate lead + listas
+3) rescheduleTaskAction({ taskId, dueAt })
+   - Atualizar due_at
+   - Inserir audit task_reschedule com before.due_at e after.due_at
+4) cancelTaskAction({ taskId })
+   - status='canceled'
+   - Inserir audit task_cancel
+
+Proteções:
+- Validar autenticação sempre.
+- Não permitir operação sem achar a task/lead (mensagem amigável).
+- Auditoria: se insert falhar, não quebrar a ação principal (logar console no server).
+
+D) UI no lead detalhe: Card “Próxima ação”
+No `/leads/[id]` (reutilize o que já existe):
+- Adicionar um card destacado “Próxima ação”
+- Buscar no server (junto com o lead):
+  - tasks abertas do lead: status='open' e due_at asc limit 5
+  - e destacar a primeira como “próxima”
+- Exibir:
+  - tipo (badge)
+  - data/hora pt-BR
+  - responsável (profiles.full_name via lookup; fallback id truncado)
+  - ações:
+    - Concluir (completeTaskAction)
+    - Reagendar (rescheduleTaskAction)
+    - Cancelar (cancelTaskAction)
+- Estado vazio:
+  - “Sem próxima ação” + botão “Criar próxima ação”
+
+Criar modal/drawer “Criar próxima ação”:
+- title (input)
+- type (select com os 6 tipos)
+- due_at (date + time)
+- notes (textarea)
+- assigned_to:
+  - se is_admin() true: mostrar select de usuários (listar profiles)
+  - se não admin: esconder (default para si)
+
+UX:
+- Visual premium (card, espaçamento, tipografia)
+- Erros amigáveis
+- Loading states
+
+E) Indicadores mínimos em lista/kanban (sem refatorar)
+Implementar um badge simples nos cards/linhas de lead:
+- “Atrasado” se existir task open com due_at < now()
+- “Sem próxima ação” se não existir task open
+Implementação:
+- Preferir criar uma VIEW no banco `lead_next_task`:
+  - lead_id
+  - next_due_at
+  - is_overdue
+  - has_open_task
+- Ou, se for mais rápido, fazer query adicional server-side nas páginas onde lista leads/kanban (mínimo impacto).
+
+F) Timeline: suportar ações de tarefa
+Atualizar o mapper/resumo da Timeline para:
+- task_create: “Próxima ação criada: {type} em {due_at}”
+- task_done: “Tarefa concluída: {type}”
+- task_reschedule: “Tarefa reagendada: {before_due_at} → {after_due_at}”
+- task_cancel: “Tarefa cancelada: {type}”
+Nunca renderizar JSON completo.
+
+CRITÉRIOS DE ACEITE (TESTES)
+1) Criar tarefa em `/leads/[id]` funciona e aparece como “Próxima ação”.
+2) Timeline registra task_create.
+3) Concluir/Reagendar/Cancelar atualiza task e registra log correspondente.
+4) Usuário comum não consegue atribuir para outro; admin consegue.
+5) Leads com task overdue mostram badge “Atrasado”; sem task open mostram “Sem próxima ação”.
+6) RLS impede vazamento (usuário não acessa tasks de leads fora do escopo).
+7) Build passa sem hydration errors.
+
+SAÍDA (OBRIGATÓRIA)
+- Commits organizados.
+- Listar arquivos criados/alterados.
+- Instruções de teste em 7 passos.
+- Se criar VIEW, incluir o SQL em `replit.md` e/ou arquivo `supabase/migrations`.
+
+Agora implemente com cuidado, seguindo as regras.

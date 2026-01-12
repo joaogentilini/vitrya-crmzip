@@ -9,6 +9,7 @@ import { Card, CardContent } from '@/components/ui/Card'
 import { EmptyState, emptyStateIcons } from '@/components/ui/EmptyState'
 import { useToast } from '@/components/ui/Toast'
 import { ClientDate } from './ClientDate'
+import { Badge } from '@/components/ui/Badge'
 import { 
   type LeadRow, 
   type PipelineRow, 
@@ -19,15 +20,37 @@ import {
   getFinalizeSuccessMessage
 } from '@/lib/leads'
 
+function TaskStatusIndicator({ status }: { status?: { is_overdue: boolean; has_open_task: boolean } }) {
+  if (!status) return null
+  
+  if (status.is_overdue) {
+    return <Badge variant="destructive" className="text-xs ml-1">Atrasado</Badge>
+  }
+  
+  if (!status.has_open_task) {
+    return <Badge variant="secondary" className="text-xs ml-1 opacity-60">Sem ação</Badge>
+  }
+  
+  return null
+}
+
 type SortOption = 'recent' | 'name' | 'stage'
+
+type LeadTaskStatus = {
+  lead_id: string
+  next_due_at: string | null
+  is_overdue: boolean
+  has_open_task: boolean
+}
 
 interface LeadsListProps {
   leads: LeadRow[]
   pipelines: PipelineRow[]
   stages: StageRow[]
+  taskStatus?: LeadTaskStatus[]
 }
 
-export function LeadsList({ leads, pipelines, stages }: LeadsListProps) {
+export function LeadsList({ leads, pipelines, stages, taskStatus = [] }: LeadsListProps) {
   const router = useRouter()
   const { success, error: showError } = useToast()
   const [isPending, startTransition] = useTransition()
@@ -54,6 +77,12 @@ export function LeadsList({ leads, pipelines, stages }: LeadsListProps) {
     pipelines.forEach(p => map.set(p.id, p))
     return map
   }, [pipelines])
+
+  const taskStatusMap = useMemo(() => {
+    const map = new Map<string, LeadTaskStatus>()
+    taskStatus.forEach(t => map.set(t.lead_id, t))
+    return map
+  }, [taskStatus])
 
   const filteredLeads = useMemo(() => {
     let result = [...leads]
@@ -253,7 +282,12 @@ export function LeadsList({ leads, pipelines, stages }: LeadsListProps) {
                             </span>
                           </td>
                           <td className="px-4 py-3">
-                            {getStatusBadge(lead.status)}
+                            <div className="flex items-center gap-1 flex-wrap">
+                              {getStatusBadge(lead.status)}
+                              {lead.status === 'open' && (
+                                <TaskStatusIndicator status={taskStatusMap.get(lead.id)} />
+                              )}
+                            </div>
                           </td>
                           <td className="px-4 py-3 text-sm text-[var(--muted-foreground)]">
                             <ClientDate value={lead.created_at} />
@@ -343,8 +377,11 @@ export function LeadsList({ leads, pipelines, stages }: LeadsListProps) {
                           <ClientDate value={lead.created_at} />
                         </p>
                       </Link>
-                      <div className="flex-shrink-0">
+                      <div className="flex-shrink-0 flex flex-wrap items-center gap-1">
                         {getStatusBadge(lead.status)}
+                        {lead.status === 'open' && (
+                          <TaskStatusIndicator status={taskStatusMap.get(lead.id)} />
+                        )}
                       </div>
                     </div>
 

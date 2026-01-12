@@ -24,10 +24,30 @@ function truncateId(id: string): string {
   return id.substring(0, 8) + '…'
 }
 
+const TASK_TYPE_LABELS: Record<string, string> = {
+  call: 'Ligação',
+  whatsapp: 'WhatsApp',
+  visit: 'Visita',
+  proposal: 'Proposta',
+  email: 'Email',
+  other: 'Outro',
+}
+
+function formatTaskDueAt(dueAt: unknown): string {
+  if (!dueAt) return '—'
+  try {
+    const d = new Date(String(dueAt))
+    if (Number.isNaN(d.getTime())) return '—'
+    return d.toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })
+  } catch {
+    return '—'
+  }
+}
+
 function summarizeAuditEvent(
   log: AuditLogRow, 
   stages: Map<string, StageRow>
-): { title: string; details: string | null; icon: 'create' | 'update' | 'move' | 'status' | 'delete' } {
+): { title: string; details: string | null; icon: 'create' | 'update' | 'move' | 'status' | 'delete' | 'task' } {
   const { action, before, after } = log
 
   if (action === 'create') {
@@ -36,6 +56,44 @@ function summarizeAuditEvent(
 
   if (action === 'delete') {
     return { title: 'Lead removido', details: null, icon: 'delete' }
+  }
+
+  if (action === 'task_create') {
+    const taskType = TASK_TYPE_LABELS[String(after?.type)] || String(after?.type)
+    const dueAt = formatTaskDueAt(after?.due_at)
+    return {
+      title: 'Próxima ação criada',
+      details: `${taskType} em ${dueAt}`,
+      icon: 'task'
+    }
+  }
+
+  if (action === 'task_done') {
+    const taskType = TASK_TYPE_LABELS[String(after?.type)] || String(after?.type)
+    return {
+      title: 'Tarefa concluída',
+      details: taskType,
+      icon: 'task'
+    }
+  }
+
+  if (action === 'task_reschedule') {
+    const beforeDue = formatTaskDueAt(before?.due_at)
+    const afterDue = formatTaskDueAt(after?.due_at)
+    return {
+      title: 'Tarefa reagendada',
+      details: `${beforeDue} → ${afterDue}`,
+      icon: 'task'
+    }
+  }
+
+  if (action === 'task_cancel') {
+    const taskType = TASK_TYPE_LABELS[String(before?.type)] || String(before?.type)
+    return {
+      title: 'Tarefa cancelada',
+      details: taskType,
+      icon: 'task'
+    }
   }
 
   if (action === 'move_stage') {
@@ -142,6 +200,14 @@ function TimelineIcon({ type, status }: { type: string; status?: string }) {
         <div className={`${baseClass} bg-[var(--destructive)]`}>
           <svg className="w-4 h-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+          </svg>
+        </div>
+      )
+    case 'task':
+      return (
+        <div className={`${baseClass} bg-[var(--primary)]/80`}>
+          <svg className="w-4 h-4 text-[var(--primary-foreground)]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
           </svg>
         </div>
       )

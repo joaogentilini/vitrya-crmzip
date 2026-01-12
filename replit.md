@@ -84,6 +84,10 @@ app/
       LeadDetailsClient.tsx  # Details view with timeline, cards, actions
       LeadTimeline.tsx  # Premium timeline with lead_audit_logs and actor resolution
       EditLeadModal.tsx # Edit lead modal with validation
+      TaskCard.tsx      # Next action card with tasks display and actions
+      CreateTaskModal.tsx  # Task creation modal with form
+    tasks/
+      actions.ts        # Server actions for task CRUD operations
     kanban/
       page.tsx          # Kanban board page with AppShell
       KanbanBoard.tsx   # Drag-and-drop Kanban component
@@ -135,11 +139,22 @@ lib/
 - `lead_stage_changes`: id, lead_id, pipeline_id, from_stage_id, to_stage_id, created_at
 - `lead_audit_logs`: id, lead_id, actor_id, action, before, after, created_at (audit trail)
 - `profiles`: id, name, full_name, email (user profiles for actor resolution)
+- `tasks`: id, lead_id, type, description, due_at, reminder_at, done_at, cancelled_at, assigned_to, created_by, created_at (next actions)
 
 ### UI Libraries
 - `@dnd-kit/core`, `@dnd-kit/sortable`, `@dnd-kit/utilities`: Drag-and-drop functionality for Kanban board
 
 ## Recent Changes (January 2026)
+
+### ETAPA 4: Tasks/Next Action (January 2026)
+- **Tasks Table**: New `tasks` table with type, description, due_at, reminder_at, done/cancelled timestamps
+- **SQL Migration**: Migration file at `supabase/migrations/20260112_create_tasks_table.sql` (requires manual execution)
+- **Server Actions**: `createTaskAction`, `completeTaskAction`, `rescheduleTaskAction`, `cancelTaskAction` in `app/leads/tasks/actions.ts`
+- **TaskCard Component**: Displays open tasks with complete/reschedule/cancel actions, create new task modal
+- **CreateTaskModal**: Task creation form with type selection, description, due date, optional reminder, admin assignment
+- **Task Indicators**: LeadsList and KanbanBoard show "Atrasado" badge for overdue tasks, "Sem ação" for leads without open tasks
+- **Timeline Integration**: Task events (create/done/reschedule/cancel) displayed with human-readable summaries
+- **Admin Role Check**: Admins can assign tasks to other users via dropdown with profiles
 
 ### ETAPA 3: Explicit Move Stage Logging (January 2026)
 - **Explicit move_stage Action**: When dragging leads in Kanban, explicitly registers `action='move_stage'` in `lead_audit_logs`

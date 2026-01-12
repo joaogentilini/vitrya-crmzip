@@ -19,7 +19,8 @@ import {
   getConfirmFinalizeMessage,
   getFinalizeSuccessMessage
 } from '@/lib/leads'
-import type { AuditLogRow, ActorProfile } from './page'
+import type { AuditLogRow, ActorProfile, TaskRow } from './page'
+import { TaskCard, type ProfileRow } from './TaskCard'
 
 interface LeadDetailsClientProps {
   lead: LeadRow
@@ -29,6 +30,9 @@ interface LeadDetailsClientProps {
   stages: StageRow[]
   auditLogs: AuditLogRow[]
   actorProfiles: ActorProfile[]
+  tasks: TaskRow[]
+  allProfiles: ActorProfile[]
+  isAdmin: boolean
 }
 
 export function LeadDetailsClient({ 
@@ -38,7 +42,10 @@ export function LeadDetailsClient({
   pipelines, 
   stages,
   auditLogs,
-  actorProfiles
+  actorProfiles,
+  tasks,
+  allProfiles,
+  isAdmin
 }: LeadDetailsClientProps) {
   const router = useRouter()
   const { success, error: showError } = useToast()
@@ -273,22 +280,12 @@ export function LeadDetailsClient({
             </CardContent>
           </Card>
 
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-base">Próxima Ação</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <EmptyState
-                title="Sem ação agendada"
-                description="Agende um follow-up ou tarefa."
-                icon={
-                  <svg className="w-10 h-10" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-                  </svg>
-                }
-              />
-            </CardContent>
-          </Card>
+          <TaskCard
+            leadId={lead.id}
+            tasks={tasks as unknown as import('./TaskCard').TaskRow[]}
+            profiles={allProfiles as ProfileRow[]}
+            isAdmin={isAdmin}
+          />
         </div>
       </div>
 
