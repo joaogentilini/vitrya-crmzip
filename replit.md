@@ -13,20 +13,40 @@ Preferred communication style: Simple, everyday language.
 ### Frontend Architecture
 - **Framework**: Next.js 16 with App Router
 - **UI Pattern**: React Server Components for data fetching, Client Components for interactivity
-- **Styling**: Tailwind CSS v4 with CSS variables for theming (light/dark mode support)
+- **Styling**: Tailwind CSS v4 with CSS custom properties for theming (light/dark mode auto-detection)
+- **Design System**: Custom component library in `components/ui/` with consistent styling tokens
 - **Drag-and-Drop**: @dnd-kit library suite (core, sortable, utilities) for Kanban board interactions
 - **Fonts**: Geist font family loaded via next/font
+
+### Design System Components
+Located in `components/ui/`:
+- **Button**: Primary, secondary, ghost, outline, destructive, link variants with loading states
+- **Input**: Form input with label, error state, and accessibility support
+- **Select**: Styled select dropdown with label and error handling
+- **Card**: Container component with Header, Title, Description, Content, Footer sub-components
+- **Badge**: Status badges with success, warning, destructive, secondary variants
+- **Skeleton**: Loading placeholder components (CardSkeleton, TableRowSkeleton)
+- **EmptyState**: Zero-state display with icon, title, description, and action
+- **Toast**: Toast notification system with ToastProvider context (success, error, warning, info)
+
+### App Shell Layout
+Located in `components/layout/AppShell.tsx`:
+- Responsive sidebar navigation with mobile hamburger menu
+- Header with branding and user info/logout
+- Navigation items: Leads list, Kanban board
+- Used by authenticated pages via `LeadsAppShell` wrapper
 
 ### Backend Architecture
 - **API Pattern**: Mix of Server Actions (`'use server'`) and Route Handlers (`/api/*`)
 - **Server Actions**: Used for lead creation (`createLeadAction`), lead movement (`moveLeadToStageAction`), and status updates (`setLeadFinalStatusAction`)
-- **Route Handlers**: REST endpoint at `/api/leads/finalize` for finalizing leads
+- **Route Handlers**: REST endpoints at `/api/leads/finalize` for finalizing leads, `/api/health` for health checks
 - **Data Fetching**: Server Components fetch data directly using Supabase client, with `force-dynamic` and `revalidate = 0` for real-time data
 
 ### State Management
 - **Server State**: Managed via Server Components with `revalidatePath()` for cache invalidation
 - **Client State**: React `useState` for form inputs and UI state, `useTransition` for pending states
 - **Auth State**: Supabase auth listeners with `onAuthStateChange` for session management
+- **Toast State**: Context-based toast notifications via `ToastProvider`
 
 ### Authentication & Authorization
 - **Provider**: Supabase Auth with email/password authentication
@@ -39,6 +59,48 @@ The application uses a pipeline-based lead management system:
 - **Pipelines**: Top-level containers for organizing sales processes
 - **Pipeline Stages**: Ordered stages within each pipeline (by position)
 - **Leads**: Individual opportunities with title, status (open/won/lost), pipeline assignment, and stage assignment
+
+## Project Structure
+
+```
+app/
+  page.tsx              # Login page
+  layout.tsx            # Root layout with ToastProvider
+  globals.css           # Design tokens and Tailwind v4 theme
+  leads/
+    page.tsx            # Leads list page
+    CreateLeadForm.tsx  # Lead creation form
+    LeadsAppShell.tsx   # App shell wrapper for leads pages
+    ClientDate.tsx      # Hydration-safe date component
+    kanban/
+      page.tsx          # Kanban board page
+      KanbanBoard.tsx   # Drag-and-drop Kanban component
+  auth/
+    callback/           # Supabase auth callback
+    reset/              # Password reset page
+    auth-code-error/    # Auth error display
+  api/
+    health/             # Health check endpoint
+    leads/finalize/     # Lead finalization endpoint
+
+components/
+  ui/                   # Design system components
+    Button.tsx
+    Input.tsx
+    Select.tsx
+    Card.tsx
+    Badge.tsx
+    Skeleton.tsx
+    EmptyState.tsx
+    Toast.tsx
+    index.ts            # Component exports
+  layout/
+    AppShell.tsx        # Main navigation layout
+
+lib/
+  supabaseClient.ts     # Browser Supabase client
+  supabaseServer.ts     # Server Supabase client
+```
 
 ## External Dependencies
 
@@ -60,20 +122,24 @@ The application uses a pipeline-based lead management system:
 
 ## Recent Changes (January 2026)
 
-### UX Improvements
+### Design System Implementation
+- **CSS Tokens**: Comprehensive design tokens in `globals.css` for colors, spacing, borders, with light/dark mode support via `prefers-color-scheme`
+- **Component Library**: Created reusable UI components (Button, Input, Select, Card, Badge, Skeleton, EmptyState, Toast)
+- **AppShell Layout**: Responsive navigation shell with sidebar and mobile hamburger menu
+- **Toast Notifications**: Context-based toast system with auto-dismiss (4 seconds)
+
+### Page Refactoring
+- **Login Page**: Refactored to use Card, Input, Button components with toast feedback
+- **Leads Page**: Updated with AppShell, Card, Badge, EmptyState components
+- **Kanban Board**: Polished with design system styling, toast notifications for actions
+
+### Production Hardening
+- **Health Endpoint**: Added `/api/health` returning JSON `{ status: 'ok', timestamp }` for monitoring
+
+### Previous Fixes
 - **Optimistic UI Updates**: Lead movements in Kanban board update instantly with automatic rollback on server failure
 - **DragOverlay**: Visual feedback showing the lead card being dragged
 - **Ganhar/Perder Buttons**: Fixed button clicks inside draggable cards by stopping pointer event propagation
-
-### Authentication Fixes
-- **Auth Callback Route**: Added `/auth/callback` route handler for Supabase code exchange (fixes SSR auth mismatch)
+- **Auth Callback Route**: Added `/auth/callback` route handler for Supabase code exchange
 - **Password Reset Flow**: Added `/auth/reset` page for password recovery
-
-### Hydration Fixes
 - **Date Formatting**: Server renders ISO dates, client renders locale-formatted dates after mount to prevent hydration mismatches
-
-### Configuration
-- **next.config.ts**: Configured `allowedDevOrigins` and `serverActions.allowedOrigins` for Replit deployment hosts
-- **Auth Error Page**: Added `/auth/auth-code-error` for graceful error handling
-- **ClientDate Component**: Created `app/leads/ClientDate.tsx` for hydration-safe date rendering
-- **CRLF Line Endings**: Fixed Windows-style line endings in all source files

@@ -3,6 +3,10 @@
 import React, { useMemo, useState, useTransition, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { moveLeadToStageAction } from './actions'
+import { useToast } from '@/components/ui/Toast'
+import { Button } from '@/components/ui/Button'
+import { Badge } from '@/components/ui/Badge'
+import { EmptyState } from '@/components/ui/EmptyState'
 
 import { DndContext, closestCenter, DragEndEvent, DragOverlay, DragStartEvent, defaultDropAnimationSideEffects } from '@dnd-kit/core'
 import { useDroppable } from '@dnd-kit/core'
@@ -34,11 +38,11 @@ function LeadCard({
   isOptimistic,
   onFinalize 
 }: { 
-  lead: LeadRow; 
-  isDragging?: boolean; 
-  disabled?: boolean;
-  isOptimistic?: boolean;
-  onFinalize?: (leadId: string, status: 'won' | 'lost') => void;
+  lead: LeadRow
+  isDragging?: boolean
+  disabled?: boolean
+  isOptimistic?: boolean
+  onFinalize?: (leadId: string, status: 'won' | 'lost') => void
 }) {
   const [mounted, setMounted] = useState(false)
 
@@ -50,58 +54,35 @@ function LeadCard({
     if (!value) return '—'
     const d = new Date(value)
     if (Number.isNaN(d.getTime())) return '—'
-    
-    // Determinístico no servidor (ISO) e local no cliente
     if (!mounted) return d.toISOString().split('T')[0]
     return d.toLocaleString()
   }
 
   return (
     <div
-      style={{
-        border: isOptimistic ? '1px dashed #3b82f6' : '1px solid #eee',
-        borderRadius: 10,
-        padding: 10,
-        background: '#fff',
-        boxShadow: isDragging ? '0 5px 15px rgba(0,0,0,0.1)' : 'none',
-        opacity: disabled || isOptimistic ? 0.6 : 1,
-        position: 'relative',
-        transition: 'all 0.2s ease',
-      }}
+      className={`
+        rounded-[var(--radius)] border bg-[var(--card)] p-3
+        ${isDragging ? 'shadow-lg ring-2 ring-[var(--primary)]' : 'shadow-sm'}
+        ${isOptimistic ? 'border-dashed border-[var(--primary)]' : 'border-[var(--border)]'}
+        ${disabled || isOptimistic ? 'opacity-60' : ''}
+        transition-all duration-200
+      `}
     >
       {isOptimistic && (
-        <div style={{
-          position: 'absolute',
-          top: 4,
-          right: 4,
-          width: 8,
-          height: 8,
-          borderRadius: '50%',
-          background: '#3b82f6',
-          animation: 'pulse 1.5s infinite'
-        }} />
+        <div className="absolute top-2 right-2 w-2 h-2 rounded-full bg-[var(--primary)] animate-pulse" />
       )}
-      <div style={{ fontWeight: 600 }}>{lead.title}</div>
-
-      <div style={{ fontSize: 12, opacity: 0.7, marginTop: 4 }}>
+      <p className="font-medium text-[var(--card-foreground)] text-sm">{lead.title}</p>
+      <p className="text-xs text-[var(--muted-foreground)] mt-1">
         {formatDate(lead.created_at)}
-      </div>
+      </p>
 
       {lead.status === 'open' && onFinalize && (
-        <div style={{ display: 'flex', gap: 6, marginTop: 10 }}>
-          <button
-            type="button"
+        <div className="flex gap-2 mt-3">
+          <Button
+            size="sm"
+            variant="default"
             disabled={disabled || isOptimistic}
-            style={{
-              flex: 1,
-              background: '#16a34a',
-              color: '#fff',
-              border: 'none',
-              borderRadius: 6,
-              padding: '6px 8px',
-              cursor: (disabled || isOptimistic) ? 'not-allowed' : 'pointer',
-              fontSize: 12,
-            }}
+            className="flex-1 text-xs bg-[var(--success)] hover:bg-[var(--success)]/90"
             onPointerDown={(e) => e.stopPropagation()}
             onMouseDown={(e) => e.stopPropagation()}
             onClick={(e) => {
@@ -111,20 +92,12 @@ function LeadCard({
             }}
           >
             Ganhar
-          </button>
-          <button
-            type="button"
+          </Button>
+          <Button
+            size="sm"
+            variant="destructive"
             disabled={disabled || isOptimistic}
-            style={{
-              flex: 1,
-              background: '#dc2626',
-              color: '#fff',
-              border: 'none',
-              borderRadius: 6,
-              padding: '6px 8px',
-              cursor: (disabled || isOptimistic) ? 'not-allowed' : 'pointer',
-              fontSize: 12,
-            }}
+            className="flex-1 text-xs"
             onPointerDown={(e) => e.stopPropagation()}
             onMouseDown={(e) => e.stopPropagation()}
             onClick={(e) => {
@@ -134,16 +107,9 @@ function LeadCard({
             }}
           >
             Perder
-          </button>
+          </Button>
         </div>
       )}
-      <style>{`
-        @keyframes pulse {
-          0% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(59, 130, 246, 0.7); }
-          70% { transform: scale(1); box-shadow: 0 0 0 5px rgba(59, 130, 246, 0); }
-          100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(59, 130, 246, 0); }
-        }
-      `}</style>
     </div>
   )
 }
@@ -183,38 +149,46 @@ function DroppableColumn({
   id,
   title,
   count,
+  isOver,
   children,
 }: {
   id: string
   title: string
   count: number
+  isOver?: boolean
   children: React.ReactNode
 }) {
-  const { setNodeRef, isOver } = useDroppable({ id })
+  const { setNodeRef, isOver: droppableIsOver } = useDroppable({ id })
+  const active = isOver ?? droppableIsOver
 
   return (
     <div
       ref={setNodeRef}
-      style={{
-        minWidth: 280,
-        border: isOver ? '2px solid #3b82f6' : '1px solid #e5e5e5',
-        borderRadius: 10,
-        padding: 12,
-        background: isOver ? '#eff6ff' : '#f9fafb',
-        transition: 'all 0.2s ease',
-      }}
+      className={`
+        min-w-[280px] max-w-[320px] rounded-[var(--radius-lg)] p-4
+        ${active 
+          ? 'bg-[var(--primary)]/5 border-2 border-[var(--primary)]' 
+          : 'bg-[var(--muted)]/50 border border-[var(--border)]'
+        }
+        transition-all duration-200
+      `}
     >
-      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 10 }}>
-        <strong style={{ color: isOver ? '#1d4ed8' : 'inherit' }}>{title}</strong>
-        <span style={{ opacity: 0.7 }}>{count}</span>
+      <div className="flex items-center justify-between mb-3">
+        <h3 className={`font-semibold text-sm ${active ? 'text-[var(--primary)]' : 'text-[var(--foreground)]'}`}>
+          {title}
+        </h3>
+        <Badge variant="secondary" className="text-xs">
+          {count}
+        </Badge>
       </div>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>{children}</div>
+      <div className="flex flex-col gap-2 min-h-[100px]">{children}</div>
     </div>
   )
 }
 
 export function KanbanBoard({ pipelines, stages, leads, defaultPipelineId }: Props) {
   const router = useRouter()
+  const { success, error: showError } = useToast()
   const [isPending, startTransition] = useTransition()
   const [activeId, setActiveId] = useState<string | null>(null)
   const [localLeads, setLocalLeads] = useState<LeadRow[]>(leads)
@@ -273,42 +247,66 @@ export function KanbanBoard({ pipelines, stages, leads, defaultPipelineId }: Pro
     startTransition(async () => {
       try {
         await moveLeadToStageAction({ leadId, pipelineId, toStageId })
+        success('Lead movido com sucesso!')
         router.refresh()
-      } catch (err: any) {
+      } catch (err: unknown) {
         setLocalLeads(prev => prev.map(l => l.id === leadId ? { ...l, stage_id: originalStageId } : l))
-        alert(err?.message || 'Erro ao mover lead.')
+        const message = err instanceof Error ? err.message : 'Erro ao mover lead.'
+        showError(message)
       }
     })
   }
 
   function onFinalizeLead(leadId: string, status: 'won' | 'lost') {
+    if (!confirm(`Marcar como ${status === 'won' ? 'ganho' : 'perdido'}?`)) return
+    
     startTransition(async () => {
       try {
-        if (!confirm(`Marcar como ${status === 'won' ? 'ganho' : 'perdido'}?`)) return
         const resp = await fetch('/api/leads/finalize', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ leadId, status }),
         })
         if (!resp.ok) throw new Error('Erro ao finalizar lead')
+        success(`Lead marcado como ${status === 'won' ? 'ganho' : 'perdido'}!`)
         router.refresh()
-      } catch (err: any) {
-        alert(err?.message || 'Erro ao finalizar lead.')
+      } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : 'Erro ao finalizar lead.'
+        showError(message)
       }
     })
   }
 
+  if (pipelines.length === 0) {
+    return (
+      <EmptyState
+        title="Nenhum pipeline encontrado"
+        description="Configure um pipeline para começar a usar o Kanban."
+        icon={
+          <svg className="w-12 h-12" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 17V7m0 10a2 2 0 01-2 2H5a2 2 0 01-2-2V7a2 2 0 012-2h2a2 2 0 012 2m0 10a2 2 0 002 2h2a2 2 0 002-2M9 7a2 2 0 012-2h2a2 2 0 012 2m0 10V7m0 10a2 2 0 002 2h2a2 2 0 002-2V7a2 2 0 00-2-2h-2a2 2 0 00-2 2" />
+          </svg>
+        }
+      />
+    )
+  }
+
   return (
-    <div style={{ marginTop: 16 }}>
-      <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-        <span>Pipeline:</span>
-        <select value={pipelineId} onChange={(e) => setPipelineId(e.target.value)} disabled={isPending}>
+    <div className="space-y-4">
+      <div className="flex items-center gap-3">
+        <label className="text-sm font-medium text-[var(--foreground)]">Pipeline:</label>
+        <select 
+          value={pipelineId} 
+          onChange={(e) => setPipelineId(e.target.value)} 
+          disabled={isPending}
+          className="h-9 rounded-[var(--radius)] border border-[var(--input)] bg-[var(--background)] px-3 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)]"
+        >
           {pipelines.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
         </select>
       </div>
 
       <DndContext collisionDetection={closestCenter} onDragStart={onDragStart} onDragEnd={onDragEnd}>
-        <div style={{ display: 'flex', gap: 12, marginTop: 16, overflowX: 'auto', paddingBottom: 8 }}>
+        <div className="flex gap-4 overflow-x-auto pb-4">
           {columns.map((col) => {
             const items = (leadsByStage.get(col.id) ?? []).sort((a, b) => (b.created_at ?? '').localeCompare(a.created_at ?? ''))
             return (
@@ -316,11 +314,20 @@ export function KanbanBoard({ pipelines, stages, leads, defaultPipelineId }: Pro
                 <SortableContext items={items.map(i => i.id)} strategy={verticalListSortingStrategy}>
                   {items.map((l) => (
                     <DraggableCard key={l.id} id={l.id} disabled={isPending}>
-                      <LeadCard lead={l} disabled={isPending} isOptimistic={isPending && activeId === null && leads.find(sl => sl.id === l.id)?.stage_id !== l.stage_id} onFinalize={onFinalizeLead} />
+                      <LeadCard 
+                        lead={l} 
+                        disabled={isPending} 
+                        isOptimistic={isPending && activeId === null && leads.find(sl => sl.id === l.id)?.stage_id !== l.stage_id} 
+                        onFinalize={onFinalizeLead} 
+                      />
                     </DraggableCard>
                   ))}
                 </SortableContext>
-                {!items.length && <div style={{ fontSize: 12, opacity: 0.6 }}>Sem leads</div>}
+                {!items.length && (
+                  <p className="text-xs text-[var(--muted-foreground)] text-center py-4">
+                    Sem leads nesta etapa
+                  </p>
+                )}
               </DroppableColumn>
             )
           })}

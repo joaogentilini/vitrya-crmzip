@@ -3,13 +3,13 @@ export const revalidate = 0
 
 import { createClient } from '@/lib/supabaseServer'
 import { KanbanBoard } from './KanbanBoard'
-
+import { LeadsAppShell } from '../LeadsAppShell'
 
 export default async function LeadsKanbanPage() {
   const supabase = await createClient()
 
   const { data: userRes } = await supabase.auth.getUser()
-  const userId = userRes?.user?.id
+  const userEmail = userRes?.user?.email
 
   const { data: pipelines } = await supabase
     .from('pipelines')
@@ -30,22 +30,22 @@ export default async function LeadsKanbanPage() {
     .limit(200)
 
   return (
-    <div style={{ padding: 24, fontFamily: 'system-ui, sans-serif' }}>
-      <h1>Kanban</h1>
-      <div style={{ fontSize: 12, opacity: 0.7, marginTop: 6 }}>
-        Usuário: {userId ?? '(não autenticado)'}
-      </div>
+    <LeadsAppShell userEmail={userEmail}>
+      <div className="space-y-6">
+        <div>
+          <h1 className="text-2xl font-bold text-[var(--foreground)]">Kanban</h1>
+          <p className="text-sm text-[var(--muted-foreground)]">
+            Visualize e gerencie seus leads por etapas
+          </p>
+        </div>
 
-      <div style={{ marginTop: 12 }}>
-        <a href="/leads" style={{ fontSize: 14 }}>Voltar para Leads</a>
+        <KanbanBoard
+          pipelines={pipelines ?? []}
+          stages={stages ?? []}
+          leads={leads ?? []}
+          defaultPipelineId={pipelineId}
+        />
       </div>
-
-      <KanbanBoard
-  pipelines={pipelines ?? []}
-  stages={stages ?? []}
-  leads={leads ?? []}
-  defaultPipelineId={pipelineId}
-/>
-    </div>
+    </LeadsAppShell>
   )
 }

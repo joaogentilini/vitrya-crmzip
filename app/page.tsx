@@ -2,12 +2,18 @@
 
 import { useEffect, useState } from 'react'
 import { supabase } from '../lib/supabaseClient'
+import { Button } from '@/components/ui/Button'
+import { Input } from '@/components/ui/Input'
+import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from '@/components/ui/Card'
+import { useToast } from '@/components/ui/Toast'
+import Link from 'next/link'
 
 export default function HomePage() {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [userEmail, setUserEmail] = useState<string | null>(null)
-  const [status, setStatus] = useState('')
+  const [loading, setLoading] = useState(false)
+  const { success, error: showError } = useToast()
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => {
@@ -24,85 +30,122 @@ export default function HomePage() {
   }, [])
 
   async function signIn() {
-    setStatus('Entrando...')
+    if (!email || !password) {
+      showError('Preencha email e senha.')
+      return
+    }
+    setLoading(true)
     const { error } = await supabase.auth.signInWithPassword({
       email,
       password,
     })
     
     if (!error) {
-      setStatus('Logado com sucesso. Sincronizando sessão...')
-      // Forçamos o reload para o callback/leads para garantir que o middleware/cookies SSR funcionem
+      success('Login realizado com sucesso!')
       window.location.href = '/leads'
     } else {
-      setStatus(`Erro: ${error.message}`)
+      showError(error.message)
+      setLoading(false)
     }
   }
 
   async function resetPassword() {
     if (!email) {
-      setStatus('Informe o email para recuperar a senha.')
+      showError('Informe o email para recuperar a senha.')
       return
     }
-    setStatus('Enviando link...')
+    setLoading(true)
     const { error } = await supabase.auth.resetPasswordForEmail(email, {
       redirectTo: `${window.location.origin}/auth/callback?next=/auth/reset`,
     })
-    if (error) setStatus(`Erro: ${error.message}`)
-    else setStatus('Link de recuperação enviado para o email.')
+    setLoading(false)
+    if (error) {
+      showError(error.message)
+    } else {
+      success('Link de recuperação enviado para o email.')
+    }
   }
 
   async function signOut() {
     await supabase.auth.signOut()
     setUserEmail(null)
+    success('Você saiu da conta.')
   }
 
   if (userEmail) {
     return (
-      <main style={{ padding: 24 }}>
-        <h1>Vitrya CRM</h1>
-        <p>Logado como: {userEmail}</p>
-
-        <button onClick={signOut} style={{ padding: 10 }}>
-          Sair
-        </button>
-
-        <hr style={{ margin: '24px 0' }} />
-
-        <a href="/leads">Ir para Leads</a>
+      <main className="min-h-screen flex items-center justify-center p-6 bg-[var(--background)]">
+        <Card className="w-full max-w-md">
+          <CardHeader className="text-center">
+            <CardTitle className="text-2xl">
+              <span className="text-[var(--primary)]">Vitrya</span> CRM
+            </CardTitle>
+            <CardDescription>Bem-vindo de volta!</CardDescription>
+          </CardHeader>
+          <CardContent className="text-center">
+            <p className="text-sm text-[var(--muted-foreground)] mb-4">
+              Logado como: <span className="font-medium text-[var(--foreground)]">{userEmail}</span>
+            </p>
+            <Link href="/leads">
+              <Button className="w-full">Ir para Leads</Button>
+            </Link>
+          </CardContent>
+          <CardFooter className="justify-center">
+            <Button variant="ghost" onClick={signOut}>
+              Sair
+            </Button>
+          </CardFooter>
+        </Card>
       </main>
     )
   }
 
   return (
-    <main style={{ padding: 24, maxWidth: 420 }}>
-      <h1>Vitrya CRM — Login</h1>
-
-      <input
-        placeholder="Email"
-        value={email}
-        onChange={(e) => setEmail(e.target.value)}
-        style={{ width: '100%', padding: 10, marginBottom: 12 }}
-      />
-
-      <input
-        placeholder="Senha"
-        type="password"
-        value={password}
-        onChange={(e) => setPassword(e.target.value)}
-        style={{ width: '100%', padding: 10, marginBottom: 12 }}
-      />
-
-      <div style={{ display: 'flex', gap: 8 }}>
-        <button onClick={signIn} style={{ flex: 1, padding: 10 }}>
-          Entrar
-        </button>
-        <button onClick={resetPassword} style={{ flex: 1, padding: 10, background: '#f3f4f6', border: '1px solid #ccc' }}>
-          Esqueci Senha
-        </button>
-      </div>
-
-      <p style={{ marginTop: 12 }}>{status}</p>
+    <main className="min-h-screen flex items-center justify-center p-6 bg-[var(--background)]">
+      <Card className="w-full max-w-md">
+        <CardHeader className="text-center">
+          <CardTitle className="text-2xl">
+            <span className="text-[var(--primary)]">Vitrya</span> CRM
+          </CardTitle>
+          <CardDescription>Entre na sua conta para continuar</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <Input
+            type="email"
+            label="Email"
+            placeholder="seu@email.com"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            disabled={loading}
+          />
+          <Input
+            type="password"
+            label="Senha"
+            placeholder="Sua senha"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            disabled={loading}
+            onKeyDown={(e) => e.key === 'Enter' && signIn()}
+          />
+        </CardContent>
+        <CardFooter className="flex-col gap-3">
+          <Button 
+            className="w-full" 
+            onClick={signIn} 
+            loading={loading}
+          >
+            Entrar
+          </Button>
+          <Button 
+            variant="ghost" 
+            className="w-full"
+            onClick={resetPassword}
+            disabled={loading}
+          >
+            Esqueci minha senha
+          </Button>
+        </CardFooter>
+      </Card>
     </main>
   )
 }
