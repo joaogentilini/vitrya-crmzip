@@ -141,6 +141,13 @@ lib/
 
 ## Recent Changes (January 2026)
 
+### ETAPA 3: Explicit Move Stage Logging (January 2026)
+- **Explicit move_stage Action**: When dragging leads in Kanban, explicitly registers `action='move_stage'` in `lead_audit_logs`
+- **Enhanced moveLeadToStageAction**: Now accepts `fromStageId` parameter and inserts audit log with before/after stage_id
+- **Deduplication Logic**: Timeline filters redundant 'update' events when `move_stage` exists within 5-second window
+- **RLS Compliant**: All audit log inserts happen server-side via `createClient()` respecting Row Level Security
+- **All Surfaces Updated**: LeadsList, KanbanBoard, and LeadDetailsClient all pass fromStageId for proper logging
+
 ### ETAPA 2.5: Timeline Enhancement (January 2026)
 - **LeadTimeline Component**: Premium vertical timeline with audit log integration
 - **Audit Logs Integration**: Fetches from `lead_audit_logs` for complete history (create/update/delete/move_stage)
