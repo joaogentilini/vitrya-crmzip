@@ -103,48 +103,52 @@ export default function HomePage() {
   return (
     <main className="min-h-screen flex items-center justify-center p-6 bg-[var(--background)]">
       <Card className="w-full max-w-md">
-        <CardHeader className="text-center">
-          <CardTitle className="text-2xl">
-            <span className="text-[var(--primary)]">Vitrya</span> CRM
-          </CardTitle>
-          <CardDescription>Entre na sua conta para continuar</CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <Input
-            type="email"
-            label="Email"
-            placeholder="seu@email.com"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            disabled={loading}
-          />
-          <Input
-            type="password"
-            label="Senha"
-            placeholder="Sua senha"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            disabled={loading}
-            onKeyDown={(e) => e.key === 'Enter' && signIn()}
-          />
-        </CardContent>
-        <CardFooter className="flex-col gap-3">
-          <Button 
-            className="w-full" 
-            onClick={signIn} 
-            loading={loading}
-          >
-            Entrar
-          </Button>
-          <Button 
-            variant="ghost" 
-            className="w-full"
-            onClick={resetPassword}
-            disabled={loading}
-          >
-            Esqueci minha senha
-          </Button>
-        </CardFooter>
+        <form onSubmit={(e) => { e.preventDefault(); signIn(); }}>
+          <CardHeader className="text-center">
+            <CardTitle className="text-2xl">
+              <span className="text-[var(--primary)]">Vitrya</span> CRM
+            </CardTitle>
+            <CardDescription>Entre na sua conta para continuar</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <Input
+              type="email"
+              label="Email"
+              placeholder="seu@email.com"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              disabled={loading}
+              autoComplete="email"
+            />
+            <Input
+              type="password"
+              label="Senha"
+              placeholder="Sua senha"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              disabled={loading}
+              autoComplete="current-password"
+            />
+          </CardContent>
+          <CardFooter className="flex-col gap-3">
+            <Button 
+              type="submit"
+              className="w-full" 
+              loading={loading}
+            >
+              Entrar
+            </Button>
+            <Button 
+              type="button"
+              variant="ghost" 
+              className="w-full"
+              onClick={resetPassword}
+              disabled={loading}
+            >
+              Esqueci minha senha
+            </Button>
+          </CardFooter>
+        </form>
       </Card>
     </main>
   )
