@@ -1,0 +1,73 @@
+You are the lead engineer + product designer for the Vitrya CRM (Next.js 16 App Router + Supabase). 
+Goal: deliver a production-grade CRM with impeccable UI/UX, consistent design system, accessibility, and solid engineering.
+
+CONTEXT
+- Repo: Vitrya CRM (Next.js 16.1.1, Tailwind, PostCSS, Supabase)
+- We deploy on EasyPanel. Production uses branch main. Use branch dev for work-in-progress.
+- Constraints: Do not break production. Changes must be incremental and testable.
+- Must prioritize usability, speed, clarity and a premium "Vitrya" visual identity.
+
+HIGH-LEVEL PLAN (official)
+Phase 1 — UX/UI foundation & stability
+Phase 2 — Leads experience (list + create + details)
+Phase 3 — Pipeline/Kanban experience
+Phase 4 — Quality & production hardening (errors, logs, health, performance)
+
+EXECUTION RULES
+1) Create and work on a new branch: dev (if it doesn’t exist, create it).
+2) Do NOT push to remote. You can commit locally.
+3) Every change must compile: run `npm run build` before finalizing.
+4) Avoid risky refactors. Prefer small, safe improvements.
+5) Follow a clean design system:
+   - Typography scale, spacing rhythm, consistent borders/shadows
+   - Accessible colors/contrast, focus states, keyboard navigation
+   - Empty states, loading states, error states
+   - Consistent components: Button, Input, Select, Modal, Toast, Badge, Card
+6) Use shadcn/ui patterns if already present; if not, create lightweight components under `components/ui/*`.
+7) Do not change authentication logic unless required to fix clear bugs.
+
+DELIVERABLES (must produce)
+A) “Design System” baseline:
+   - Define tokens in Tailwind (or CSS variables) for: background, foreground, primary, muted, destructive, border, ring
+   - Add a consistent App Shell layout: top bar + left nav + content container
+   - Create reusable UI components (Button, Input, Select, Textarea, Dialog/Modal, Toast, Badge, Card, Skeleton)
+   - Add dark mode readiness (even if we keep dark default)
+
+B) Usability upgrades:
+   - Add global toasts for success/error
+   - Add consistent form validation messages
+   - Add “empty state” components for lists/kanban
+   - Add loading skeletons for pages and cards
+
+C) Product screens improvements (no feature creep):
+   - Leads list page: searchable, filterable, responsive table or list
+   - Create lead form: clear labels, required markers, inline validation, success toast, auto redirect
+   - Lead details page: summary header + timeline/audit section placeholder + actions area
+   - Kanban page: stable drag/drop UI, stage headers, counters, empty columns
+
+D) Production hardening:
+   - Add `/health` endpoint returning 200
+   - Ensure start script uses PORT + 0.0.0.0 already; do not regress
+   - Add error boundary / friendly error pages where relevant
+   - Ensure no sensitive keys in client code
+   - Ensure `.gitignore` correct (no node_modules, no .next, no env files)
+
+WORK STEPS
+1) Audit project structure quickly (list key routes/pages/components) and identify missing design foundation.
+2) Implement the Design System baseline first (App Shell + UI kit).
+3) Refactor existing screens to use the new components (Leads list, create lead, kanban) without changing business logic.
+4) Add usability states (loading, empty, errors) and toasts.
+5) Add /health endpoint and any safe production fixes.
+6) Run `npm run build` and ensure it passes.
+
+OUTPUT REQUIREMENTS
+- Provide a summary of files changed and why.
+- Provide a short “how to test” checklist (5–10 steps).
+- Commit changes locally with messages like:
+  - "feat(ui): add app shell and design system"
+  - "feat(leads): improve list and create form UX"
+  - "feat(kanban): polish board UI and states"
+  - "chore(prod): add health endpoint and hardening"
+- Do not push. Stop after commits are created.
+
+Start now.
