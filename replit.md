@@ -13,19 +13,26 @@ Preferred communication style: Simple, everyday language.
 ### Frontend Architecture
 - **Framework**: Next.js 16 with App Router
 - **UI Pattern**: React Server Components for data fetching, Client Components for interactivity
-- **Styling**: Tailwind CSS v4 with CSS custom properties for theming (light/dark mode auto-detection)
-- **Design System**: Custom component library in `components/ui/` with consistent styling tokens
+- **Styling**: Tailwind CSS v4 with CSS custom properties for Vitrya brand theming
+- **Design System**: Custom component library in `components/ui/` with Vitrya design tokens
 - **Drag-and-Drop**: @dnd-kit library suite (core, sortable, utilities) for Kanban board interactions
-- **Fonts**: Geist font family loaded via next/font
+- **Fonts**: Inter for UI text, loaded via next/font from Google Fonts
+
+### Vitrya Brand Color Palette
+- **Mirage (#171A21)**: Sidebar background, dark headers
+- **Cobalt (#294487)**: Secondary buttons, highlights
+- **Off-White (#FAFAFA)**: Main content background
+- **Pumpkin Orange (#FF681F)**: Primary CTAs, active states, focus rings
+- **Deep Teal (#17BEBB)**: Info badges, hover states
 
 ### Design System Components
 Located in `components/ui/`:
-- **Button**: Primary, secondary, ghost, outline, destructive, link variants with loading states
+- **Button**: Primary (Pumpkin Orange), secondary (Cobalt), ghost, outline, destructive, link variants with loading states
 - **Input**: Form input with label, hint, error state, and accessibility support (aria-describedby)
 - **Textarea**: Multi-line text input with label, hint, error state
 - **Select**: Styled select dropdown with label and error handling
 - **Card**: Container component with Header, Title, Description, Content, Footer sub-components
-- **Badge**: Status badges with success, warning, destructive, secondary variants
+- **Badge**: Status badges with success, warning, destructive, info (Deep Teal), secondary variants
 - **Skeleton**: Loading placeholder components (Skeleton, CardSkeleton, TableRowSkeleton, PageSkeleton, KanbanSkeleton)
 - **EmptyState**: Zero-state display with icon presets, title, description, and action/CTA
 - **InlineError**: Error state with retry button for data loading failures
@@ -33,12 +40,14 @@ Located in `components/ui/`:
 
 ### App Shell Layout
 Located in `components/layout/AppShell.tsx`:
+- Fixed dark sidebar (Mirage #171A21) with Vitrya branding and logo
+- Light content area (Off-White #FAFAFA) with max-width 1280px, centered
 - Responsive sidebar navigation with mobile hamburger menu (Escape to close)
-- Header with branding, page title breadcrumb, "Novo Lead" primary action button, and user dropdown menu
-- Navigation items with active/parent-active states: Leads list, Kanban board
-- User menu with avatar initial, email display, and sign-out action
-- Full keyboard navigation support with focus-visible styles
-- Used by authenticated pages via `LeadsAppShell` wrapper
+- Header with page title, "Novo Lead" primary action button (Pumpkin Orange), and user dropdown menu
+- Navigation items with active states using Pumpkin Orange highlight
+- User menu with avatar initial (Cobalt background), email display, and sign-out action
+- No horizontal scroll, only vertical scroll
+- Full keyboard navigation support with focus-visible styles (Pumpkin Orange ring)
 
 ### Backend Architecture
 - **API Pattern**: Mix of Server Actions (`'use server'`) and Route Handlers (`/api/*`)
@@ -145,6 +154,14 @@ lib/
 - `@dnd-kit/core`, `@dnd-kit/sortable`, `@dnd-kit/utilities`: Drag-and-drop functionality for Kanban board
 
 ## Recent Changes (January 2026)
+
+### Vitrya Design System Implementation (January 2026)
+- **Brand Colors**: Mirage (#171A21), Cobalt (#294487), Off-White (#FAFAFA), Pumpkin Orange (#FF681F), Deep Teal (#17BEBB)
+- **Typography**: Inter font for modern SaaS appearance
+- **Sidebar**: Dark fixed sidebar with Vitrya branding, Pumpkin Orange active states
+- **Content Area**: Light Off-White background, max-width 1280px, centered
+- **Buttons**: Primary (Pumpkin Orange), Secondary (Cobalt), Destructive variants
+- **Layout**: SaaS-style with fixed sidebar, no horizontal scroll
 
 ### ETAPA 4: Tasks/Next Action (January 2026)
 - **Tasks Table**: New `tasks` table with type, description, due_at, reminder_at, done/cancelled timestamps
