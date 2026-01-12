@@ -56,6 +56,7 @@ export function LeadDetailsClient({
         await moveLeadToStageAction({ 
           leadId: lead.id, 
           pipelineId: lead.pipeline_id!, 
+          fromStageId: lead.stage_id || '',
           toStageId 
         })
         success('Estágio atualizado!')

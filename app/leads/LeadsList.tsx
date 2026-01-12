@@ -109,11 +109,13 @@ export function LeadsList({ leads, pipelines, stages }: LeadsListProps) {
 
   const hasActiveFilters = search || filterPipeline || filterStage || filterStatus || sortBy !== 'recent'
 
-  const handleMoveStage = useCallback(async (leadId: string, toStageId: string, pipelineId: string) => {
+  const handleMoveStage = useCallback(async (leadId: string, fromStageId: string, toStageId: string, pipelineId: string) => {
+    if (fromStageId === toStageId) return
+    
     startTransition(async () => {
       try {
         const { moveLeadToStageAction } = await import('./kanban/actions')
-        await moveLeadToStageAction({ leadId, pipelineId, toStageId })
+        await moveLeadToStageAction({ leadId, pipelineId, fromStageId, toStageId })
         success('Lead movido com sucesso!')
         router.refresh()
       } catch (err) {
@@ -270,7 +272,7 @@ export function LeadsList({ leads, pipelines, stages }: LeadsListProps) {
                               {lead.status === 'open' && lead.pipeline_id && availableStages.length > 1 && (
                                 <select
                                   value={lead.stage_id || ''}
-                                  onChange={(e) => handleMoveStage(lead.id, e.target.value, lead.pipeline_id!)}
+                                  onChange={(e) => handleMoveStage(lead.id, lead.stage_id || '', e.target.value, lead.pipeline_id!)}
                                   disabled={isPending}
                                   className="h-8 rounded-[var(--radius)] border border-[var(--input)] bg-[var(--background)] px-2 text-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)] disabled:opacity-50"
                                 >
@@ -351,7 +353,7 @@ export function LeadsList({ leads, pipelines, stages }: LeadsListProps) {
                         {lead.pipeline_id && availableStages.length > 1 && (
                           <select
                             value={lead.stage_id || ''}
-                            onChange={(e) => handleMoveStage(lead.id, e.target.value, lead.pipeline_id!)}
+                            onChange={(e) => handleMoveStage(lead.id, lead.stage_id || '', e.target.value, lead.pipeline_id!)}
                             disabled={isPending}
                             className="flex-1 h-9 rounded-[var(--radius)] border border-[var(--input)] bg-[var(--background)] px-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)] disabled:opacity-50"
                           >

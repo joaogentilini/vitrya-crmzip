@@ -260,7 +260,7 @@ export function KanbanBoard({ pipelines, stages, leads, defaultPipelineId }: Pro
 
     startTransition(async () => {
       try {
-        await moveLeadToStageAction({ leadId, pipelineId, toStageId })
+        await moveLeadToStageAction({ leadId, pipelineId, fromStageId: originalStageId, toStageId })
         success('Lead movido com sucesso!')
         router.refresh()
       } catch (err: unknown) {
