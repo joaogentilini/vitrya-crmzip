@@ -20,11 +20,18 @@ export interface RescheduleTaskInput {
   dueAt: string
 }
 
-async function isUserAdmin(supabase: Awaited<ReturnType<typeof createClient>>): Promise<boolean> {
-  const { data: profile } = await supabase
+async function isUserAdmin(supabase: Awaited<ReturnType<typeof createClient>>, userId: string): Promise<boolean> {
+  const { data: profile, error } = await supabase
     .from('profiles')
     .select('role')
+    .eq('id', userId)
     .single()
+  
+  if (error) {
+    console.error('[isUserAdmin] Failed to fetch profile:', error)
+    return false
+  }
+  
   return profile?.role === 'admin'
 }
 
@@ -33,7 +40,7 @@ async function canAccessLead(
   leadId: string,
   userId: string
 ): Promise<boolean> {
-  const isAdmin = await isUserAdmin(supabase)
+  const isAdmin = await isUserAdmin(supabase, userId)
   if (isAdmin) return true
 
   const { data: lead } = await supabase
@@ -51,7 +58,7 @@ async function canAccessTask(
   taskId: string,
   userId: string
 ): Promise<{ allowed: boolean; task?: { id: string; lead_id: string; title: string; type: string; due_at: string; status: string; assigned_to: string } }> {
-  const isAdmin = await isUserAdmin(supabase)
+  const isAdmin = await isUserAdmin(supabase, userId)
 
   const { data: task, error } = await supabase
     .from('tasks')
@@ -79,7 +86,7 @@ export async function createTaskAction(input: CreateTaskInput) {
   const hasAccess = await canAccessLead(supabase, input.leadId, userId)
   if (!hasAccess) throw new Error('Sem permissão para criar tarefa neste lead')
 
-  const isAdmin = await isUserAdmin(supabase)
+  const isAdmin = await isUserAdmin(supabase, userId)
   const assignedTo = isAdmin && input.assignedTo ? input.assignedTo : userId
 
   const { data: task, error: insertError } = await supabase
@@ -92,29 +99,30 @@ export async function createTaskAction(input: CreateTaskInput) {
       notes: input.notes || null,
       assigned_to: assignedTo,
       created_by: userId,
+      status: 'open',
     })
     .select('id, title, type, due_at, status, assigned_to')
     .single()
 
   if (insertError) throw new Error(insertError.message)
 
-  try {
-    await supabase.from('lead_audit_logs').insert({
-      lead_id: input.leadId,
-      actor_id: userId,
-      action: 'task_create',
-      before: null,
-      after: {
-        task_id: task.id,
-        title: task.title,
-        type: task.type,
-        due_at: task.due_at,
-        status: task.status,
-        assigned_to: task.assigned_to,
-      },
-    })
-  } catch (auditErr) {
-    console.error('[createTaskAction] Audit log insert failed:', auditErr)
+  const { error: auditError } = await supabase.from('lead_audit_logs').insert({
+    lead_id: input.leadId,
+    actor_id: userId,
+    action: 'task_create',
+    before: null,
+    after: {
+      task_id: task.id,
+      title: task.title,
+      type: task.type,
+      due_at: task.due_at,
+      status: task.status,
+      assigned_to: task.assigned_to,
+    },
+  })
+
+  if (auditError) {
+    console.error('[TaskAudit] task_create insert failed:', auditError)
   }
 
   revalidatePath('/leads')
@@ -151,16 +159,16 @@ export async function completeTaskAction(taskId: string) {
 
   if (updateError) throw new Error(updateError.message)
 
-  try {
-    await supabase.from('lead_audit_logs').insert({
-      lead_id: task.lead_id,
-      actor_id: userId,
-      action: 'task_done',
-      before: beforeState,
-      after: { ...beforeState, status: 'done' },
-    })
-  } catch (auditErr) {
-    console.error('[completeTaskAction] Audit log insert failed:', auditErr)
+  const { error: auditError } = await supabase.from('lead_audit_logs').insert({
+    lead_id: task.lead_id,
+    actor_id: userId,
+    action: 'task_done',
+    before: beforeState,
+    after: { ...beforeState, status: 'done' },
+  })
+
+  if (auditError) {
+    console.error('[TaskAudit] task_done insert failed:', auditError)
   }
 
   revalidatePath('/leads')
@@ -188,30 +196,30 @@ export async function rescheduleTaskAction(input: RescheduleTaskInput) {
 
   if (updateError) throw new Error(updateError.message)
 
-  try {
-    await supabase.from('lead_audit_logs').insert({
-      lead_id: task.lead_id,
-      actor_id: userId,
-      action: 'task_reschedule',
-      before: {
-        task_id: task.id,
-        title: task.title,
-        type: task.type,
-        due_at: beforeDueAt,
-        status: task.status,
-        assigned_to: task.assigned_to,
-      },
-      after: {
-        task_id: task.id,
-        title: task.title,
-        type: task.type,
-        due_at: input.dueAt,
-        status: task.status,
-        assigned_to: task.assigned_to,
-      },
-    })
-  } catch (auditErr) {
-    console.error('[rescheduleTaskAction] Audit log insert failed:', auditErr)
+  const { error: auditError } = await supabase.from('lead_audit_logs').insert({
+    lead_id: task.lead_id,
+    actor_id: userId,
+    action: 'task_reschedule',
+    before: {
+      task_id: task.id,
+      title: task.title,
+      type: task.type,
+      due_at: beforeDueAt,
+      status: task.status,
+      assigned_to: task.assigned_to,
+    },
+    after: {
+      task_id: task.id,
+      title: task.title,
+      type: task.type,
+      due_at: input.dueAt,
+      status: task.status,
+      assigned_to: task.assigned_to,
+    },
+  })
+
+  if (auditError) {
+    console.error('[TaskAudit] task_reschedule insert failed:', auditError)
   }
 
   revalidatePath('/leads')
@@ -246,16 +254,16 @@ export async function cancelTaskAction(taskId: string) {
 
   if (updateError) throw new Error(updateError.message)
 
-  try {
-    await supabase.from('lead_audit_logs').insert({
-      lead_id: task.lead_id,
-      actor_id: userId,
-      action: 'task_cancel',
-      before: beforeState,
-      after: { ...beforeState, status: 'canceled' },
-    })
-  } catch (auditErr) {
-    console.error('[cancelTaskAction] Audit log insert failed:', auditErr)
+  const { error: auditError } = await supabase.from('lead_audit_logs').insert({
+    lead_id: task.lead_id,
+    actor_id: userId,
+    action: 'task_cancel',
+    before: beforeState,
+    after: { ...beforeState, status: 'canceled' },
+  })
+
+  if (auditError) {
+    console.error('[TaskAudit] task_cancel insert failed:', auditError)
   }
 
   revalidatePath('/leads')
