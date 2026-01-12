@@ -82,6 +82,7 @@ app/
     [id]/
       page.tsx          # Lead details 360° page
       LeadDetailsClient.tsx  # Details view with timeline, cards, actions
+      LeadTimeline.tsx  # Premium timeline with lead_audit_logs and actor resolution
       EditLeadModal.tsx # Edit lead modal with validation
     kanban/
       page.tsx          # Kanban board page with AppShell
@@ -114,6 +115,7 @@ components/
 lib/
   supabaseClient.ts     # Browser Supabase client
   supabaseServer.ts     # Server Supabase client
+  leads.tsx             # Shared lead types and helpers (getStatusBadge, normalizeError)
 ```
 
 ## External Dependencies
@@ -131,11 +133,21 @@ lib/
 - `pipelines`: id, name, created_at
 - `pipeline_stages`: id, pipeline_id, name, position
 - `lead_stage_changes`: id, lead_id, pipeline_id, from_stage_id, to_stage_id, created_at
+- `lead_audit_logs`: id, lead_id, actor_id, action, before, after, created_at (audit trail)
+- `profiles`: id, name, full_name, email (user profiles for actor resolution)
 
 ### UI Libraries
 - `@dnd-kit/core`, `@dnd-kit/sortable`, `@dnd-kit/utilities`: Drag-and-drop functionality for Kanban board
 
 ## Recent Changes (January 2026)
+
+### ETAPA 2.5: Timeline Enhancement (January 2026)
+- **LeadTimeline Component**: Premium vertical timeline with audit log integration
+- **Audit Logs Integration**: Fetches from `lead_audit_logs` for complete history (create/update/delete/move_stage)
+- **Actor Resolution**: Resolves actor names from `profiles` table (name, full_name, or email)
+- **Event Summarization**: Human-readable summaries (stage changes, status changes, title changes)
+- **Clickable Titles**: Lead titles link to detail page in both list and Kanban views
+- **Code Consolidation**: Shared types and helpers in `lib/leads.tsx`
 
 ### ETAPA 2: Leads Professional
 - **Leads List PRO**: Search input, pipeline/stage/status filters, sorting (recent/name/stage), responsive table/cards

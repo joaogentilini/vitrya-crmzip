@@ -29,6 +29,23 @@ type StageRow = {
   position: number
 }
 
+export type AuditLogRow = {
+  id: string
+  lead_id: string
+  actor_id: string
+  action: string
+  before: Record<string, unknown> | null
+  after: Record<string, unknown> | null
+  created_at: string
+}
+
+export type ActorProfile = {
+  id: string
+  name: string | null
+  full_name: string | null
+  email: string | null
+}
+
 export default async function LeadDetailsPage({ 
   params 
 }: { 
@@ -67,6 +84,58 @@ export default async function LeadDetailsPage({
   const pipeline = pipelines.find(p => p.id === lead.pipeline_id)
   const stage = stages.find(s => s.id === lead.stage_id)
 
+  let auditLogs: AuditLogRow[] = []
+  let actorProfiles: ActorProfile[] = []
+
+  const { data: auditLogsRaw, error: auditError } = await supabase
+    .from('lead_audit_logs')
+    .select('id, lead_id, actor_id, action, before, after, created_at')
+    .eq('lead_id', id)
+    .order('created_at', { ascending: false })
+    .limit(50)
+
+  if (!auditError && auditLogsRaw) {
+    auditLogs = auditLogsRaw.map(log => {
+      let parsedBefore = log.before
+      let parsedAfter = log.after
+      
+      try {
+        if (typeof log.before === 'string') {
+          parsedBefore = JSON.parse(log.before)
+        }
+      } catch {
+        parsedBefore = null
+      }
+      
+      try {
+        if (typeof log.after === 'string') {
+          parsedAfter = JSON.parse(log.after)
+        }
+      } catch {
+        parsedAfter = null
+      }
+      
+      return {
+        ...log,
+        before: parsedBefore,
+        after: parsedAfter,
+      }
+    }) as AuditLogRow[]
+
+    const actorIds = [...new Set(auditLogs.map(l => l.actor_id).filter(Boolean))]
+    
+    if (actorIds.length > 0) {
+      const { data: profilesRaw } = await supabase
+        .from('profiles')
+        .select('id, name, full_name, email')
+        .in('id', actorIds)
+
+      if (profilesRaw) {
+        actorProfiles = profilesRaw as ActorProfile[]
+      }
+    }
+  }
+
   return (
     <LeadsAppShell 
       userEmail={userEmail} 
@@ -79,6 +148,8 @@ export default async function LeadDetailsPage({
         stage={stage}
         pipelines={pipelines}
         stages={stages}
+        auditLogs={auditLogs}
+        actorProfiles={actorProfiles}
       />
     </LeadsAppShell>
   )

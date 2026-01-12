@@ -2,6 +2,7 @@
 
 import React, { useMemo, useState, useTransition, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
+import Link from 'next/link'
 import { moveLeadToStageAction } from './actions'
 import { useToast } from '@/components/ui/Toast'
 import { Button } from '@/components/ui/Button'
@@ -76,7 +77,15 @@ function LeadCard({
       {isOptimistic && (
         <div className="absolute top-2 right-2 w-2 h-2 rounded-full bg-[var(--primary)] animate-pulse" />
       )}
-      <p className="font-medium text-[var(--card-foreground)] text-sm">{lead.title}</p>
+      <Link 
+        href={`/leads/${lead.id}`}
+        className="font-medium text-[var(--card-foreground)] text-sm hover:text-[var(--primary)] hover:underline block"
+        onPointerDown={(e) => e.stopPropagation()}
+        onMouseDown={(e) => e.stopPropagation()}
+        onClick={(e) => e.stopPropagation()}
+      >
+        {lead.title}
+      </Link>
       <p className="text-xs text-[var(--muted-foreground)] mt-1">
         {formatDate(lead.created_at)}
       </p>

@@ -1,0 +1,87 @@
+Você é um engenheiro full-stack sênior (Next.js App Router + TypeScript + Supabase) e designer de sistemas focado em CRM imobiliário. Trabalhe no repositório atual `vitrya-crm`. Objetivo: implementar/ajustar a **Tela do Lead (detalhe)** e a **Timeline (Histórico de ações)** com padrão de produto.
+
+REGRAS CRÍTICAS (OBRIGATÓRIAS)
+1) JÁ EXISTE a rota `app/leads/[id]`. Você deve REUTILIZAR e AJUSTAR o que existir, sem mudar o comportamento das telas antigas.
+2) NÃO refatore telas antigas (listagem, kanban, etc.). Pode apenas adicionar o link para abrir o detalhe do lead (título clicável), sem reestruturar componentes.
+3) Não enfraquecer RLS. Não usar service_role no client. Todas as queries sensíveis devem usar o server client `createClient()` de `@/lib/supabaseServer`.
+4) Evitar hydration mismatch. Preferir datas renderizadas no server; se precisar no client, use componente hydration-safe.
+
+CONTEXTO TÉCNICO (não alterar)
+- Next.js 16 App Router + TS.
+- Supabase server client existente: `@/lib/supabaseServer` (use `createClient()`).
+- RLS ativo em `public.leads` e `public.lead_audit_logs`.
+- Admin: `public.is_admin()` retorna true quando `public.profiles.role = 'admin'`.
+- Auditoria: tabela `public.lead_audit_logs` com colunas:
+  - lead_id (uuid), actor_id (uuid), action (text: create/update/delete/move_stage), before (jsonb), after (jsonb), created_at (timestamptz).
+- Trigger já grava update/delete. Create é gravado pelo código no `createLeadAction` (já existe log de create/update no banco).
+
+ENTREGÁVEIS (obrigatórios)
+A) Detalhe do lead (reutilizar `app/leads/[id]`)
+- Ajustar a página existente em `app/leads/[id]/page.tsx` (ou estrutura equivalente já presente) para:
+  1) Buscar o lead por `id` via server (`createClient()`).
+  2) Renderizar um header com:
+     - Título do lead
+     - Badge de status (open/won/lost)
+     - Pipeline e Stage (IDs ou nomes se já estiverem disponíveis em tabelas)
+     - Assigned_to e Created_by (IDs truncados; se existir nome no profiles, mostrar)
+     - created_at e updated_at
+  3) Incluir uma seção “Histórico” (Timeline) com os logs do `lead_audit_logs` para este `lead_id`.
+
+- Caso não encontre o lead ou não tenha permissão (RLS), exibir UI amigável:
+  “Lead não encontrado ou sem permissão”.
+
+B) Timeline (Histórico)
+- Criar componente dedicado (preferência):
+  - `app/leads/[id]/LeadTimeline.tsx`
+- A timeline deve ser um layout vertical estilo CRM premium:
+  - itens com marcador/linha
+  - cada item mostra: ação, data/hora (pt-BR), ator (nome se possível, senão actor_id truncado)
+  - não renderizar JSON completo; renderizar apenas resumos humanos.
+- Resumos (diff) mínimos:
+  - Se action=update:
+    - se `before.stage_id` != `after.stage_id`: “Etapa alterada”
+    - se `before.status` != `after.status`: “Status alterado: X → Y”
+    - se `before.title` != `after.title`: “Título alterado”
+  - Se action=create: “Lead criado”
+  - Se action=delete: “Lead removido”
+  - Se action=move_stage: “Movido de etapa” (se houver dados suficientes)
+- Paginação inicial: carregar apenas os 50 mais recentes.
+
+C) Resolver nome do actor (opcional, se existir no schema)
+- Verificar se `public.profiles` tem `name` ou `full_name`.
+- Se existir, buscar e exibir nome do ator no histórico. Se não existir, manter actor_id truncado.
+- Não fazer JOIN que quebre RLS. Preferir query separada:
+  1) coletar actor_ids distintos dos logs
+  2) buscar profiles desses IDs
+  3) mapear para nome
+
+D) Link para abrir detalhe (sem refatorar telas antigas)
+- Em `/leads` e/ou Kanban, tornar o título do lead clicável para `/leads/[id]`.
+- Alteração mínima: apenas envolver o título com `<Link href={`/leads/${lead.id}`}>`.
+- Não reestruturar a listagem/kanban.
+
+SUGESTÃO DE IMPLEMENTAÇÃO (direção)
+- Buscar lead:
+  `supabase.from('leads').select('*').eq('id', params.id).single()`
+- Buscar logs:
+  `supabase.from('lead_audit_logs').select('id, action, actor_id, created_at, before, after').eq('lead_id', params.id).order('created_at', { ascending: false }).limit(50)`
+- Criar helper `summarizeAuditEvent(event)` que retorna:
+  - title (ex “Etapa alterada”)
+  - details (ex “status: open → won”)
+  - actorDisplay
+  - datetimeDisplay
+
+CRITÉRIOS DE ACEITE (testes manuais)
+1) Admin consegue abrir qualquer `/leads/[id]`.
+2) Corretor só consegue abrir leads onde ele é owner (user_id) ou assigned_to (RLS).
+3) Timeline mostra eventos existentes (create/update) com data/hora correta.
+4) Alterar título/etapa gera novo item (update) visível após refresh.
+5) Design consistente e “premium” (cards, espaçamento, tipografia, sem poluição visual).
+6) Nenhum erro de hydration no console.
+
+SAÍDA (obrigatória)
+- Entregar com commit organizado.
+- Listar arquivos criados/alterados.
+- Explicar como testar em 5 passos (login, abrir lead, editar, verificar histórico, validar permissões).
+
+Agora execute a implementação com cuidado, respeitando as regras críticas.

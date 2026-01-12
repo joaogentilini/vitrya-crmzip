@@ -1,25 +1,25 @@
 'use client'
 
-import { useState, useTransition, useCallback, useEffect } from 'react'
+import { useState, useTransition, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { Button } from '@/components/ui/Button'
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/Card'
 import { EmptyState } from '@/components/ui/EmptyState'
-import { Skeleton } from '@/components/ui/Skeleton'
 import { useToast } from '@/components/ui/Toast'
 import { ClientDate } from '../ClientDate'
 import { EditLeadModal } from './EditLeadModal'
+import { LeadTimeline } from './LeadTimeline'
 import { 
   type LeadRow, 
   type PipelineRow, 
   type StageRow,
-  type StageChange,
   getStatusBadge,
   normalizeError,
   getConfirmFinalizeMessage,
   getFinalizeSuccessMessage
 } from '@/lib/leads'
+import type { AuditLogRow, ActorProfile } from './page'
 
 interface LeadDetailsClientProps {
   lead: LeadRow
@@ -27,6 +27,8 @@ interface LeadDetailsClientProps {
   stage?: StageRow
   pipelines: PipelineRow[]
   stages: StageRow[]
+  auditLogs: AuditLogRow[]
+  actorProfiles: ActorProfile[]
 }
 
 export function LeadDetailsClient({ 
@@ -34,7 +36,9 @@ export function LeadDetailsClient({
   pipeline, 
   stage, 
   pipelines, 
-  stages 
+  stages,
+  auditLogs,
+  actorProfiles
 }: LeadDetailsClientProps) {
   const router = useRouter()
   const { success, error: showError } = useToast()
@@ -205,11 +209,12 @@ export function LeadDetailsClient({
               <CardTitle className="text-base">Linha do Tempo</CardTitle>
             </CardHeader>
             <CardContent>
-              <TimelineSection 
-                leadId={lead.id} 
+              <LeadTimeline 
                 createdAt={lead.created_at} 
                 status={lead.status}
                 stages={stages}
+                auditLogs={auditLogs}
+                actorProfiles={actorProfiles}
               />
             </CardContent>
           </Card>
@@ -293,161 +298,6 @@ export function LeadDetailsClient({
         pipelines={pipelines}
         stages={stages}
       />
-    </div>
-  )
-}
-
-function TimelineSection({ 
-  leadId, 
-  createdAt, 
-  status,
-  stages 
-}: { 
-  leadId: string
-  createdAt: string
-  status: string
-  stages: StageRow[]
-}) {
-  const [changes, setChanges] = useState<StageChange[]>([])
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
-
-  const stageMap = new Map(stages.map(s => [s.id, s]))
-
-  useEffect(() => {
-    async function fetchChanges() {
-      try {
-        const { supabase } = await import('@/lib/supabaseClient')
-        const { data, error: fetchError } = await supabase
-          .from('lead_stage_changes')
-          .select('id, lead_id, from_stage_id, to_stage_id, created_at')
-          .eq('lead_id', leadId)
-          .order('created_at', { ascending: true })
-
-        if (fetchError) {
-          if (fetchError.code === '42P01') {
-            setChanges([])
-          } else {
-            throw fetchError
-          }
-        } else {
-          setChanges((data || []) as StageChange[])
-        }
-      } catch (err) {
-        console.error('Error fetching stage changes:', err)
-        setError('Não foi possível carregar o histórico.')
-      } finally {
-        setLoading(false)
-      }
-    }
-
-    fetchChanges()
-  }, [leadId])
-
-  if (loading) {
-    return (
-      <div className="space-y-4">
-        <div className="flex gap-4">
-          <Skeleton className="w-8 h-8 rounded-full" />
-          <div className="space-y-2 flex-1">
-            <Skeleton className="h-4 w-32" />
-            <Skeleton className="h-3 w-24" />
-          </div>
-        </div>
-      </div>
-    )
-  }
-
-  if (error) {
-    return (
-      <p className="text-sm text-[var(--muted-foreground)]">{error}</p>
-    )
-  }
-
-  return (
-    <div className="relative">
-      <div className="absolute left-4 top-0 bottom-0 w-0.5 bg-[var(--border)]" />
-      
-      <div className="space-y-6">
-        <div className="relative flex gap-4">
-          <div className="w-8 h-8 rounded-full bg-[var(--primary)] flex items-center justify-center flex-shrink-0 z-10">
-            <svg className="w-4 h-4 text-[var(--primary-foreground)]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
-            </svg>
-          </div>
-          <div className="pt-1">
-            <p className="text-sm font-medium text-[var(--foreground)]">
-              Lead criado
-            </p>
-            <p className="text-xs text-[var(--muted-foreground)] mt-0.5">
-              <ClientDate value={createdAt} />
-            </p>
-          </div>
-        </div>
-
-        {changes.map((change) => {
-          const fromStage = stageMap.get(change.from_stage_id || '')
-          const toStage = stageMap.get(change.to_stage_id || '')
-
-          return (
-            <div key={change.id} className="relative flex gap-4">
-              <div className="w-8 h-8 rounded-full bg-[var(--accent)] flex items-center justify-center flex-shrink-0 z-10">
-                <svg className="w-4 h-4 text-[var(--accent-foreground)]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
-                </svg>
-              </div>
-              <div className="pt-1">
-                <p className="text-sm font-medium text-[var(--foreground)]">
-                  Movido de <span className="text-[var(--muted-foreground)]">{fromStage?.name || '—'}</span> para{' '}
-                  <span className="text-[var(--primary)]">{toStage?.name || '—'}</span>
-                </p>
-                <p className="text-xs text-[var(--muted-foreground)] mt-0.5">
-                  <ClientDate value={change.created_at} />
-                </p>
-              </div>
-            </div>
-          )
-        })}
-
-        {status !== 'open' && (
-          <div className="relative flex gap-4">
-            <div className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 z-10 ${
-              status === 'won' ? 'bg-[var(--success)]' : 'bg-[var(--destructive)]'
-            }`}>
-              <svg className="w-4 h-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                {status === 'won' ? (
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                ) : (
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                )}
-              </svg>
-            </div>
-            <div className="pt-1">
-              <p className="text-sm font-medium text-[var(--foreground)]">
-                Lead marcado como{' '}
-                <span className={status === 'won' ? 'text-[var(--success)]' : 'text-[var(--destructive)]'}>
-                  {status === 'won' ? 'Ganho' : 'Perdido'}
-                </span>
-              </p>
-            </div>
-          </div>
-        )}
-
-        {changes.length === 0 && status === 'open' && (
-          <div className="relative flex gap-4">
-            <div className="w-8 h-8 rounded-full bg-[var(--muted)] flex items-center justify-center flex-shrink-0 z-10">
-              <svg className="w-4 h-4 text-[var(--muted-foreground)]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-              </svg>
-            </div>
-            <div className="pt-1">
-              <p className="text-sm text-[var(--muted-foreground)]">
-                Nenhuma alteração de estágio registrada ainda.
-              </p>
-            </div>
-          </div>
-        )}
-      </div>
     </div>
   )
 }
