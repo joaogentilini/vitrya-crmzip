@@ -37,3 +37,42 @@ export async function createLeadAction(data: CreateLeadInput) {
   revalidatePath('/leads')
   return inserted
 }
+
+type UpdateLeadInput = {
+  leadId: string
+  title: string
+  pipelineId: string | null
+  stageId: string | null
+}
+
+export async function updateLeadAction(data: UpdateLeadInput) {
+  const supabase = await createClient()
+
+  const { data: userRes, error: authError } = await supabase.auth.getUser()
+  if (authError || !userRes?.user) throw new Error('Usuário não autenticado')
+
+  const updateData: Record<string, string | null> = {
+    title: data.title,
+  }
+
+  if (data.pipelineId !== null) {
+    updateData.pipeline_id = data.pipelineId
+  }
+  if (data.stageId !== null) {
+    updateData.stage_id = data.stageId
+  }
+
+  const { error: updateError } = await supabase
+    .from('leads')
+    .update(updateData)
+    .eq('id', data.leadId)
+
+  if (updateError) {
+    console.error('[updateLeadAction] updateError:', updateError)
+    throw new Error(updateError.message)
+  }
+
+  revalidatePath('/leads')
+  revalidatePath(`/leads/${data.leadId}`)
+  return { success: true }
+}

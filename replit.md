@@ -22,6 +22,7 @@ Preferred communication style: Simple, everyday language.
 Located in `components/ui/`:
 - **Button**: Primary, secondary, ghost, outline, destructive, link variants with loading states
 - **Input**: Form input with label, hint, error state, and accessibility support (aria-describedby)
+- **Textarea**: Multi-line text input with label, hint, error state
 - **Select**: Styled select dropdown with label and error handling
 - **Card**: Container component with Header, Title, Description, Content, Footer sub-components
 - **Badge**: Status badges with success, warning, destructive, secondary variants
@@ -41,7 +42,7 @@ Located in `components/layout/AppShell.tsx`:
 
 ### Backend Architecture
 - **API Pattern**: Mix of Server Actions (`'use server'`) and Route Handlers (`/api/*`)
-- **Server Actions**: Used for lead creation (`createLeadAction`), lead movement (`moveLeadToStageAction`), and status updates (`setLeadFinalStatusAction`)
+- **Server Actions**: Used for lead creation (`createLeadAction`), lead update (`updateLeadAction`), lead movement (`moveLeadToStageAction`)
 - **Route Handlers**: REST endpoints at `/api/leads/finalize` for finalizing leads, `/api/health` for health checks
 - **Data Fetching**: Server Components fetch data directly using Supabase client, with `force-dynamic` and `revalidate = 0` for real-time data
 
@@ -62,6 +63,7 @@ The application uses a pipeline-based lead management system:
 - **Pipelines**: Top-level containers for organizing sales processes
 - **Pipeline Stages**: Ordered stages within each pipeline (by position)
 - **Leads**: Individual opportunities with title, status (open/won/lost), pipeline assignment, and stage assignment
+- **Lead Stage Changes**: Audit log of stage movements with from/to stage and timestamp
 
 ## Project Structure
 
@@ -71,13 +73,20 @@ app/
   layout.tsx            # Root layout with ToastProvider
   globals.css           # Design tokens, animations, and Tailwind v4 theme
   leads/
-    page.tsx            # Leads list page with AppShell
+    page.tsx            # Leads list page with search, filters, sorting
+    LeadsList.tsx       # Client component with table/card layout
     CreateLeadForm.tsx  # Lead creation form with validation
     LeadsAppShell.tsx   # App shell wrapper for leads pages
     ClientDate.tsx      # Hydration-safe date component
+    actions.ts          # Server actions: createLeadAction, updateLeadAction
+    [id]/
+      page.tsx          # Lead details 360° page
+      LeadDetailsClient.tsx  # Details view with timeline, cards, actions
+      EditLeadModal.tsx # Edit lead modal with validation
     kanban/
       page.tsx          # Kanban board page with AppShell
       KanbanBoard.tsx   # Drag-and-drop Kanban component
+      actions.ts        # moveLeadToStageAction
   auth/
     callback/           # Supabase auth callback
     reset/              # Password reset page
@@ -90,6 +99,7 @@ components/
   ui/                   # Design system components
     Button.tsx          # Button with variants and loading state
     Input.tsx           # Input with label, hint, error, accessibility
+    Textarea.tsx        # Textarea with label, hint, error
     Select.tsx          # Select dropdown with label and error
     Card.tsx            # Card container with sub-components
     Badge.tsx           # Status badges
@@ -120,23 +130,25 @@ lib/
 - `leads`: id, title, status, pipeline_id, stage_id, created_by, assigned_to, created_at
 - `pipelines`: id, name, created_at
 - `pipeline_stages`: id, pipeline_id, name, position
+- `lead_stage_changes`: id, lead_id, pipeline_id, from_stage_id, to_stage_id, created_at
 
 ### UI Libraries
 - `@dnd-kit/core`, `@dnd-kit/sortable`, `@dnd-kit/utilities`: Drag-and-drop functionality for Kanban board
 
 ## Recent Changes (January 2026)
 
-### Sprint 1: UX Consistency + Premium Design
-- **App Shell Refinements**: Enhanced header with page title breadcrumb, "Novo Lead" primary action button, user avatar dropdown menu with sign-out
-- **Sidebar Improvements**: Clear active/parent-active states, mobile-responsive with Escape key to close, full keyboard navigation
-- **State System**: Added PageSkeleton, KanbanSkeleton, InlineError components; improved EmptyState with icon presets
-- **Forms UX**: Added hint text to Input component, client-side validation with inline errors, loading state on submit buttons
-- **Accessibility**: Enhanced focus-visible styles across all interactive elements, ARIA attributes (aria-expanded, aria-current, aria-describedby)
-- **Typography/Spacing**: Consistent tracking-tight on headings, improved responsive padding, smooth scroll behavior
-- **CSS Enhancements**: Added animations (fade-in, slide-in), selection styling, prefers-reduced-motion support, autofill styling
+### ETAPA 2: Leads Professional
+- **Leads List PRO**: Search input, pipeline/stage/status filters, sorting (recent/name/stage), responsive table/cards
+- **Quick Actions**: View details link, move stage dropdown, mark won/lost buttons on each lead row/card
+- **Lead Details 360°**: New route `/leads/[id]` with header, status badge, pipeline/stage info
+- **Timeline**: Shows lead creation and stage changes from `lead_stage_changes` table
+- **Edit Modal**: Title validation, pipeline/stage selection, loading states, toast feedback
+- **Cards Layout**: Contact, Interest/Origin, Notes, Next action placeholder cards
+- **Server Actions**: Added `updateLeadAction` for editing leads
 
-### Previous Changes
-- **Design System Implementation**: CSS tokens, component library, AppShell layout, Toast notifications
-- **Health Endpoint**: `/api/health` returning JSON `{ status: 'ok', timestamp }` for monitoring
-- **Optimistic UI Updates**: Lead movements in Kanban board update instantly with automatic rollback
-- **Auth Fixes**: Auth callback route, password reset flow, hydration-safe date formatting
+### ETAPA 1: Base Premium UX/UI
+- **App Shell**: Header with page title, "Novo Lead" button, user menu; sidebar with active states
+- **Design Tokens**: CSS variables for colors, typography, animations
+- **UI Components**: Button, Input, Textarea, Select, Card, Badge, Skeleton, Toast, EmptyState, InlineError
+- **State System**: PageSkeleton, KanbanSkeleton, InlineError with retry
+- **Accessibility**: Focus-visible styles, keyboard navigation, ARIA attributes
