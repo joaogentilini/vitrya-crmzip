@@ -1,57 +1,75 @@
 @import "tailwindcss";
 
 :root {
-  --background: #ffffff;
-  --foreground: #0f172a;
+  --mirage: #171A21;
+  --cobalt: #294487;
+  --off-white: #FAFAFA;
+  --pumpkin: #FF681F;
+  --pumpkin-hover: #E85A15;
+  --teal: #17BEBB;
+  --teal-hover: #14A8A5;
+
+  --background: #FAFAFA;
+  --foreground: #171A21;
   --card: #ffffff;
-  --card-foreground: #0f172a;
+  --card-foreground: #171A21;
   --popover: #ffffff;
-  --popover-foreground: #0f172a;
-  --primary: #2563eb;
+  --popover-foreground: #171A21;
+  --primary: #FF681F;
   --primary-foreground: #ffffff;
-  --secondary: #f1f5f9;
-  --secondary-foreground: #0f172a;
+  --secondary: #294487;
+  --secondary-foreground: #ffffff;
   --muted: #f1f5f9;
   --muted-foreground: #64748b;
   --accent: #f1f5f9;
-  --accent-foreground: #0f172a;
+  --accent-foreground: #171A21;
   --destructive: #dc2626;
   --destructive-foreground: #ffffff;
   --success: #16a34a;
   --success-foreground: #ffffff;
   --warning: #f59e0b;
-  --warning-foreground: #0f172a;
+  --warning-foreground: #171A21;
+  --info: #17BEBB;
+  --info-foreground: #ffffff;
   --border: #e2e8f0;
   --input: #e2e8f0;
-  --ring: #2563eb;
+  --ring: #FF681F;
   --radius: 0.5rem;
+
+  --sidebar-bg: #171A21;
+  --sidebar-foreground: #f8fafc;
+  --sidebar-muted: rgba(255, 255, 255, 0.5);
+  --sidebar-hover: rgba(255, 255, 255, 0.1);
+  --sidebar-active: #FF681F;
 }
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --background: #0f172a;
+    --background: #0f1419;
     --foreground: #f8fafc;
-    --card: #1e293b;
+    --card: #1a1f27;
     --card-foreground: #f8fafc;
-    --popover: #1e293b;
+    --popover: #1a1f27;
     --popover-foreground: #f8fafc;
-    --primary: #3b82f6;
+    --primary: #FF681F;
     --primary-foreground: #ffffff;
-    --secondary: #334155;
-    --secondary-foreground: #f8fafc;
-    --muted: #334155;
+    --secondary: #3d5a9f;
+    --secondary-foreground: #ffffff;
+    --muted: #2a3140;
     --muted-foreground: #94a3b8;
-    --accent: #334155;
+    --accent: #2a3140;
     --accent-foreground: #f8fafc;
     --destructive: #ef4444;
     --destructive-foreground: #ffffff;
     --success: #22c55e;
     --success-foreground: #ffffff;
     --warning: #fbbf24;
-    --warning-foreground: #0f172a;
-    --border: #334155;
-    --input: #334155;
-    --ring: #3b82f6;
+    --warning-foreground: #171A21;
+    --info: #17BEBB;
+    --info-foreground: #ffffff;
+    --border: #2a3140;
+    --input: #2a3140;
+    --ring: #FF681F;
   }
 }
 
@@ -72,10 +90,12 @@
   --color-destructive-foreground: var(--destructive-foreground);
   --color-success: var(--success);
   --color-success-foreground: var(--success-foreground);
+  --color-info: var(--info);
+  --color-info-foreground: var(--info-foreground);
   --color-border: var(--border);
   --color-input: var(--input);
   --color-ring: var(--ring);
-  --font-sans: var(--font-geist-sans);
+  --font-sans: var(--font-inter);
   --font-mono: var(--font-geist-mono);
   --radius-sm: calc(var(--radius) - 0.25rem);
   --radius-md: var(--radius);
@@ -90,15 +110,17 @@
 
 html {
   scroll-behavior: smooth;
+  overflow-x: hidden;
 }
 
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: var(--font-sans), system-ui, -apple-system, sans-serif;
+  font-family: var(--font-sans), 'Inter', system-ui, -apple-system, sans-serif;
   font-feature-settings: "rlig" 1, "calt" 1;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  overflow-x: hidden;
 }
 
 :focus-visible {

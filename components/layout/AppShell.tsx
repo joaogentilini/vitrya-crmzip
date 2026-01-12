@@ -77,9 +77,86 @@ export function AppShell({
   }
 
   return (
-    <div className="min-h-screen bg-[var(--background)]">
-      <header className="sticky top-0 z-40 border-b border-[var(--border)] bg-[var(--card)]">
-        <div className="flex h-14 items-center px-4 gap-4">
+    <div className="min-h-screen flex bg-[var(--background)] overflow-x-hidden">
+      <aside
+        className={`
+          fixed inset-y-0 left-0 z-30 w-64 bg-[var(--sidebar-bg)] 
+          transform transition-transform duration-200 ease-in-out
+          lg:translate-x-0 lg:static lg:inset-auto
+          ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'}
+          flex flex-col
+        `}
+        role="navigation"
+        aria-label="Menu principal"
+      >
+        <div className="h-14 flex items-center px-4 border-b border-white/10">
+          <Link 
+            href="/leads" 
+            className="flex items-center gap-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)] rounded-[var(--radius)]"
+          >
+            <div className="w-8 h-8 rounded-lg bg-[var(--primary)] flex items-center justify-center">
+              <span className="text-white font-bold text-sm">V</span>
+            </div>
+            <span className="font-semibold text-lg text-white">Vitrya</span>
+            <span className="text-[var(--sidebar-muted)] text-sm font-normal">CRM</span>
+          </Link>
+        </div>
+
+        <nav className="flex-1 p-3 space-y-1 overflow-y-auto">
+          {navItems.map((item) => {
+            const isActive = pathname === item.href
+            const isParentActive = pathname?.startsWith(item.href + '/')
+            return (
+              <Link
+                key={item.href}
+                href={item.href}
+                onClick={closeSidebar}
+                aria-current={isActive ? 'page' : undefined}
+                className={`
+                  flex items-center gap-3 px-3 py-2.5 rounded-[var(--radius)] text-sm font-medium
+                  transition-all duration-150
+                  focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)]
+                  ${isActive
+                    ? 'bg-[var(--sidebar-active)] text-white shadow-sm'
+                    : isParentActive
+                      ? 'bg-[var(--sidebar-hover)] text-white'
+                      : 'text-[var(--sidebar-muted)] hover:bg-[var(--sidebar-hover)] hover:text-white'
+                  }
+                `}
+              >
+                {item.icon}
+                {item.label}
+              </Link>
+            )
+          })}
+        </nav>
+
+        <div className="p-3 border-t border-white/10">
+          {showNewLeadButton && (
+            <Button 
+              size="sm" 
+              onClick={handleNewLead} 
+              className="w-full"
+            >
+              <svg className="w-4 h-4 mr-1.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+              </svg>
+              Novo Lead
+            </Button>
+          )}
+        </div>
+      </aside>
+
+      {sidebarOpen && (
+        <div
+          className="fixed inset-0 z-20 bg-black/50 lg:hidden"
+          onClick={closeSidebar}
+          aria-hidden="true"
+        />
+      )}
+
+      <div className="flex-1 flex flex-col min-w-0 overflow-x-hidden">
+        <header className="sticky top-0 z-40 h-14 border-b border-[var(--border)] bg-[var(--card)] flex items-center px-4 gap-4">
           <button
             onClick={() => setSidebarOpen(!sidebarOpen)}
             className="lg:hidden p-2 rounded-[var(--radius)] hover:bg-[var(--accent)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)]"
@@ -91,21 +168,10 @@ export function AppShell({
             </svg>
           </button>
 
-          <Link 
-            href="/leads" 
-            className="flex items-center gap-2 font-semibold text-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)] rounded-[var(--radius)]"
-          >
-            <span className="text-[var(--primary)]">Vitrya</span>
-            <span className="text-[var(--muted-foreground)]">CRM</span>
-          </Link>
-
           {pageTitle && (
-            <>
-              <span className="text-[var(--muted-foreground)] hidden sm:inline">/</span>
-              <h1 className="text-base font-medium text-[var(--foreground)] hidden sm:inline">
-                {pageTitle}
-              </h1>
-            </>
+            <h1 className="text-base font-semibold text-[var(--foreground)]">
+              {pageTitle}
+            </h1>
           )}
 
           <div className="flex-1" />
@@ -127,7 +193,7 @@ export function AppShell({
                 aria-label="Menu do usuário"
                 aria-expanded={userMenuOpen}
               >
-                <div className="w-8 h-8 rounded-full bg-[var(--primary)] text-[var(--primary-foreground)] flex items-center justify-center text-sm font-medium">
+                <div className="w-8 h-8 rounded-full bg-[var(--secondary)] text-[var(--secondary-foreground)] flex items-center justify-center text-sm font-medium">
                   {userEmail.charAt(0).toUpperCase()}
                 </div>
                 <svg className="w-4 h-4 text-[var(--muted-foreground)] hidden sm:block" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -168,74 +234,12 @@ export function AppShell({
               )}
             </div>
           )}
-        </div>
-      </header>
+        </header>
 
-      <div className="flex">
-        <aside
-          className={`
-            fixed inset-y-0 left-0 z-30 w-64 bg-[var(--card)] border-r border-[var(--border)]
-            transform transition-transform duration-200 ease-in-out
-            lg:translate-x-0 lg:static lg:inset-auto
-            ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'}
-            pt-14 lg:pt-0
-          `}
-          role="navigation"
-          aria-label="Menu principal"
-        >
-          <div className="flex flex-col h-full">
-            <nav className="flex-1 p-4 space-y-1">
-              {navItems.map((item) => {
-                const isActive = pathname === item.href
-                const isParentActive = pathname?.startsWith(item.href + '/')
-                return (
-                  <Link
-                    key={item.href}
-                    href={item.href}
-                    onClick={closeSidebar}
-                    aria-current={isActive ? 'page' : undefined}
-                    className={`
-                      flex items-center gap-3 px-3 py-2.5 rounded-[var(--radius)] text-sm font-medium
-                      transition-colors
-                      focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)]
-                      ${isActive
-                        ? 'bg-[var(--primary)] text-[var(--primary-foreground)] shadow-sm'
-                        : isParentActive
-                          ? 'bg-[var(--accent)] text-[var(--accent-foreground)]'
-                          : 'text-[var(--muted-foreground)] hover:bg-[var(--accent)] hover:text-[var(--accent-foreground)]'
-                      }
-                    `}
-                  >
-                    {item.icon}
-                    {item.label}
-                  </Link>
-                )
-              })}
-            </nav>
-
-            <div className="p-4 border-t border-[var(--border)] lg:hidden">
-              {showNewLeadButton && (
-                <Button size="sm" onClick={handleNewLead} className="w-full">
-                  <svg className="w-4 h-4 mr-1.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-                  </svg>
-                  Novo Lead
-                </Button>
-              )}
-            </div>
+        <main className="flex-1 p-4 sm:p-6 lg:p-8 overflow-x-hidden">
+          <div className="max-w-[1280px] mx-auto w-full">
+            {children}
           </div>
-        </aside>
-
-        {sidebarOpen && (
-          <div
-            className="fixed inset-0 z-20 bg-black/50 lg:hidden"
-            onClick={closeSidebar}
-            aria-hidden="true"
-          />
-        )}
-
-        <main className="flex-1 p-4 sm:p-6 lg:p-8 min-h-[calc(100vh-3.5rem)]">
-          {children}
         </main>
       </div>
     </div>
