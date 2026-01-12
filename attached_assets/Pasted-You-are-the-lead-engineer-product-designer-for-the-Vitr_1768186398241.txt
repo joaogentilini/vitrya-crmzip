@@ -1,0 +1,54 @@
+You are the lead engineer + product designer for the Vitrya CRM.
+We will execute the full official plan end-to-end with no skipped steps.
+Start with ETAPA 1 (Base Premium UX/UI), because it reduces rework and sets the foundation for all features.
+
+CONSTRAINTS
+- Work ONLY on branch: dev
+- Do NOT push to remote; create local commits only.
+- Must pass: npm run build before finalizing.
+- Avoid risky refactors; keep business logic intact.
+- All UI must be consistent, accessible, responsive, and premium.
+
+ETAPA 1 — TASK LIST (do all)
+1) App Shell (layout)
+   - Ensure authenticated pages share a single shell: Sidebar + Header + Content container.
+   - Sidebar: active states, icons, responsive collapse for mobile.
+   - Header: page title, primary CTA button “Novo Lead”, user menu (logout).
+   - Consistent spacing, max-width container, and page paddings.
+
+2) Design System tokens
+   - In globals.css (or CSS variables), define tokens for:
+     background, foreground, card, muted, border, ring, primary, destructive, success, warning.
+   - Ensure proper contrast and focus-visible ring.
+   - Keep typography scale consistent (h1/h2/body/small).
+
+3) UI Component Library (if missing or inconsistent)
+   - Create/standardize reusable components under components/ui:
+     Button (variants + loading), Input (label+error), Textarea, Select,
+     Card, Badge, Skeleton, Toast, EmptyState, InlineError.
+   - Ensure accessibility: labels, aria attributes, keyboard focus.
+
+4) Standard page states
+   - Implement standard Loading (Skeleton) for Leads and Kanban.
+   - Implement EmptyState when there are no leads/columns.
+   - Implement InlineError with retry action for failed server actions.
+
+5) Apply to pages (without changing core logic)
+   - Update / (login) to match design system and show toasts on error.
+   - Update /leads to use the standardized components and states.
+   - Update /leads/kanban similarly.
+
+6) Quality checks
+   - Run npm run build and ensure no warnings that break production.
+   - Ensure no .next, node_modules or env files are committed.
+
+DELIVERABLES
+- Provide a concise summary of what was changed and why.
+- Provide a 10-step manual test checklist.
+- Create 2–4 local commits with clear messages:
+  1) "feat(ui): implement app shell layout"
+  2) "feat(ui): add design tokens and core components"
+  3) "feat(ui): standardize loading/empty/error states"
+  4) "chore(ui): apply design system to leads and kanban"
+Stop after commits.
+Start now.
