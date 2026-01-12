@@ -7,6 +7,11 @@ import { useToast } from '@/components/ui/Toast'
 import { Button } from '@/components/ui/Button'
 import { Badge } from '@/components/ui/Badge'
 import { EmptyState } from '@/components/ui/EmptyState'
+import { 
+  normalizeError,
+  getConfirmFinalizeMessage,
+  getFinalizeSuccessMessage
+} from '@/lib/leads'
 
 import { DndContext, closestCenter, DragEndEvent, DragOverlay, DragStartEvent, defaultDropAnimationSideEffects } from '@dnd-kit/core'
 import { useDroppable } from '@dnd-kit/core'
@@ -251,14 +256,13 @@ export function KanbanBoard({ pipelines, stages, leads, defaultPipelineId }: Pro
         router.refresh()
       } catch (err: unknown) {
         setLocalLeads(prev => prev.map(l => l.id === leadId ? { ...l, stage_id: originalStageId } : l))
-        const message = err instanceof Error ? err.message : 'Erro ao mover lead.'
-        showError(message)
+        showError(normalizeError(err, 'Erro ao mover lead.'))
       }
     })
   }
 
   function onFinalizeLead(leadId: string, status: 'won' | 'lost') {
-    if (!confirm(`Marcar como ${status === 'won' ? 'ganho' : 'perdido'}?`)) return
+    if (!confirm(getConfirmFinalizeMessage(status))) return
     
     startTransition(async () => {
       try {
@@ -268,11 +272,10 @@ export function KanbanBoard({ pipelines, stages, leads, defaultPipelineId }: Pro
           body: JSON.stringify({ leadId, status }),
         })
         if (!resp.ok) throw new Error('Erro ao finalizar lead')
-        success(`Lead marcado como ${status === 'won' ? 'ganho' : 'perdido'}!`)
+        success(getFinalizeSuccessMessage(status))
         router.refresh()
       } catch (err: unknown) {
-        const message = err instanceof Error ? err.message : 'Erro ao finalizar lead.'
-        showError(message)
+        showError(normalizeError(err, 'Erro ao finalizar lead.'))
       }
     })
   }

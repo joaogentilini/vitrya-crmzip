@@ -4,44 +4,22 @@ import { useState, useTransition, useCallback, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { Button } from '@/components/ui/Button'
-import { Badge } from '@/components/ui/Badge'
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/Card'
 import { EmptyState } from '@/components/ui/EmptyState'
 import { Skeleton } from '@/components/ui/Skeleton'
 import { useToast } from '@/components/ui/Toast'
 import { ClientDate } from '../ClientDate'
 import { EditLeadModal } from './EditLeadModal'
-
-type LeadRow = {
-  id: string
-  title: string
-  status: 'open' | 'won' | 'lost' | string
-  pipeline_id: string | null
-  stage_id: string | null
-  created_at: string
-  created_by: string | null
-  assigned_to: string | null
-}
-
-type PipelineRow = {
-  id: string
-  name: string
-}
-
-type StageRow = {
-  id: string
-  pipeline_id: string
-  name: string
-  position: number
-}
-
-type StageChange = {
-  id: string
-  lead_id: string
-  from_stage_id: string | null
-  to_stage_id: string | null
-  created_at: string
-}
+import { 
+  type LeadRow, 
+  type PipelineRow, 
+  type StageRow,
+  type StageChange,
+  getStatusBadge,
+  normalizeError,
+  getConfirmFinalizeMessage,
+  getFinalizeSuccessMessage
+} from '@/lib/leads'
 
 interface LeadDetailsClientProps {
   lead: LeadRow
@@ -49,18 +27,6 @@ interface LeadDetailsClientProps {
   stage?: StageRow
   pipelines: PipelineRow[]
   stages: StageRow[]
-}
-
-function getStatusBadge(status: string, size: 'sm' | 'lg' = 'sm') {
-  const className = size === 'lg' ? 'text-sm px-3 py-1' : ''
-  switch (status) {
-    case 'won':
-      return <Badge variant="success" className={className}>Ganho</Badge>
-    case 'lost':
-      return <Badge variant="destructive" className={className}>Perdido</Badge>
-    default:
-      return <Badge variant="secondary" className={className}>Aberto</Badge>
-  }
 }
 
 export function LeadDetailsClient({ 
@@ -91,14 +57,13 @@ export function LeadDetailsClient({
         success('Estágio atualizado!')
         router.refresh()
       } catch (err) {
-        const message = err instanceof Error ? err.message : 'Erro ao mover lead.'
-        showError(message)
+        showError(normalizeError(err, 'Erro ao mover lead.'))
       }
     })
   }, [lead.id, lead.pipeline_id, lead.stage_id, router, success, showError])
 
   const handleFinalize = useCallback((status: 'won' | 'lost') => {
-    if (!confirm(`Marcar como ${status === 'won' ? 'ganho' : 'perdido'}?`)) return
+    if (!confirm(getConfirmFinalizeMessage(status))) return
 
     startTransition(async () => {
       try {
@@ -108,11 +73,10 @@ export function LeadDetailsClient({
           body: JSON.stringify({ leadId: lead.id, status }),
         })
         if (!resp.ok) throw new Error('Erro ao finalizar lead')
-        success(`Lead marcado como ${status === 'won' ? 'ganho' : 'perdido'}!`)
+        success(getFinalizeSuccessMessage(status))
         router.refresh()
       } catch (err) {
-        const message = err instanceof Error ? err.message : 'Erro ao finalizar lead.'
-        showError(message)
+        showError(normalizeError(err, 'Erro ao finalizar lead.'))
       }
     })
   }, [lead.id, router, success, showError])

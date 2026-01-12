@@ -5,26 +5,12 @@ import { useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
 import { useToast } from '@/components/ui/Toast'
-
-type LeadRow = {
-  id: string
-  title: string
-  status: string
-  pipeline_id: string | null
-  stage_id: string | null
-}
-
-type PipelineRow = {
-  id: string
-  name: string
-}
-
-type StageRow = {
-  id: string
-  pipeline_id: string
-  name: string
-  position: number
-}
+import { 
+  type LeadRow, 
+  type PipelineRow, 
+  type StageRow,
+  normalizeError
+} from '@/lib/leads'
 
 interface EditLeadModalProps {
   open: boolean
@@ -110,8 +96,7 @@ export function EditLeadModal({
         router.refresh()
         onClose()
       } catch (err) {
-        const message = err instanceof Error ? err.message : 'Erro ao atualizar lead.'
-        showError(message)
+        showError(normalizeError(err, 'Erro ao atualizar lead.'))
       }
     })
   }

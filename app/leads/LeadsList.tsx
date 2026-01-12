@@ -5,32 +5,19 @@ import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { Input } from '@/components/ui/Input'
 import { Button } from '@/components/ui/Button'
-import { Badge } from '@/components/ui/Badge'
 import { Card, CardContent } from '@/components/ui/Card'
 import { EmptyState, emptyStateIcons } from '@/components/ui/EmptyState'
 import { useToast } from '@/components/ui/Toast'
 import { ClientDate } from './ClientDate'
-
-type LeadRow = {
-  id: string
-  title: string
-  status: 'open' | 'won' | 'lost' | string
-  pipeline_id: string | null
-  stage_id: string | null
-  created_at: string
-}
-
-type PipelineRow = {
-  id: string
-  name: string
-}
-
-type StageRow = {
-  id: string
-  pipeline_id: string
-  name: string
-  position: number
-}
+import { 
+  type LeadRow, 
+  type PipelineRow, 
+  type StageRow, 
+  getStatusBadge,
+  normalizeError,
+  getConfirmFinalizeMessage,
+  getFinalizeSuccessMessage
+} from '@/lib/leads'
 
 type SortOption = 'recent' | 'name' | 'stage'
 
@@ -38,17 +25,6 @@ interface LeadsListProps {
   leads: LeadRow[]
   pipelines: PipelineRow[]
   stages: StageRow[]
-}
-
-function getStatusBadge(status: string) {
-  switch (status) {
-    case 'won':
-      return <Badge variant="success">Ganho</Badge>
-    case 'lost':
-      return <Badge variant="destructive">Perdido</Badge>
-    default:
-      return <Badge variant="secondary">Aberto</Badge>
-  }
 }
 
 export function LeadsList({ leads, pipelines, stages }: LeadsListProps) {
@@ -141,14 +117,13 @@ export function LeadsList({ leads, pipelines, stages }: LeadsListProps) {
         success('Lead movido com sucesso!')
         router.refresh()
       } catch (err) {
-        const message = err instanceof Error ? err.message : 'Erro ao mover lead.'
-        showError(message)
+        showError(normalizeError(err, 'Erro ao mover lead.'))
       }
     })
   }, [router, success, showError])
 
   const handleFinalize = useCallback(async (leadId: string, status: 'won' | 'lost') => {
-    if (!confirm(`Marcar como ${status === 'won' ? 'ganho' : 'perdido'}?`)) return
+    if (!confirm(getConfirmFinalizeMessage(status))) return
     
     startTransition(async () => {
       try {
@@ -158,11 +133,10 @@ export function LeadsList({ leads, pipelines, stages }: LeadsListProps) {
           body: JSON.stringify({ leadId, status }),
         })
         if (!resp.ok) throw new Error('Erro ao finalizar lead')
-        success(`Lead marcado como ${status === 'won' ? 'ganho' : 'perdido'}!`)
+        success(getFinalizeSuccessMessage(status))
         router.refresh()
       } catch (err) {
-        const message = err instanceof Error ? err.message : 'Erro ao finalizar lead.'
-        showError(message)
+        showError(normalizeError(err, 'Erro ao finalizar lead.'))
       }
     })
   }, [router, success, showError])
