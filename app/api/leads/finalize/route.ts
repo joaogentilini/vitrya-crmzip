@@ -16,15 +16,28 @@ export async function POST(req: Request) {
 
     const supabase = await createClient()
 
-    // 1) Buscar lead atual
+    // 0) Garantir usuário autenticado
+    const { data: authData, error: authErr } = await supabase.auth.getUser()
+    const user = authData?.user
+    if (authErr || !user) {
+      return NextResponse.json({ error: 'Não autenticado' }, { status: 401 })
+    }
+
+    // 1) Buscar lead atual (com ownership)
     const { data: lead, error: leadErr } = await supabase
       .from('leads')
-      .select('id, pipeline_id, stage_id, status')
+      .select('id, user_id, pipeline_id, stage_id, status')
       .eq('id', leadId)
       .single()
 
     if (leadErr) return NextResponse.json({ error: leadErr.message }, { status: 400 })
     if (!lead) return NextResponse.json({ error: 'Lead não encontrado' }, { status: 404 })
+
+    // Ownership check (defesa em profundidade)
+    if (lead.user_id !== user.id) {
+      return NextResponse.json({ error: 'Acesso negado' }, { status: 403 })
+    }
+
     if (lead.status !== 'open') {
       return NextResponse.json({ error: 'Lead já finalizado' }, { status: 400 })
     }
