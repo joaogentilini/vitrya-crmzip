@@ -1,0 +1,67 @@
+Você é um engenheiro full-stack sênior (Next.js App Router + TypeScript + Supabase) com foco em segurança (RLS) e auditoria. Tarefa: corrigir por que eventos de TASK não aparecem na Timeline. Hoje não existem registros `task_*` em `public.lead_audit_logs` (apenas update/move_stage/create). O schema de `lead_audit_logs` é:
+
+id uuid, lead_id uuid, actor_id uuid, action text, before jsonb, after jsonb, created_at timestamptz
+
+CAUSA PROVÁVEL
+- O código usa try/catch em `await supabase.from('lead_audit_logs').insert(...)`, mas o Supabase NÃO lança exceção; ele retorna `{ error }`. Assim a falha do audit fica silenciosa e nada é gravado.
+- Além disso, `isUserAdmin()` está errado: faz `.from('profiles').select('role').single()` sem filtrar por `id`, podendo retornar profile incorreto ou falhar por RLS.
+
+REGRAS
+1) NÃO refatorar telas antigas. Alterar somente server actions de tasks (e helpers) e, se necessário, um pequeno ajuste de log.
+2) Manter RLS e segurança. Não usar service_role no client.
+3) Build deve passar.
+4) Mudanças mínimas e commits organizados.
+
+ARQUIVO-ALVO
+- Localizar o arquivo de actions de tasks existente (provavelmente `app/leads/tasks/actions.ts`). Trabalhar nele.
+
+O QUE FAZER (EXATO)
+
+A) Corrigir isUserAdmin
+- Atualizar a função para receber (supabase, userId) e buscar o role filtrando por id:
+  - `.from('profiles').select('role').eq('id', userId).single()`
+- Se der erro, logar `console.error('[isUserAdmin] failed:', error)` e retornar false.
+- Atualizar todas as chamadas: `isUserAdmin(supabase)` -> `isUserAdmin(supabase, userId)`.
+
+B) Tornar o audit NÃO silencioso (crítico)
+Em TODAS as ações de task onde existe audit:
+- createTaskAction: action='task_create'
+- completeTaskAction: action='task_done'
+- rescheduleTaskAction: action='task_reschedule'
+- cancelTaskAction: action='task_cancel'
+
+Substituir o bloco atual:
+  try { await supabase.from('lead_audit_logs').insert(...) } catch { ... }
+por:
+  const { error: auditError } = await supabase.from('lead_audit_logs').insert({...})
+  if (auditError) console.error('[TaskAudit][<action>]', auditError)
+
+Importante: remover try/catch que não captura error do Supabase.
+
+C) Garantir consistência na criação da task
+- Em `createTaskAction`, incluir explicitamente `status: 'open'` no insert da task (mesmo se o banco tiver default).
+- Garantir que `due_at` use `input.dueAt` como string ISO (não formatar no client).
+
+D) Adicionar logs de diagnóstico (temporários, leves)
+- Após inserir a task: `console.log('[createTaskAction] task created', task.id, input.leadId)`
+- Após tentar inserir audit: logar o `auditError` (já coberto no item B)
+Esses logs devem ficar no server (não no client). Manter conciso.
+
+CRITÉRIO DE ACEITE (OBRIGATÓRIO)
+1) Criar uma task em um lead gera uma linha em `public.lead_audit_logs` com `action='task_create'`.
+2) Completar/reagendar/cancelar gera `task_done`, `task_reschedule`, `task_cancel`.
+3) A Timeline passa a exibir eventos de tarefa automaticamente (não mexer em UI).
+4) Se o audit falhar por RLS, o console do servidor deve mostrar o erro real (ex.: “violates row-level security policy”).
+
+INSTRUÇÕES DE TESTE (EXECUTAR E REPORTAR)
+Após implementar:
+1) Rodar o app.
+2) Criar uma task num lead existente.
+3) No Supabase SQL Editor, rodar:
+   - `select action, created_at from public.lead_audit_logs where action like 'task_%' order by created_at desc limit 20;`
+4) Incluir no relatório final o output esperado (ao menos 1 task_create).
+
+SAÍDA
+- Listar arquivos alterados.
+- Resumo do que mudou.
+- Passos de teste.

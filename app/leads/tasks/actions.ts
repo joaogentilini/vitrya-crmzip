@@ -106,6 +106,8 @@ export async function createTaskAction(input: CreateTaskInput) {
 
   if (insertError) throw new Error(insertError.message)
 
+  console.log('[createTaskAction] task created', task.id, input.leadId)
+
   const { error: auditError } = await supabase.from('lead_audit_logs').insert({
     lead_id: input.leadId,
     actor_id: userId,
