@@ -81,6 +81,12 @@ app/
   page.tsx              # Login page with form accessibility
   layout.tsx            # Root layout with ToastProvider
   globals.css           # Design tokens, animations, and Tailwind v4 theme
+  dashboard/
+    page.tsx            # Dashboard server component with metrics fetching
+    DashboardClient.tsx # Client component with cards, lists, admin filter
+  agenda/
+    page.tsx            # Agenda server component with tasks fetching
+    AgendaClient.tsx    # Client component with today/week views, task actions
   leads/
     page.tsx            # Leads list page with search, filters, sorting
     LeadsList.tsx       # Client component with table/card layout
@@ -154,6 +160,15 @@ lib/
 - `@dnd-kit/core`, `@dnd-kit/sortable`, `@dnd-kit/utilities`: Drag-and-drop functionality for Kanban board
 
 ## Recent Changes (January 2026)
+
+### ETAPA 5: Dashboard Executivo e Agenda (January 2026)
+- **Dashboard (/dashboard)**: Executive metrics with cards for total leads, leads without action, overdue leads, upcoming tasks (24h), won/lost counts
+- **Dashboard Lists**: Today's actions, leads without action (limit 10), overdue leads (limit 10)
+- **Agenda (/agenda)**: Task calendar with Today/Week views, grouped by day
+- **Agenda Actions**: Complete, reschedule tasks directly from agenda; link to lead details
+- **Admin Filter**: Both pages support broker filter dropdown for admin users
+- **Server-Side Queries**: All data fetched via server components respecting RLS
+- **Navigation**: Added Dashboard and Agenda items to sidebar
 
 ### Vitrya Design System Implementation (January 2026)
 - **Brand Colors**: Mirage (#171A21), Cobalt (#294487), Off-White (#FAFAFA), Pumpkin Orange (#FF681F), Deep Teal (#17BEBB)
