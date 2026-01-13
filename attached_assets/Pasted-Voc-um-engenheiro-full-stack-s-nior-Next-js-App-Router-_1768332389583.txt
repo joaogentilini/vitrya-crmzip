@@ -1,0 +1,99 @@
+Você é um engenheiro full-stack sênior (Next.js App Router + TypeScript + Supabase) e product designer de SaaS CRM imobiliário. 
+Objetivo: implementar a ETAPA 5 da plataforma Vitrya CRM sem refatorar telas antigas e mantendo o padrão premium (sidebar escura Mirage + conteúdo claro Off-White).
+
+REGRAS OBRIGATÓRIAS
+1) NÃO refatorar telas antigas.
+2) NÃO quebrar ETAPA 4 (Tasks/Next Action) e Timeline.
+3) Manter RLS e segurança (sem service_role no client).
+4) Sem scroll horizontal em nenhuma tela.
+5) Layout SaaS premium: sidebar escura (#171A21), conteúdo claro (#FAFAFA), largura máxima ~1280px.
+6) Código limpo, commits organizados e testável.
+
+CONTEXTO ATUAL (já pronto)
+- Leads CRUD e Kanban funcionando
+- Timeline com audit logs (create, update, move_stage e task_*)
+- Tasks (Next Action) funcionando com badges:
+  - "Sem ação"
+  - "Atrasado"
+- Admin pode atribuir tarefas para outros usuários
+- Existe tabela profiles (id, full_name, role, phone, created_at, updated_at)
+
+ETAPA 5 — O QUE IMPLEMENTAR
+
+A) DASHBOARD EXECUTIVO (Nova rota: /dashboard)
+Criar uma página premium com cards e indicadores principais do CRM, com foco em gestão diária.
+
+Métricas (cards):
+1) Leads totais (visíveis pelo usuário via RLS)
+2) Leads "Sem ação" (não possuem task aberta)
+3) Leads "Atrasado" (tem task aberta vencida)
+4) Próximas ações (tarefas open com due_at nas próximas 24h)
+5) Leads ganhos/perdidos (se existir status won/lost no projeto; se não existir, ocultar)
+
+Listas úteis (abaixo dos cards):
+- "Ações de hoje": lista de tasks open ordenadas por due_at
+- "Leads sem próxima ação": lista de leads sem task open (limite 10)
+- "Leads atrasados": lista de leads com task open vencida (limite 10)
+
+Regras:
+- Para admin: permitir filtro por corretor (assigned_to) via select.
+- Para não-admin: mostrar apenas o próprio escopo.
+
+UI:
+- Cards com visual premium, badges e ícones discretos.
+- Sem poluição, foco em leitura rápida.
+
+B) AGENDA (Nova rota: /agenda)
+Criar uma agenda simples e funcional baseada nas tasks:
+- Visão "Hoje" e "Semana"
+- Lista por dia com tasks open
+- Botões rápidos: concluir, reagendar, abrir lead
+
+Regras:
+- Ordenar por horário (due_at)
+- Mostrar tipo da task (call/whatsapp/visit/proposal/email/other)
+- Mostrar nome do lead clicável para /leads/[id]
+- Para admin: filtro por corretor
+
+C) QUERIES SERVER-SIDE (Performance + RLS)
+- Buscar dados server-side (server components) para respeitar RLS.
+- Usar createClient() do supabaseServer.
+- Evitar buscar tudo no client.
+
+D) VIEW/QUERY PARA "Sem ação" e "Atrasado"
+Se já existe view `public.lead_next_task`, reutilizar.
+Se não existir, criar fallback de query no código:
+- Sem ação: leads que NÃO possuem tasks com status='open'
+- Atrasado: leads com tasks status='open' e due_at < now()
+
+E) PADRÃO VISUAL VITRYA (aplicar nas novas telas)
+Paleta:
+- Mirage #171A21 (sidebar/headers)
+- Off-White #FAFAFA (conteúdo)
+- Pumpkin Orange #FF681F (CTA primário)
+- Deep Teal #17BEBB (hover/estados)
+- Cobalt #294487 (destaques secundários)
+
+F) NÃO MEXER
+- Não alterar telas antigas de leads/kanban/details
+- Não refatorar estrutura geral
+- Não mudar schema de banco agora
+
+CRITÉRIOS DE ACEITE
+1) /dashboard abre sem erros e mostra métricas coerentes.
+2) /agenda lista tasks open por dia e permite concluir/reagendar.
+3) Admin consegue filtrar por corretor.
+4) Não-admin só vê seus dados.
+5) Nenhuma tela tem scroll horizontal.
+6) Build passa.
+
+TESTE (executar e reportar)
+- Login como admin e como usuário comum
+- Criar 2 tasks (uma vencida e uma futura)
+- Verificar badges e contagens no dashboard
+- Verificar tasks na agenda
+
+SAÍDA FINAL
+- Lista de arquivos criados/modificados
+- Resumo do que foi feito
+- Como testar em 5 passos
