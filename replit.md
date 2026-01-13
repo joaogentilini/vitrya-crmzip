@@ -25,6 +25,16 @@ Preferred communication style: Simple, everyday language.
 - **Provider**: Supabase Auth (email/password).
 - **Client/Server Integration**: `@supabase/ssr` for both browser and server-side client creation with cookie handling.
 - **User Context**: User ID from session for data ownership.
+- **Role System**: Three roles (admin, gestor, corretor) with cascading permissions.
+- **First User Bootstrap**: First authenticated user automatically becomes admin via ensureUserProfile.
+- **Route Protection**: Inactive users blocked at /blocked page; role-based access to settings.
+
+### User Management
+- **Profiles Table**: id, role, full_name, email, is_active, created_at, updated_at.
+- **Roles**: admin (full access), gestor (manage users/leads), corretor (own leads only).
+- **Lead Ownership**: owner_user_id field on leads; RLS filters by role; admin/gestor can reassign.
+- **API Routes**: /api/admin/users using service role key for privileged operations (create user, change role, reset password).
+- **Admin UI**: /settings/users page for user management (admin/gestor only).
 
 ### Data Model
 - **Core Entities**: Pipelines, Pipeline Stages, Leads, Lead Stage Changes, Lead Audit Logs, Profiles, Tasks, Lead Catalogs (Types, Interests, Sources).
@@ -52,9 +62,14 @@ Preferred communication style: Simple, everyday language.
 - `lib/phone.ts` - Brazilian phone normalization to E.164 format
 - `lib/catalogs.ts` - Catalog CRUD operations (lead types, interests, sources)
 - `lib/automations.ts` - Automation rules and task creation
-- `app/leads/actions.ts` - Server actions for lead CRUD and phone duplicate checking
+- `lib/auth.ts` - Authentication helpers including ensureUserProfile and getCurrentUserProfile
+- `lib/authHelpers.ts` - Role check utilities (isAdmin, isAdminOrGestor, hasRole)
+- `app/leads/actions.ts` - Server actions for lead CRUD, phone duplicate checking, and owner reassignment
+- `app/api/admin/users/` - API routes for user management (create, update, reset password)
+- `app/settings/users/` - User management page with create user modal
 - `app/settings/catalogs/` - Admin catalog management page
-- `supabase/migrations/` - Database migrations for catalogs and lead fields
+- `app/blocked/page.tsx` - Page shown to inactive users
+- `supabase/migrations/20260113_create_user_profiles_roles.sql` - Migration for profiles table and RLS policies
 
 ## External Dependencies
 - **Supabase**:
