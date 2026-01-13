@@ -1,0 +1,137 @@
+Você é um engenheiro full-stack senior (Next.js App Router + Supabase). 
+Objetivo: implementar “Usuários/Perfis/Roles” + escopo de leads por proprietário (owner_user_id) + criação de usuários via app (admin/gestor) + proteção de rotas.
+Compatível com a Fase 1 (leads completos + catálogos configuráveis + anti-duplicidade por telefone).
+
+CONTEXTO
+- Projeto: vitrya-crm (Next.js App Router).
+- Auth: Supabase Auth (email/password) já em uso.
+- Tabelas existentes:
+  - leads agora possui: owner_user_id (uuid), client_name, phone_e164, lead_type_id, lead_interest_id, lead_source_id etc.
+  - catálogos: lead_types, lead_interests, lead_sources com settings UI.
+- Precisamos de:
+  1) perfis e roles para (admin, gestor, corretor)
+  2) escopo: corretor vê/edita apenas seus leads; gestor/admin veem todos
+  3) admin/gestor consegue criar usuários (para Alex, Brenda e corretores) dentro do app
+  4) rotas protegidas + pós-login ir para /dashboard
+
+REQUISITOS FUNCIONAIS (USUÁRIOS/ROLES)
+1) Modelo de roles:
+   - roles: 'admin' | 'gestor' | 'corretor'
+   - tabela profiles (1:1 com auth.users)
+2) Campos mínimos em profiles:
+   - id uuid primary key references auth.users(id) on delete cascade
+   - full_name text not null
+   - phone_e164 text null (opcional)
+   - role text not null check (role in ('admin','gestor','corretor'))
+   - is_active boolean default true
+   - created_at, updated_at
+3) Criação de usuário via app:
+   - Página: /settings/users
+   - Somente admin/gestor acessa
+   - Form: full_name (obrig.), email (obrig.), senha temporária (obrig.), role (obrig.), phone opcional
+   - Ao criar:
+     - criar usuário no Supabase Auth (admin API)
+     - criar profile correspondente
+     - opcional: enviar reset password link ou instrução de primeiro acesso (se possível)
+4) Gestão de usuários:
+   - Listar usuários com filtro por role/ativo
+   - Ativar/desativar (is_active)
+   - Alterar role (admin/gestor)
+   - Reset de senha (se possível via Admin API) OU gerar “reset link” (preferível)
+5) Atribuição de leads:
+   - Ao criar lead: owner_user_id = auth.uid() por padrão (corretor cria para ele mesmo)
+   - Admin/gestor pode reatribuir owner_user_id no detalhe do lead (dropdown com corretores ativos)
+   - Na listagem/kanban:
+     - corretor enxerga apenas os dele
+     - gestor/admin enxerga todos e pode filtrar por owner (opcional)
+
+SEGURANÇA / RLS (OBRIGATÓRIO)
+6) Implementar RLS no Supabase:
+   - profiles:
+     - usuário logado pode SELECT o próprio profile
+     - admin/gestor pode SELECT todos
+     - inserts: apenas via função/edge/admin (não pelo client)
+     - updates: usuário pode atualizar alguns campos próprios (ex.: full_name/phone) OU somente admin/gestor (definir)
+   - leads:
+     - corretor: SELECT/UPDATE apenas onde owner_user_id = auth.uid()
+     - gestor/admin: SELECT/UPDATE em todos
+     - insert: qualquer authed pode inserir, mas:
+       - se role = corretor, forçar owner_user_id = auth.uid() (via trigger ou validação server-side)
+       - se role = admin/gestor, permitir definir owner_user_id
+7) Criação de usuário exige “service role key”:
+   - NUNCA expor service role no client.
+   - Criar route handler server-side (ex.: POST /api/admin/users/create) que usa service role key (via env).
+   - Proteger esse endpoint: somente admin/gestor (validar sessão + role no profiles).
+   - Para validar role, ler profiles no server usando supabase server client.
+
+ROTAS E EXPERIÊNCIA (UX)
+8) Pós-login:
+   - Após login, redirecionar para /dashboard (não /leads).
+9) Proteção de rotas:
+   - Usuário não logado:
+     - ao acessar /dashboard, /leads, /agenda, /settings/* deve ser redirecionado para /auth/login
+   - Usuário logado e is_active=false:
+     - bloquear acesso e mostrar tela “Acesso desativado – fale com o administrador”
+10) Settings:
+   - /settings/users: somente admin/gestor
+   - /settings/catalogs: somente admin/gestor
+11) UI:
+   - Em /leads/[id], se admin/gestor, mostrar campo “Responsável” (owner) e permitir alterar.
+   - Em /leads e /kanban, se admin/gestor, mostrar filtro por responsável.
+
+BANCO / MIGRAÇÕES
+12) SQL:
+   - criar tabela profiles
+   - triggers updated_at (opcional)
+   - policies RLS completas para profiles e leads
+   - (se necessário) backfill owner_user_id nos leads antigos:
+     - se owner_user_id null, setar para o primeiro admin existente OU auth.uid() quando editado (definir estratégia simples e segura)
+13) Seed inicial de admin:
+   - Se não existir admin, permitir script/manual para elevar o seu usuário atual a admin:
+     - criar profile do usuário logado com role='admin' se não existir (one-time helper)
+   - Implementar um “bootstrap” seguro:
+     - Se profiles está vazio, o primeiro usuário logado vira admin (somente uma vez). Depois disso, travar.
+
+REQUISITOS TÉCNICOS (NEXT)
+A) Server utilities:
+   - getCurrentUserProfile() server-side
+   - requireRole(['admin','gestor']) helper
+B) API route:
+   - POST /api/admin/users/create (usa service role)
+   - PATCH /api/admin/users/{id} (toggle active / change role)
+   - POST /api/admin/users/{id}/reset-password (se suportado; senão gerar link)
+C) Front:
+   - /settings/users page
+   - componentes: UsersTable, CreateUserModal
+D) Logs:
+   - Logar auditoria básica quando:
+     - cria usuário
+     - muda role
+     - desativa/ativa
+     - reatribui lead
+   - Pode usar tabela audit_logs existente (se houver) ou criar uma simples.
+
+TESTES (OBRIGATÓRIOS)
+1) Login -> vai para /dashboard.
+2) Corretor cria lead -> owner_user_id = ele; só ele vê.
+3) Admin vê todos os leads.
+4) Admin reatribui um lead para outro corretor -> lead some do corretor anterior e aparece para o novo.
+5) Usuário desativado não acessa.
+6) npm run build sem erros.
+
+ENTREGÁVEIS
+- Commits claros.
+- Sem expor service role.
+- RLS funcionando em produção.
+- Documentar no README:
+  - env vars necessárias
+  - bootstrap do primeiro admin
+  - como criar usuários
+
+EXECUÇÃO (PASSO A PASSO)
+1) Implementar SQL e RLS.
+2) Implementar bootstrap de admin (com segurança).
+3) Implementar API routes com service role.
+4) Implementar UI /settings/users.
+5) Ajustar pós-login /dashboard e proteção de rotas.
+6) Rodar testes e build.
