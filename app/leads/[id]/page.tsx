@@ -15,6 +15,19 @@ type LeadRow = {
   created_at: string
   created_by: string | null
   assigned_to: string | null
+  client_name: string | null
+  phone_raw: string | null
+  phone_e164: string | null
+  lead_type_id: string | null
+  lead_interest_id: string | null
+  lead_source_id: string | null
+  budget_range: string | null
+  notes: string | null
+}
+
+type CatalogItem = {
+  id: string
+  name: string
 }
 
 type PipelineRow = {
@@ -72,9 +85,29 @@ export default async function LeadDetailsPage({
 
   const { data: lead, error } = await supabase
     .from('leads')
-    .select('id, title, status, pipeline_id, stage_id, created_at, created_by, assigned_to')
+    .select('id, title, status, pipeline_id, stage_id, created_at, created_by, assigned_to, client_name, phone_raw, phone_e164, lead_type_id, lead_interest_id, lead_source_id, budget_range, notes')
     .eq('id', id)
     .single()
+
+  // Fetch catalogs for display
+  const { data: leadTypesRaw } = await supabase
+    .from('lead_types')
+    .select('id, name')
+    .order('position', { ascending: true })
+
+  const { data: leadInterestsRaw } = await supabase
+    .from('lead_interests')
+    .select('id, name')
+    .order('position', { ascending: true })
+
+  const { data: leadSourcesRaw } = await supabase
+    .from('lead_sources')
+    .select('id, name')
+    .order('position', { ascending: true })
+
+  const leadTypes = (leadTypesRaw ?? []) as CatalogItem[]
+  const leadInterests = (leadInterestsRaw ?? []) as CatalogItem[]
+  const leadSources = (leadSourcesRaw ?? []) as CatalogItem[]
 
   if (error || !lead) {
     notFound()
@@ -190,6 +223,9 @@ export default async function LeadDetailsPage({
         tasks={tasks}
         allProfiles={allProfiles}
         isAdmin={isAdmin}
+        leadTypes={leadTypes}
+        leadInterests={leadInterests}
+        leadSources={leadSources}
       />
     </LeadsAppShell>
   )

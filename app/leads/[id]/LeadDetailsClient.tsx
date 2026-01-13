@@ -22,6 +22,11 @@ import {
 import type { AuditLogRow, ActorProfile, TaskRow } from './page'
 import { TaskCard, type ProfileRow } from './TaskCard'
 
+type CatalogItem = {
+  id: string
+  name: string
+}
+
 interface LeadDetailsClientProps {
   lead: LeadRow
   pipeline?: PipelineRow
@@ -33,6 +38,9 @@ interface LeadDetailsClientProps {
   tasks: TaskRow[]
   allProfiles: ActorProfile[]
   isAdmin: boolean
+  leadTypes?: CatalogItem[]
+  leadInterests?: CatalogItem[]
+  leadSources?: CatalogItem[]
 }
 
 export function LeadDetailsClient({ 
@@ -45,8 +53,14 @@ export function LeadDetailsClient({
   actorProfiles,
   tasks,
   allProfiles,
-  isAdmin
+  isAdmin,
+  leadTypes = [],
+  leadInterests = [],
+  leadSources = []
 }: LeadDetailsClientProps) {
+  const leadType = leadTypes.find(t => t.id === lead.lead_type_id)
+  const leadInterest = leadInterests.find(i => i.id === lead.lead_interest_id)
+  const leadSource = leadSources.find(s => s.id === lead.lead_source_id)
   const router = useRouter()
   const { success, error: showError } = useToast()
   const [isPending, startTransition] = useTransition()
@@ -178,6 +192,66 @@ export function LeadDetailsClient({
               )}
             </div>
           </div>
+        </CardContent>
+      </Card>
+
+      {/* Lead Details Card */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Ficha do Lead</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            <div>
+              <p className="text-xs text-[var(--muted-foreground)] mb-1">Nome do Cliente</p>
+              <p className="text-sm font-medium text-[var(--foreground)]">
+                {lead.client_name || lead.title || '—'}
+              </p>
+            </div>
+            <div>
+              <p className="text-xs text-[var(--muted-foreground)] mb-1">Telefone</p>
+              <p className="text-sm font-medium text-[var(--foreground)]">
+                {lead.phone_raw || '—'}
+              </p>
+            </div>
+            <div>
+              <p className="text-xs text-[var(--muted-foreground)] mb-1">Tipo</p>
+              <p className="text-sm font-medium text-[var(--foreground)]">
+                {leadType?.name || '—'}
+              </p>
+            </div>
+            <div>
+              <p className="text-xs text-[var(--muted-foreground)] mb-1">Interesse</p>
+              <p className="text-sm font-medium text-[var(--foreground)]">
+                {leadInterest?.name || '—'}
+              </p>
+            </div>
+            <div>
+              <p className="text-xs text-[var(--muted-foreground)] mb-1">Origem</p>
+              <p className="text-sm font-medium text-[var(--foreground)]">
+                {leadSource?.name || '—'}
+              </p>
+            </div>
+            {lead.budget_range && (
+              <div>
+                <p className="text-xs text-[var(--muted-foreground)] mb-1">Faixa de Orçamento</p>
+                <p className="text-sm font-medium text-[var(--foreground)]">{lead.budget_range}</p>
+              </div>
+            )}
+          </div>
+          {lead.notes && (
+            <div className="mt-4 pt-4 border-t border-[var(--border)]">
+              <p className="text-xs text-[var(--muted-foreground)] mb-1">Observações</p>
+              <p className="text-sm text-[var(--foreground)] whitespace-pre-wrap">{lead.notes}</p>
+            </div>
+          )}
+          {!lead.client_name && !lead.phone_raw && (
+            <div className="mt-4 p-3 bg-[var(--warning)]/10 border border-[var(--warning)] rounded-[var(--radius)] text-sm">
+              <p className="text-[var(--warning)]">
+                Este é um lead antigo sem dados completos. Clique em "Editar" para preencher a ficha.
+              </p>
+            </div>
+          )}
         </CardContent>
       </Card>
 
