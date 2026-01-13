@@ -9,7 +9,6 @@ import { Button } from '@/components/ui/Button'
 import { Badge } from '@/components/ui/Badge'
 import { Input } from '@/components/ui/Input'
 import { useToast } from '@/components/ui/Toast'
-import { upsertCatalogItem, deleteCatalogItem, CatalogKind } from '@/lib/catalogs'
 
 interface CatalogItem {
   id: string
@@ -32,6 +31,25 @@ const tabLabels: Record<TabKey, string> = {
   types: 'Tipos',
   interests: 'Interesses',
   sources: 'Origens',
+}
+
+const apiEndpoints: Record<TabKey, string> = {
+  types: '/api/catalogs/lead-types',
+  interests: '/api/catalogs/lead-interests',
+  sources: '/api/catalogs/lead-sources',
+}
+
+async function apiUpsert(tab: TabKey, item: { id?: string; name: string; is_active?: boolean; position?: number }) {
+  const resp = await fetch(apiEndpoints[tab], {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(item),
+  })
+  const json = await resp.json()
+  if (!resp.ok) {
+    throw new Error(json.error || 'Erro ao salvar')
+  }
+  return json.data
 }
 
 export function CatalogsClient({ userEmail, leadTypes, leadInterests, leadSources }: CatalogsClientProps) {
@@ -74,38 +92,36 @@ export function CatalogsClient({ userEmail, leadTypes, leadInterests, leadSource
     }
 
     startTransition(async () => {
-      const result = await upsertCatalogItem(activeTab, {
-        name: newItemName.trim(),
-        position: getItems().length,
-      })
-
-      if (result.success && result.item) {
-        setItems([...getItems(), result.item])
+      try {
+        const newItem = await apiUpsert(activeTab, {
+          name: newItemName.trim(),
+          position: getItems().length,
+        })
+        setItems([...getItems(), newItem])
         setNewItemName('')
         success('Item adicionado!')
         router.refresh()
-      } else {
-        showError(result.error || 'Erro ao adicionar')
+      } catch (err) {
+        showError(err instanceof Error ? err.message : 'Erro ao adicionar')
       }
     })
   }
 
   const handleToggleActive = (item: CatalogItem) => {
     startTransition(async () => {
-      const result = await upsertCatalogItem(activeTab, {
-        id: item.id,
-        name: item.name,
-        is_active: !item.is_active,
-        position: item.position,
-      })
-
-      if (result.success) {
+      try {
+        await apiUpsert(activeTab, {
+          id: item.id,
+          name: item.name,
+          is_active: !item.is_active,
+          position: item.position,
+        })
         setItems(getItems().map(i => 
           i.id === item.id ? { ...i, is_active: !item.is_active } : i
         ))
         success(item.is_active ? 'Item desativado' : 'Item ativado')
-      } else {
-        showError(result.error || 'Erro ao atualizar')
+      } catch (err) {
+        showError(err instanceof Error ? err.message : 'Erro ao atualizar')
       }
     })
   }
@@ -118,9 +134,13 @@ export function CatalogsClient({ userEmail, leadTypes, leadInterests, leadSource
     items[index - 1] = temp
 
     startTransition(async () => {
-      await upsertCatalogItem(activeTab, { id: items[index].id, name: items[index].name, position: index })
-      await upsertCatalogItem(activeTab, { id: items[index - 1].id, name: items[index - 1].name, position: index - 1 })
-      setItems(items.map((item, i) => ({ ...item, position: i })))
+      try {
+        await apiUpsert(activeTab, { id: items[index].id, name: items[index].name, position: index })
+        await apiUpsert(activeTab, { id: items[index - 1].id, name: items[index - 1].name, position: index - 1 })
+        setItems(items.map((item, i) => ({ ...item, position: i })))
+      } catch (err) {
+        showError(err instanceof Error ? err.message : 'Erro ao reordenar')
+      }
     })
   }
 
@@ -132,9 +152,13 @@ export function CatalogsClient({ userEmail, leadTypes, leadInterests, leadSource
     items[index + 1] = temp
 
     startTransition(async () => {
-      await upsertCatalogItem(activeTab, { id: items[index].id, name: items[index].name, position: index })
-      await upsertCatalogItem(activeTab, { id: items[index + 1].id, name: items[index + 1].name, position: index + 1 })
-      setItems(items.map((item, i) => ({ ...item, position: i })))
+      try {
+        await apiUpsert(activeTab, { id: items[index].id, name: items[index].name, position: index })
+        await apiUpsert(activeTab, { id: items[index + 1].id, name: items[index + 1].name, position: index + 1 })
+        setItems(items.map((item, i) => ({ ...item, position: i })))
+      } catch (err) {
+        showError(err instanceof Error ? err.message : 'Erro ao reordenar')
+      }
     })
   }
 
