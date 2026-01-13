@@ -20,6 +20,13 @@ type LeadRow = {
   lead_type_id?: string | null
   lead_interest_id?: string | null
   lead_source_id?: string | null
+  owner_user_id?: string | null
+}
+
+type UserProfile = {
+  id: string
+  full_name: string
+  role: string
 }
 
 type CatalogItem = {
@@ -54,11 +61,29 @@ async function LeadsContent() {
     .from('leads')
     .select('id', { count: 'exact', head: true })
 
+  const { data: currentProfile } = await supabase
+    .from('profiles')
+    .select('id, full_name, role')
+    .single()
+
+  const isAdminOrGestor = currentProfile?.role === 'admin' || currentProfile?.role === 'gestor'
+
   const { data: leadsRaw } = await supabase
     .from('leads')
-    .select('id, title, status, pipeline_id, stage_id, created_at, client_name, phone_raw, lead_type_id, lead_interest_id, lead_source_id')
+    .select('id, title, status, pipeline_id, stage_id, created_at, client_name, phone_raw, lead_type_id, lead_interest_id, lead_source_id, owner_user_id')
     .order('created_at', { ascending: false })
     .limit(200)
+
+  let corretores: UserProfile[] = []
+  if (isAdminOrGestor) {
+    const { data: corretoresRaw } = await supabase
+      .from('profiles')
+      .select('id, full_name, role')
+      .eq('is_active', true)
+      .order('full_name', { ascending: true })
+    
+    corretores = (corretoresRaw ?? []) as UserProfile[]
+  }
 
   // Fetch catalogs for the form
   const { data: leadTypesRaw } = await supabase
@@ -158,7 +183,14 @@ async function LeadsContent() {
         leadSources={leadSources}
       />
 
-      <LeadsList leads={leads} pipelines={pipelines} stages={stages} taskStatus={taskStatus} />
+      <LeadsList 
+        leads={leads} 
+        pipelines={pipelines} 
+        stages={stages} 
+        taskStatus={taskStatus}
+        corretores={corretores}
+        isAdminOrGestor={isAdminOrGestor}
+      />
     </div>
   )
 }

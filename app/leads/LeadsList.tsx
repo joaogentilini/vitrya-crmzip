@@ -43,14 +43,22 @@ type LeadTaskStatus = {
   has_open_task: boolean
 }
 
+type UserProfile = {
+  id: string
+  full_name: string
+  role: string
+}
+
 interface LeadsListProps {
   leads: LeadRow[]
   pipelines: PipelineRow[]
   stages: StageRow[]
   taskStatus?: LeadTaskStatus[]
+  corretores?: UserProfile[]
+  isAdminOrGestor?: boolean
 }
 
-export function LeadsList({ leads, pipelines, stages, taskStatus = [] }: LeadsListProps) {
+export function LeadsList({ leads, pipelines, stages, taskStatus = [], corretores = [], isAdminOrGestor = false }: LeadsListProps) {
   const router = useRouter()
   const { success, error: showError } = useToast()
   const [isPending, startTransition] = useTransition()
@@ -59,7 +67,14 @@ export function LeadsList({ leads, pipelines, stages, taskStatus = [] }: LeadsLi
   const [filterPipeline, setFilterPipeline] = useState<string>('')
   const [filterStage, setFilterStage] = useState<string>('')
   const [filterStatus, setFilterStatus] = useState<string>('')
+  const [filterOwner, setFilterOwner] = useState<string>('')
   const [sortBy, setSortBy] = useState<SortOption>('recent')
+
+  const ownerMap = useMemo(() => {
+    const map = new Map<string, UserProfile>()
+    corretores.forEach(c => map.set(c.id, c))
+    return map
+  }, [corretores])
 
   const stageOptions = useMemo(() => {
     if (!filterPipeline) return stages
@@ -104,6 +119,10 @@ export function LeadsList({ leads, pipelines, stages, taskStatus = [] }: LeadsLi
       result = result.filter(l => l.status === filterStatus)
     }
 
+    if (filterOwner) {
+      result = result.filter(l => l.owner_user_id === filterOwner)
+    }
+
     switch (sortBy) {
       case 'name':
         result.sort((a, b) => a.title.localeCompare(b.title))
@@ -121,7 +140,7 @@ export function LeadsList({ leads, pipelines, stages, taskStatus = [] }: LeadsLi
     }
 
     return result
-  }, [leads, search, filterPipeline, filterStage, filterStatus, sortBy, stageMap])
+  }, [leads, search, filterPipeline, filterStage, filterStatus, filterOwner, sortBy, stageMap])
 
   const handlePipelineChange = useCallback((value: string) => {
     setFilterPipeline(value)
@@ -133,10 +152,11 @@ export function LeadsList({ leads, pipelines, stages, taskStatus = [] }: LeadsLi
     setFilterPipeline('')
     setFilterStage('')
     setFilterStatus('')
+    setFilterOwner('')
     setSortBy('recent')
   }, [])
 
-  const hasActiveFilters = search || filterPipeline || filterStage || filterStatus || sortBy !== 'recent'
+  const hasActiveFilters = search || filterPipeline || filterStage || filterStatus || filterOwner || sortBy !== 'recent'
 
   const handleMoveStage = useCallback(async (leadId: string, fromStageId: string, toStageId: string, pipelineId: string) => {
     if (fromStageId === toStageId) return
@@ -220,6 +240,19 @@ export function LeadsList({ leads, pipelines, stages, taskStatus = [] }: LeadsLi
                 <option value="won">Ganho</option>
                 <option value="lost">Perdido</option>
               </select>
+
+              {isAdminOrGestor && corretores.length > 0 && (
+                <select
+                  value={filterOwner}
+                  onChange={(e) => setFilterOwner(e.target.value)}
+                  className="h-10 rounded-[var(--radius)] border border-[var(--input)] bg-[var(--background)] px-3 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)]"
+                >
+                  <option value="">Todos Responsáveis</option>
+                  {corretores.map(c => (
+                    <option key={c.id} value={c.id}>{c.full_name}</option>
+                  ))}
+                </select>
+              )}
 
               <select
                 value={sortBy}
