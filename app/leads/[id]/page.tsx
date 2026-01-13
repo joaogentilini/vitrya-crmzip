@@ -85,7 +85,7 @@ export default async function LeadDetailsPage({
 
   const { data: lead, error } = await supabase
     .from('leads')
-    .select('id, title, status, pipeline_id, stage_id, created_at, created_by, assigned_to, client_name, phone_raw, phone_e164, lead_type_id, lead_interest_id, lead_source_id, budget_range, notes')
+    .select('id, title, status, pipeline_id, stage_id, created_at, created_by, assigned_to, client_name, phone_raw, phone_e164, lead_type_id, lead_interest_id, lead_source_id, budget_range, notes, owner_user_id')
     .eq('id', id)
     .single()
 
@@ -142,10 +142,22 @@ export default async function LeadDetailsPage({
 
   const { data: currentUserProfile } = await supabase
     .from('profiles')
-    .select('role')
+    .select('id, role')
     .single()
 
   const isAdmin = currentUserProfile?.role === 'admin'
+  const isAdminOrGestor = currentUserProfile?.role === 'admin' || currentUserProfile?.role === 'gestor'
+
+  let corretores: { id: string; full_name: string }[] = []
+  if (isAdminOrGestor) {
+    const { data: corretoresRaw } = await supabase
+      .from('profiles')
+      .select('id, full_name')
+      .eq('is_active', true)
+      .order('full_name', { ascending: true })
+    
+    corretores = (corretoresRaw ?? []) as { id: string; full_name: string }[]
+  }
 
   const { data: allProfilesRaw } = await supabase
     .from('profiles')
@@ -223,9 +235,11 @@ export default async function LeadDetailsPage({
         tasks={tasks}
         allProfiles={allProfiles}
         isAdmin={isAdmin}
+        isAdminOrGestor={isAdminOrGestor}
         leadTypes={leadTypes}
         leadInterests={leadInterests}
         leadSources={leadSources}
+        corretores={corretores}
       />
     </LeadsAppShell>
   )

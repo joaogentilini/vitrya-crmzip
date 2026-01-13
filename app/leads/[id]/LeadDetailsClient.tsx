@@ -27,6 +27,11 @@ type CatalogItem = {
   name: string
 }
 
+type CorretorProfile = {
+  id: string
+  full_name: string
+}
+
 interface LeadDetailsClientProps {
   lead: LeadRow
   pipeline?: PipelineRow
@@ -38,9 +43,11 @@ interface LeadDetailsClientProps {
   tasks: TaskRow[]
   allProfiles: ActorProfile[]
   isAdmin: boolean
+  isAdminOrGestor?: boolean
   leadTypes?: CatalogItem[]
   leadInterests?: CatalogItem[]
   leadSources?: CatalogItem[]
+  corretores?: CorretorProfile[]
 }
 
 export function LeadDetailsClient({ 
@@ -54,17 +61,35 @@ export function LeadDetailsClient({
   tasks,
   allProfiles,
   isAdmin,
+  isAdminOrGestor = false,
   leadTypes = [],
   leadInterests = [],
-  leadSources = []
+  leadSources = [],
+  corretores = []
 }: LeadDetailsClientProps) {
   const leadType = leadTypes.find(t => t.id === lead.lead_type_id)
   const leadInterest = leadInterests.find(i => i.id === lead.lead_interest_id)
   const leadSource = leadSources.find(s => s.id === lead.lead_source_id)
+  const currentOwner = corretores.find(c => c.id === lead.owner_user_id)
   const router = useRouter()
   const { success, error: showError } = useToast()
   const [isPending, startTransition] = useTransition()
   const [editModalOpen, setEditModalOpen] = useState(false)
+
+  const handleChangeOwner = useCallback((newOwnerId: string) => {
+    if (newOwnerId === lead.owner_user_id) return
+
+    startTransition(async () => {
+      try {
+        const { updateLeadOwnerAction } = await import('../actions')
+        await updateLeadOwnerAction(lead.id, newOwnerId)
+        success('Responsável atualizado!')
+        router.refresh()
+      } catch (err) {
+        showError(normalizeError(err, 'Erro ao atualizar responsável.'))
+      }
+    })
+  }, [lead.id, lead.owner_user_id, router, success, showError])
 
   const availableStages = stages.filter(s => s.pipeline_id === lead.pipeline_id)
 
@@ -238,6 +263,26 @@ export function LeadDetailsClient({
                 <p className="text-sm font-medium text-[var(--foreground)]">{lead.budget_range}</p>
               </div>
             )}
+            <div>
+              <p className="text-xs text-[var(--muted-foreground)] mb-1">Responsável</p>
+              {isAdminOrGestor && corretores.length > 0 ? (
+                <select
+                  value={lead.owner_user_id || ''}
+                  onChange={(e) => handleChangeOwner(e.target.value)}
+                  disabled={isPending}
+                  className="h-8 w-full max-w-[200px] rounded-[var(--radius)] border border-[var(--input)] bg-[var(--background)] px-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)] disabled:opacity-50"
+                >
+                  <option value="">Sem responsável</option>
+                  {corretores.map(c => (
+                    <option key={c.id} value={c.id}>{c.full_name}</option>
+                  ))}
+                </select>
+              ) : (
+                <p className="text-sm font-medium text-[var(--foreground)]">
+                  {currentOwner?.full_name || '—'}
+                </p>
+              )}
+            </div>
           </div>
           {lead.notes && (
             <div className="mt-4 pt-4 border-t border-[var(--border)]">

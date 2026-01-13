@@ -235,3 +235,53 @@ export async function updateLeadAction(data: UpdateLeadInput) {
   revalidatePath(`/leads/${data.leadId}`)
   return { success: true }
 }
+
+export async function updateLeadOwnerAction(leadId: string, newOwnerId: string) {
+  const supabase = await createClient()
+  const actorId = await getAuthedUserId(supabase)
+
+  const { data: profile } = await supabase
+    .from('profiles')
+    .select('role')
+    .eq('id', actorId)
+    .single()
+
+  if (profile?.role !== 'admin' && profile?.role !== 'gestor') {
+    throw new Error('Apenas admin/gestor pode reatribuir leads')
+  }
+
+  const { data: currentLead } = await supabase
+    .from('leads')
+    .select('id, owner_user_id')
+    .eq('id', leadId)
+    .single()
+
+  if (!currentLead) {
+    throw new Error('Lead não encontrado')
+  }
+
+  const { data: updated, error: updateError } = await supabase
+    .from('leads')
+    .update({ owner_user_id: newOwnerId })
+    .eq('id', leadId)
+    .select('id, owner_user_id')
+    .single()
+
+  if (updateError) {
+    console.error('[updateLeadOwnerAction] updateError:', updateError)
+    throw new Error('Erro ao atualizar responsável')
+  }
+
+  await supabase.from('lead_audit_logs').insert({
+    lead_id: leadId,
+    actor_id: actorId,
+    action: 'owner_changed',
+    before: { owner_user_id: currentLead.owner_user_id },
+    after: { owner_user_id: newOwnerId },
+  })
+
+  revalidatePath('/leads')
+  revalidatePath('/leads/kanban')
+  revalidatePath(`/leads/${leadId}`)
+  return { success: true }
+}
