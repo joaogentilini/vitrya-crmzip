@@ -20,16 +20,26 @@ export function middleware(req: NextRequest) {
   );
   if (!isProtected) return NextResponse.next();
 
-  // Verifica se tem sessão (cookie)
-  const hasSession =
-    req.cookies.get("sb-access-token") || req.cookies.get("sb-refresh-token");
+  // Verifica se tem sessão (qualquer cookie sb-* com auth/access/refresh token)
+  const allCookies = req.cookies.getAll();
+  const hasSession = allCookies.some((cookie) => {
+    if (!cookie.name.startsWith("sb-")) return false;
+    const lowerName = cookie.name.toLowerCase();
+    return (
+      lowerName.includes("auth-token") ||
+      lowerName.includes("access-token") ||
+      lowerName.includes("refresh-token") ||
+      lowerName.includes("access_token") ||
+      lowerName.includes("refresh_token")
+    );
+  });
 
   // Se tem sessão, segue normal
   if (hasSession) return NextResponse.next();
 
-  // Se não tem sessão, redireciona para /auth e guarda a rota desejada
+  // Se não tem sessão, redireciona para "/" (home/login) e guarda a rota desejada
   const url = req.nextUrl.clone();
-  url.pathname = "/auth";
+  url.pathname = "/";
   url.searchParams.set("next", pathname);
   return NextResponse.redirect(url);
 }
