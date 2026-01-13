@@ -15,6 +15,16 @@ type LeadRow = {
   pipeline_id: string | null
   stage_id: string | null
   created_at: string
+  client_name?: string | null
+  phone_raw?: string | null
+  lead_type_id?: string | null
+  lead_interest_id?: string | null
+  lead_source_id?: string | null
+}
+
+type CatalogItem = {
+  id: string
+  name: string
 }
 
 type PipelineRow = {
@@ -46,9 +56,32 @@ async function LeadsContent() {
 
   const { data: leadsRaw } = await supabase
     .from('leads')
-    .select('id, title, status, pipeline_id, stage_id, created_at')
+    .select('id, title, status, pipeline_id, stage_id, created_at, client_name, phone_raw, lead_type_id, lead_interest_id, lead_source_id')
     .order('created_at', { ascending: false })
     .limit(200)
+
+  // Fetch catalogs for the form
+  const { data: leadTypesRaw } = await supabase
+    .from('lead_types')
+    .select('id, name')
+    .eq('is_active', true)
+    .order('position', { ascending: true })
+
+  const { data: leadInterestsRaw } = await supabase
+    .from('lead_interests')
+    .select('id, name')
+    .eq('is_active', true)
+    .order('position', { ascending: true })
+
+  const { data: leadSourcesRaw } = await supabase
+    .from('lead_sources')
+    .select('id, name')
+    .eq('is_active', true)
+    .order('position', { ascending: true })
+
+  const leadTypes = (leadTypesRaw ?? []) as CatalogItem[]
+  const leadInterests = (leadInterestsRaw ?? []) as CatalogItem[]
+  const leadSources = (leadSourcesRaw ?? []) as CatalogItem[]
 
   const leads = (leadsRaw ?? []) as LeadRow[]
 
@@ -117,7 +150,13 @@ async function LeadsContent() {
         </div>
       </div>
 
-      <CreateLeadForm pipelines={pipelines} stages={stages} />
+      <CreateLeadForm 
+        pipelines={pipelines} 
+        stages={stages}
+        leadTypes={leadTypes}
+        leadInterests={leadInterests}
+        leadSources={leadSources}
+      />
 
       <LeadsList leads={leads} pipelines={pipelines} stages={stages} taskStatus={taskStatus} />
     </div>
