@@ -1,0 +1,149 @@
+ETAPA 5.1 — AUTOMAÇÕES INICIAIS (Cadência Vitrya)
+
+Você é um engenheiro full-stack sênior (Next.js App Router + TypeScript + Supabase) com foco em automações e CRM imobiliário. 
+Objetivo: implementar automações iniciais de cadência de follow-up para leads usando a estrutura existente de Tasks/Next Action + Timeline (lead_audit_logs), SEM refatorar telas antigas.
+
+REGRAS OBRIGATÓRIAS
+1) NÃO refatorar telas antigas.
+2) NÃO quebrar ETAPA 4 (Tasks/Next Action) e Timeline.
+3) Respeitar RLS e segurança (sem service_role no client).
+4) Automação deve ser previsível, auditável e idempotente (não criar tasks duplicadas).
+5) Admin deve conseguir ativar/desativar automações.
+6) Tudo deve gerar rastro na Timeline (lead_audit_logs com action='automation_*' ou 'task_create' + metadata).
+
+CONTEXTO (já existe)
+- Tabela tasks com: lead_id, title, type, due_at, status, notes, assigned_to, created_by
+- Timeline lê lead_audit_logs (create/update/move_stage/task_*)
+- Leads tem: id, pipeline_id, stage_id, assigned_to, created_by, status
+- Função is_admin() existe no banco
+- Admin pode atribuir tarefas para outros usuários
+
+OBJETIVO DA ETAPA 5.1
+Criar um sistema simples de automações para gerar tarefas automaticamente baseado em eventos e tempo, para garantir que nenhum lead fique sem acompanhamento.
+
+AUTOMAÇÕES A IMPLEMENTAR (MVP)
+
+A) AUTO-TASK AO CRIAR LEAD (imediato)
+Quando um lead for criado:
+- Criar automaticamente 1 task do tipo "whatsapp"
+- Título: "Enviar WhatsApp inicial"
+- due_at: now() + 10 minutos
+- assigned_to: lead.assigned_to (ou created_by se assigned_to estiver null)
+- status: open
+
+Regras anti-duplicação:
+- Se já existir task open do tipo whatsapp criada nos últimos 30 minutos para o mesmo lead, não criar outra.
+
+Auditoria:
+- Inserir em lead_audit_logs:
+  - action: 'automation_task_create'
+  - after: { reason: 'lead_created', task_type: 'whatsapp', due_at: ..., task_id: ... }
+E também deve existir o task_create normal (se o sistema já grava task_create).
+
+B) AUTO-TASK “SEM AÇÃO EM 24H”
+Regra: Se um lead NÃO tiver nenhuma task open, e o lead foi criado há mais de 24h:
+- Criar task tipo "call"
+- Título: "Ligação de follow-up (24h sem ação)"
+- due_at: now() + 30 minutos
+- assigned_to: lead.assigned_to
+
+Anti-duplicação:
+- Não criar se já existir task open do tipo call com título semelhante criada nas últimas 48h.
+
+Auditoria:
+- action: 'automation_task_create'
+- after: { reason: 'no_open_tasks_24h', ... }
+
+C) AUTO-TASK “LEAD PARADO 3 DIAS”
+Regra: Se o lead não teve movimentação relevante em 3 dias:
+- Definição de movimentação relevante:
+  - move_stage OU task_done OU task_reschedule OU update de status
+- Criar task tipo "call"
+- Título: "Retomada de contato (Lead parado 3 dias)"
+- due_at: now() + 1 hora
+
+Anti-duplicação:
+- Não criar se já existir task open com esse título nos últimos 3 dias.
+
+Auditoria:
+- action: 'automation_task_create'
+- after: { reason: 'stale_lead_3d', ... }
+
+D) AUTO-TASK AO MOVER PARA ETAPA “PROPOSTA”
+Quando lead for movido para uma etapa cujo nome contenha "Proposta" (case-insensitive):
+- Criar task tipo "proposal"
+- Título: "Enviar proposta e confirmar recebimento"
+- due_at: now() + 2 horas
+
+Anti-duplicação:
+- Não criar se já existir task open tipo proposal para o lead.
+
+Auditoria:
+- action: 'automation_task_create'
+- after: { reason: 'moved_to_proposal_stage', ... }
+
+IMPLEMENTAÇÃO TÉCNICA (como fazer)
+
+1) Criar tabela de configurações de automação (simples)
+Criar uma tabela `automation_settings`:
+- id uuid
+- key text unique (ex: 'lead_created_whatsapp', 'no_action_24h', 'stale_3d', 'proposal_stage')
+- enabled boolean default true
+- created_at, updated_at
+
+Somente admin pode alterar (RLS).
+
+2) Criar uma função/rota de "runner" para automações
+Criar uma rota server-side:
+- /api/automations/run (POST)
+Essa rota:
+- valida admin (ou usa secret token via env AUTOMATIONS_SECRET)
+- executa as regras acima
+- retorna resumo: quantas tasks foram criadas por regra
+
+IMPORTANTE:
+- Não usar cron externo obrigatório agora.
+- Deixar pronto para depois integrar com cron (Easypanel / Supabase scheduled jobs / Replit cron).
+
+3) Estratégia idempotente
+Para evitar duplicação:
+- Antes de criar uma task, checar se já existe task open do mesmo tipo/título dentro de uma janela de tempo.
+- Use queries com lead_id + status='open' + type + created_at > now()-interval.
+
+4) Inserção de task e audit
+Reutilizar a mesma lógica do createTaskAction (garantir status='open').
+Após criar task:
+- inserir lead_audit_logs com action='automation_task_create' e metadados no after.
+
+5) Performance
+- Rodar em batches (limite 200 leads por execução)
+- Evitar N+1 queries quando possível
+
+UI ADMIN (mínimo)
+Criar página simples:
+- /settings/automations
+Com lista de toggles para cada regra (enabled true/false)
+Somente admin vê.
+
+CRITÉRIOS DE ACEITE
+1) Criar lead gera task automática whatsapp em 10 min (aparece no card e na timeline).
+2) Runner cria tasks para leads sem ação há 24h.
+3) Runner cria tasks para leads parados há 3 dias.
+4) Ao mover lead para etapa “Proposta”, cria task proposal.
+5) Nenhuma regra cria tarefas duplicadas.
+6) Tudo é auditável na Timeline.
+7) Admin consegue ligar/desligar regras em /settings/automations.
+8) Build passa e nenhuma tela antiga foi refatorada.
+
+TESTE (executar e reportar)
+- Criar lead e confirmar task auto whatsapp
+- Simular lead antigo sem task (ajustar created_at no banco) e rodar runner
+- Simular lead parado 3 dias (sem logs) e rodar runner
+- Mover lead para etapa “Proposta” e confirmar task automática
+- Verificar lead_audit_logs com action='automation_task_create'
+
+SAÍDA FINAL
+- Arquivos criados/modificados
+- SQL migration(s) adicionadas
+- Como rodar /api/automations/run
+- Prints/descrição dos testes realizados
