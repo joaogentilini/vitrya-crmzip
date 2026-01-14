@@ -151,33 +151,45 @@ export function CreateLeadForm({ pipelines, stages, leadTypes = [], leadInterest
     }
 
     startTransition(async () => {
-      try {
-        await createLeadAction({ 
-          title: clientName.trim(),
-          clientName: clientName.trim(),
-          phoneRaw: phone.trim(),
-          pipelineId, 
-          stageId,
-          leadTypeId,
-          leadInterestId,
-          leadSourceId,
-          notes: notes.trim() || undefined,
-        })
-        setClientName('')
-        setPhone('')
-        setLeadTypeId('')
-        setLeadInterestId('')
-        setLeadSourceId('')
-        setNotes('')
-        setDuplicateLead(null)
-        setClientNameError(undefined)
-        setPhoneError(undefined)
-        success('Lead criado com sucesso!')
-        router.refresh()
-      } catch (e: unknown) {
-        const message = e instanceof Error ? e.message : 'Erro ao criar lead.'
-        showError(message)
+      const result = await createLeadAction({ 
+        title: clientName.trim(),
+        clientName: clientName.trim(),
+        phoneRaw: phone.trim(),
+        pipelineId: pipelineId || undefined, 
+        stageId: stageId || undefined,
+        leadTypeId: leadTypeId || undefined,
+        leadInterestId: leadInterestId || undefined,
+        leadSourceId: leadSourceId || undefined,
+        notes: notes.trim() || undefined,
+      })
+
+      if (!result.ok) {
+        // Handle specific error codes
+        if (result.code === 'PHONE_DUPLICATE') {
+          setPhoneError(result.message)
+        } else if (result.code === 'PHONE_INVALID') {
+          setPhoneError(result.message)
+        } else if (result.code === 'VALIDATION_ERROR') {
+          setClientNameError(result.message)
+        } else {
+          showError(result.message)
+        }
+        console.error('[CreateLeadForm] Error:', result.code, result.message, result.details)
+        return
       }
+
+      // Success - reset form
+      setClientName('')
+      setPhone('')
+      setLeadTypeId('')
+      setLeadInterestId('')
+      setLeadSourceId('')
+      setNotes('')
+      setDuplicateLead(null)
+      setClientNameError(undefined)
+      setPhoneError(undefined)
+      success('Lead criado com sucesso!')
+      router.refresh()
     })
   }
 

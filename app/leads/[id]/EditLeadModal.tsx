@@ -113,32 +113,36 @@ export function EditLeadModal({
     if (!validateForm()) return
 
     startTransition(async () => {
-      try {
-        const { updateLeadAction } = await import('../actions')
-        await updateLeadAction({
-          leadId: lead.id,
-          title: title.trim(),
-          clientName: clientName.trim() || undefined,
-          phoneRaw: phoneRaw.trim() || undefined,
-          leadTypeId: leadTypeId || null,
-          leadInterestId: leadInterestId || null,
-          leadSourceId: leadSourceId || null,
-          budgetRange: budgetRange.trim() || null,
-          notes: notes.trim() || null,
-          pipelineId: pipelineId || null,
-          stageId: stageId || null,
-        })
-        success('Lead atualizado com sucesso!')
-        router.refresh()
-        onClose()
-      } catch (err) {
-        const errorMsg = normalizeError(err, 'Erro ao atualizar lead.')
-        if (errorMsg.includes('telefone')) {
-          setPhoneError(errorMsg)
+      const { updateLeadAction } = await import('../actions')
+      const result = await updateLeadAction({
+        leadId: lead.id,
+        title: title.trim(),
+        clientName: clientName.trim() || undefined,
+        phoneRaw: phoneRaw.trim() || undefined,
+        leadTypeId: leadTypeId || null,
+        leadInterestId: leadInterestId || null,
+        leadSourceId: leadSourceId || null,
+        budgetRange: budgetRange.trim() || null,
+        notes: notes.trim() || null,
+        pipelineId: pipelineId || null,
+        stageId: stageId || null,
+      })
+
+      if (!result.ok) {
+        if (result.code === 'PHONE_DUPLICATE' || result.code === 'PHONE_INVALID') {
+          setPhoneError(result.message)
+        } else if (result.code === 'VALIDATION_ERROR') {
+          setTitleError(result.message)
         } else {
-          showError(errorMsg)
+          showError(result.message)
         }
+        console.error('[EditLeadModal] Error:', result.code, result.message)
+        return
       }
+
+      success('Lead atualizado com sucesso!')
+      router.refresh()
+      onClose()
     })
   }
 

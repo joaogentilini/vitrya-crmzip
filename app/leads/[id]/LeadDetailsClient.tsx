@@ -83,14 +83,17 @@ export function LeadDetailsClient({
       if (newOwnerId === lead.owner_user_id) return;
 
       startTransition(async () => {
-        try {
-          const { updateLeadOwnerAction } = await import("../actions");
-          await updateLeadOwnerAction(lead.id, newOwnerId);
-          success("Responsável atualizado!");
-          router.refresh();
-        } catch (err) {
-          showError(normalizeError(err, "Erro ao atualizar responsável."));
+        const { updateLeadOwnerAction } = await import("../actions");
+        const result = await updateLeadOwnerAction(lead.id, newOwnerId);
+        
+        if (!result.ok) {
+          showError(result.message);
+          console.error('[LeadDetailsClient] Owner update error:', result.code, result.message);
+          return;
         }
+        
+        success("Responsável atualizado!");
+        router.refresh();
       });
     },
     [lead.id, lead.owner_user_id, router, success, showError],
