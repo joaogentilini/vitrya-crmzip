@@ -190,6 +190,9 @@ async function LeadsContent() {
         taskStatus={taskStatus}
         corretores={corretores}
         isAdminOrGestor={isAdminOrGestor}
+        leadTypes={leadTypes}
+        leadInterests={leadInterests}
+        leadSources={leadSources}
       />
     </div>
   )

@@ -49,6 +49,11 @@ type UserProfile = {
   role: string
 }
 
+type CatalogItem = {
+  id: string
+  name: string
+}
+
 interface LeadsListProps {
   leads: LeadRow[]
   pipelines: PipelineRow[]
@@ -56,9 +61,12 @@ interface LeadsListProps {
   taskStatus?: LeadTaskStatus[]
   corretores?: UserProfile[]
   isAdminOrGestor?: boolean
+  leadTypes?: CatalogItem[]
+  leadInterests?: CatalogItem[]
+  leadSources?: CatalogItem[]
 }
 
-export function LeadsList({ leads, pipelines, stages, taskStatus = [], corretores = [], isAdminOrGestor = false }: LeadsListProps) {
+export function LeadsList({ leads, pipelines, stages, taskStatus = [], corretores = [], isAdminOrGestor = false, leadTypes = [], leadInterests = [], leadSources = [] }: LeadsListProps) {
   const router = useRouter()
   const { success, error: showError } = useToast()
   const [isPending, startTransition] = useTransition()
@@ -98,6 +106,24 @@ export function LeadsList({ leads, pipelines, stages, taskStatus = [], corretore
     taskStatus.forEach(t => map.set(t.lead_id, t))
     return map
   }, [taskStatus])
+
+  const leadTypeMap = useMemo(() => {
+    const map = new Map<string, CatalogItem>()
+    leadTypes.forEach(t => map.set(t.id, t))
+    return map
+  }, [leadTypes])
+
+  const leadInterestMap = useMemo(() => {
+    const map = new Map<string, CatalogItem>()
+    leadInterests.forEach(i => map.set(i.id, i))
+    return map
+  }, [leadInterests])
+
+  const leadSourceMap = useMemo(() => {
+    const map = new Map<string, CatalogItem>()
+    leadSources.forEach(s => map.set(s.id, s))
+    return map
+  }, [leadSources])
 
   const filteredLeads = useMemo(() => {
     let result = [...leads]
@@ -288,6 +314,7 @@ export function LeadsList({ leads, pipelines, stages, taskStatus = [], corretore
                     <tr className="border-b border-[var(--border)]">
                       <th className="text-left px-4 py-3 text-sm font-medium text-[var(--muted-foreground)]">Lead</th>
                       <th className="text-left px-4 py-3 text-sm font-medium text-[var(--muted-foreground)]">Pipeline / Estágio</th>
+                      <th className="text-left px-4 py-3 text-sm font-medium text-[var(--muted-foreground)]">Tipo / Origem</th>
                       <th className="text-left px-4 py-3 text-sm font-medium text-[var(--muted-foreground)]">Status</th>
                       <th className="text-left px-4 py-3 text-sm font-medium text-[var(--muted-foreground)]">Data</th>
                       <th className="text-right px-4 py-3 text-sm font-medium text-[var(--muted-foreground)]">Ações</th>
@@ -297,6 +324,8 @@ export function LeadsList({ leads, pipelines, stages, taskStatus = [], corretore
                     {filteredLeads.map((lead) => {
                       const pipeline = pipelineMap.get(lead.pipeline_id || '')
                       const stage = stageMap.get(lead.stage_id || '')
+                      const leadType = leadTypeMap.get(lead.lead_type_id || '')
+                      const leadSource = leadSourceMap.get(lead.lead_source_id || '')
                       const availableStages = stages.filter(s => s.pipeline_id === lead.pipeline_id)
 
                       return (
@@ -308,10 +337,18 @@ export function LeadsList({ leads, pipelines, stages, taskStatus = [], corretore
                             >
                               {lead.title}
                             </Link>
+                            {lead.client_name && lead.client_name !== lead.title && (
+                              <p className="text-xs text-[var(--muted-foreground)] mt-0.5">{lead.client_name}</p>
+                            )}
                           </td>
                           <td className="px-4 py-3">
                             <span className="text-sm text-[var(--muted-foreground)]">
                               {pipeline?.name || '—'} / {stage?.name || '—'}
+                            </span>
+                          </td>
+                          <td className="px-4 py-3">
+                            <span className="text-sm text-[var(--muted-foreground)]">
+                              {leadType?.name || '—'} / {leadSource?.name || '—'}
                             </span>
                           </td>
                           <td className="px-4 py-3">
@@ -390,6 +427,8 @@ export function LeadsList({ leads, pipelines, stages, taskStatus = [], corretore
             {filteredLeads.map((lead) => {
               const pipeline = pipelineMap.get(lead.pipeline_id || '')
               const stage = stageMap.get(lead.stage_id || '')
+              const leadType = leadTypeMap.get(lead.lead_type_id || '')
+              const leadSource = leadSourceMap.get(lead.lead_source_id || '')
               const availableStages = stages.filter(s => s.pipeline_id === lead.pipeline_id)
 
               return (
@@ -403,9 +442,17 @@ export function LeadsList({ leads, pipelines, stages, taskStatus = [], corretore
                         <p className="font-medium text-[var(--foreground)] hover:text-[var(--primary)] truncate">
                           {lead.title}
                         </p>
+                        {lead.client_name && lead.client_name !== lead.title && (
+                          <p className="text-xs text-[var(--muted-foreground)] mt-0.5">{lead.client_name}</p>
+                        )}
                         <p className="text-xs text-[var(--muted-foreground)] mt-1">
                           {pipeline?.name} / {stage?.name}
                         </p>
+                        {(leadType || leadSource) && (
+                          <p className="text-xs text-[var(--muted-foreground)] mt-0.5">
+                            {leadType?.name || '—'} / {leadSource?.name || '—'}
+                          </p>
+                        )}
                         <p className="text-xs text-[var(--muted-foreground)] mt-0.5">
                           <ClientDate value={lead.created_at} />
                         </p>

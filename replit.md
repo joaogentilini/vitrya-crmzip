@@ -65,11 +65,13 @@ Preferred communication style: Simple, everyday language.
 - `lib/auth.ts` - Authentication helpers including ensureUserProfile and getCurrentUserProfile
 - `lib/authHelpers.ts` - Role check utilities (isAdmin, isAdminOrGestor, hasRole)
 - `app/leads/actions.ts` - Server actions for lead CRUD, phone duplicate checking, and owner reassignment
+- `app/leads/[id]/EditLeadModal.tsx` - Full lead editing modal with all catalog fields
+- `app/leads/LeadsList.tsx` - Lead list with catalog labels display
 - `app/api/admin/users/` - API routes for user management (create, update, reset password)
 - `app/settings/users/` - User management page with create user modal
 - `app/settings/catalogs/` - Admin catalog management page
 - `app/blocked/page.tsx` - Page shown to inactive users
-- `supabase/migrations/20260113_create_user_profiles_roles.sql` - Migration for profiles table and RLS policies
+- `docs/migrations/20260114_0307_leads_schema_rls_audit.sql` - Migration for leads table schema, RLS policies, and audit trigger
 
 ## External Dependencies
 - **Supabase**:
