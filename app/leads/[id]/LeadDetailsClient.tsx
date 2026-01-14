@@ -414,6 +414,9 @@ export function LeadDetailsClient({
         lead={lead}
         pipelines={pipelines}
         stages={stages}
+        leadTypes={leadTypes}
+        leadInterests={leadInterests}
+        leadSources={leadSources}
       />
     </div>
   )

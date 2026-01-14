@@ -1,0 +1,143 @@
+Você é um agente senior full-stack. Trabalhe no repo vitrya-crm (Next.js + Supabase). Objetivo: corrigir RLS, corrigir trigger de audit, migrar schema de leads para bater com createLeadAction e implementar UI de edição chamando updateLeadAction.
+
+IMPORTANTE
+- Faça mudanças mínimas e seguras.
+- Sempre que mexer em SQL: gere um arquivo /docs/migrations/YYYYMMDD_HHMM_<nome>.sql com tudo que rodou.
+- Depois de cada etapa, rode testes manuais simples e logue no console o resultado.
+- NÃO use RPC exec_sql (não existe). Use queries diretas.
+
+========================================================
+A) PADRÃO DE DONO
+Usar owner_user_id como “dono” do lead.
+
+========================================================
+B) MIGRAÇÃO DO BANCO (SUPABASE)
+1) Garantir colunas necessárias na tabela public.leads para suportar o payload do createLeadAction.
+
+Baseado em app/leads/actions.ts, o payload usa:
+- owner_user_id (uuid)
+- client_name (text)
+- phone_raw (text)
+- phone_e164 (text)
+- lead_type_id (uuid)
+- lead_interest_id (uuid)
+- lead_source_id (uuid)
+- budget_range (text)
+- notes (text)
+Além de manter o que já existe (title, pipeline_id, stage_id, etc).
+
+Crie migration SQL adicionando:
+- add column if not exists client_name text
+- add column if not exists phone_raw text
+- add column if not exists phone_e164 text
+- add column if not exists lead_type_id uuid
+- add column if not exists lead_interest_id uuid
+- add column if not exists lead_source_id uuid
+- add column if not exists budget_range text
+- add column if not exists notes text
+- add column if not exists owner_user_id uuid
+
+2) Defaults e preenchimento:
+- defina default owner_user_id = auth.uid()
+- backfill: se owner_user_id estiver null, set owner_user_id = coalesce(user_id, created_by, assigned_to)
+- backfill client_name: se client_name null, set client_name = title
+
+3) Constraints e índices:
+- Crie unique parcial em phone_e164 para evitar duplicação:
+  create unique index if not exists leads_phone_e164_unique
+  on public.leads (phone_e164)
+  where phone_e164 is not null;
+
+4) FKs para catálogos (se as tabelas existem):
+- lead_types(id), lead_interests(id), lead_sources(id)
+Crie FK com nomes válidos (Postgres NÃO suporta "add constraint if not exists").
+Então: verifique se já existe antes via pg_constraint, ou simplesmente tente e capture erro? Melhor: use DO $$ BEGIN IF NOT EXISTS (...) THEN ALTER TABLE ... END IF; END $$;
+
+Regras FK:
+- on delete set null
+
+========================================================
+C) RLS POLICIES CORRETAS (public.leads)
+1) Certifique-se de que RLS está habilitado:
+alter table public.leads enable row level security;
+
+2) Remova policies antigas (se existirem):
+drop policy if exists leads_select_scoped on public.leads;
+drop policy if exists leads_insert_scoped on public.leads;
+drop policy if exists leads_update_scoped on public.leads;
+drop policy if exists leads_delete_scoped on public.leads;
+
+3) Crie policies usando owner_user_id:
+- SELECT: authenticated, using (owner_user_id = auth.uid())
+- INSERT: authenticated, with check (owner_user_id = auth.uid() or owner_user_id is null)
+- UPDATE: authenticated, using(owner_user_id = auth.uid()) with check(owner_user_id = auth.uid())
+- DELETE: authenticated, using(owner_user_id = auth.uid())
+
+========================================================
+D) TRIGGER / AUDIT (public.lead_audit_logs)
+Problema atual: trigger usa auth.uid() e às vezes vem null, estourando NOT NULL actor_id.
+Corrigir function para fallback seguro.
+
+1) Localize a função audit usada em leads (provável public.audit_lead_write).
+2) Faça create or replace function com:
+- v_actor := auth.uid();
+- if v_actor is null then v_actor := coalesce(new.owner_user_id, new.user_id, new.created_by, new.assigned_to); end if;
+- insert em lead_audit_logs com actor_id = v_actor
+- action = tg_op::text ou 'update'/'insert' de forma consistente
+
+3) Garanta que o trigger está ligado na tabela leads e dispara em INSERT/UPDATE. Se já existir, só ajuste a função.
+
+========================================================
+E) AJUSTAR O CÓDIGO createLeadAction PARA BATER COM SCHEMA
+1) Em app/leads/actions.ts:
+- Mantenha o payload como está, mas garanta que ele NÃO manda colunas inexistentes.
+Após migration, todas existirão.
+- Garanta que owner_user_id sempre seja setado = actorId (além do default). Mantém compatível com RLS.
+
+2) Garanta que a lógica de duplicidade usa phone_e164 e trate erro 23505.
+
+========================================================
+F) IMPLEMENTAR UI DE EDIÇÃO DO LEAD (Update)
+Objetivo: conseguir editar depois de salvo. Hoje o usuário reclama que não tem edição e não aparecem cards de contato/interesse/origem.
+
+1) Identificar onde é listagem: /app/leads/page.tsx e componentes relacionados.
+2) Ao clicar em um lead (linha ou card), abrir um modal "Editar Lead".
+Campos do modal:
+- title (obrigatório)
+- clientName
+- phoneRaw
+- leadTypeId (select do catálogo)
+- leadInterestId (select do catálogo)
+- leadSourceId (select do catálogo)
+- budgetRange
+- notes
+- pipelineId (opcional, se existir na UI)
+- stageId (opcional, se existir na UI)
+Botões: Cancelar / Salvar
+
+3) Ao salvar, chamar updateLeadAction() com leadId e os campos alterados.
+- Mostrar toast/alert de sucesso e revalidar lista (revalidatePath já existe).
+- Tratar erros (ex: duplicidade de telefone) e mostrar mensagem ao usuário.
+
+4) Na listagem, garantir que os “cards”/campos de contato e interesse/origem renderizem:
+- mostrar client_name, phone_raw (ou phone_e164), e os labels do catálogo (nome do interest/source/type).
+- Para isso, o fetch da lista de leads precisa trazer as colunas e, se possível, join/lookup para catálogos:
+  - ou buscar catálogo uma vez e mapear id->name no front.
+
+========================================================
+G) TESTES (checklist)
+1) Rodar npm run dev e testar:
+- Login -> /dashboard
+- /leads cria lead com phone: deve salvar e aparecer
+- Duplicidade de phone: deve bloquear com mensagem clara
+- Editar lead: mudar nome/telefone/interesse/origem e salvar
+- Kanban: mover estágio ainda funciona
+2) Verificar no Supabase:
+- lead_audit_logs recebe linhas sem erro (actor_id nunca null)
+
+ENTREGA
+- Commits organizados (se possível 2 commits: db+migrations / ui+actions)
+- Atualizar docs/README com:
+  - como rodar migration no Supabase
+  - quais colunas novas existem em leads
+  - regra de ownership (owner_user_id)
