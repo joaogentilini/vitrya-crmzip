@@ -3,7 +3,6 @@ export const revalidate = 0
 
 import { createClient } from '@/lib/supabaseServer'
 import { redirect } from 'next/navigation'
-import { headers } from 'next/headers'
 import { CatalogsClient } from './CatalogsClient'
 
 interface CatalogItem {
@@ -12,24 +11,6 @@ interface CatalogItem {
   is_active: boolean
   position: number
   created_at: string
-}
-
-async function fetchCatalog(baseUrl: string, endpoint: string, cookie: string): Promise<CatalogItem[]> {
-  try {
-    const resp = await fetch(`${baseUrl}${endpoint}`, {
-      headers: { Cookie: cookie },
-      cache: 'no-store',
-    })
-    if (!resp.ok) {
-      console.error(`[CatalogsPage] Failed to fetch ${endpoint}:`, await resp.text())
-      return []
-    }
-    const json = await resp.json()
-    return json.data || []
-  } catch (err) {
-    console.error(`[CatalogsPage] Error fetching ${endpoint}:`, err)
-    return []
-  }
 }
 
 export default async function CatalogsPage() {
@@ -53,17 +34,24 @@ export default async function CatalogsPage() {
     redirect('/leads')
   }
 
-  const headersList = await headers()
-  const host = headersList.get('host') || 'localhost:5000'
-  const protocol = host.includes('localhost') ? 'http' : 'https'
-  const baseUrl = `${protocol}://${host}`
-  const cookie = headersList.get('cookie') || ''
-
-  const [leadTypes, leadInterests, leadSources] = await Promise.all([
-    fetchCatalog(baseUrl, '/api/catalogs/lead-types', cookie),
-    fetchCatalog(baseUrl, '/api/catalogs/lead-interests', cookie),
-    fetchCatalog(baseUrl, '/api/catalogs/lead-sources', cookie),
+  const [typesRes, interestsRes, sourcesRes] = await Promise.all([
+    supabase
+      .from('lead_types')
+      .select('id, name, is_active, position, created_at')
+      .order('position', { ascending: true }),
+    supabase
+      .from('lead_interests')
+      .select('id, name, is_active, position, created_at')
+      .order('position', { ascending: true }),
+    supabase
+      .from('lead_sources')
+      .select('id, name, is_active, position, created_at')
+      .order('position', { ascending: true }),
   ])
+
+  const leadTypes: CatalogItem[] = typesRes.data || []
+  const leadInterests: CatalogItem[] = interestsRes.data || []
+  const leadSources: CatalogItem[] = sourcesRes.data || []
 
   console.log('[CatalogsPage] Loaded catalogs:', {
     types: leadTypes.length,
