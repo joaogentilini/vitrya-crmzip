@@ -187,7 +187,7 @@ export default async function LeadDetailsPage({
     .limit(50)
 
   if (!auditError && auditLogsRaw) {
-    auditLogs = auditLogsRaw.map(log => {
+    const parsedLogs = auditLogsRaw.map(log => {
       let parsedBefore = log.before
       let parsedAfter = log.after
       
@@ -213,6 +213,43 @@ export default async function LeadDetailsPage({
         after: parsedAfter,
       }
     }) as AuditLogRow[]
+
+    const moveStageKeys = new Set<string>()
+    for (const log of parsedLogs) {
+      if (log.action === 'move_stage') {
+        const fromId = String(log.before?.stage_id || '')
+        const toId = String(log.after?.stage_id || '')
+        const ts = new Date(log.created_at).getTime()
+        for (let delta = -10000; delta <= 10000; delta += 1000) {
+          moveStageKeys.add(`${fromId}:${toId}:${Math.floor((ts + delta) / 1000)}`)
+        }
+      }
+    }
+
+    auditLogs = parsedLogs.filter(log => {
+      if (log.action !== 'update') return true
+      
+      const before = log.before as Record<string, unknown> | null
+      const after = log.after as Record<string, unknown> | null
+      if (!before || !after) return true
+      
+      if (before.stage_id === after.stage_id) return true
+      
+      const changedFields: string[] = []
+      const fieldsToCheck = ['stage_id', 'status', 'title', 'client_name', 'phone_e164', 'notes', 'assigned_to', 'pipeline_id', 'lead_type_id', 'lead_interest_id', 'lead_source_id', 'budget_range']
+      for (const field of fieldsToCheck) {
+        if (before[field] !== after[field]) changedFields.push(field)
+      }
+      
+      if (changedFields.length === 1 && changedFields[0] === 'stage_id') {
+        const ts = new Date(log.created_at).getTime()
+        const key = `${String(before.stage_id)}:${String(after.stage_id)}:${Math.floor(ts / 1000)}`
+        if (moveStageKeys.has(key)) return false
+        return false
+      }
+      
+      return true
+    })
 
     const actorIds = [...new Set(auditLogs.map(l => l.actor_id).filter(Boolean))]
     

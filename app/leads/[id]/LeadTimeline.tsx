@@ -239,41 +239,42 @@ function TimelineIcon({ type, status }: { type: string; status?: string }) {
   }
 }
 
-function filterDuplicateStageUpdates(logs: AuditLogRow[]): AuditLogRow[] {
-  const moveStageKeys = new Set<string>()
+function deduplicateTimelineEvents(logs: AuditLogRow[]): AuditLogRow[] {
+  const seen = new Set<string>()
+  const result: AuditLogRow[] = []
   
   for (const log of logs) {
-    if (log.action === 'move_stage') {
-      const fromId = String(log.before?.stage_id || '')
-      const toId = String(log.after?.stage_id || '')
-      const time = new Date(log.created_at).getTime()
-      moveStageKeys.add(`${fromId}:${toId}:${Math.floor(time / 5000)}`)
-      moveStageKeys.add(`${fromId}:${toId}:${Math.floor(time / 5000) + 1}`)
-      moveStageKeys.add(`${fromId}:${toId}:${Math.floor(time / 5000) - 1}`)
-    }
-  }
-
-  return logs.filter(log => {
-    if (log.action !== 'update') return true
-
-    const beforeStageId = log.before?.stage_id
-    const afterStageId = log.after?.stage_id
-    if (beforeStageId === afterStageId) return true
-
-    const changedFields = new Set<string>()
-    if (log.before?.stage_id !== log.after?.stage_id) changedFields.add('stage_id')
-    if (log.before?.status !== log.after?.status) changedFields.add('status')
-    if (log.before?.title !== log.after?.title) changedFields.add('title')
-    if (log.before?.assigned_to !== log.after?.assigned_to) changedFields.add('assigned_to')
-    if (log.before?.pipeline_id !== log.after?.pipeline_id) changedFields.add('pipeline_id')
-
-    if (changedFields.size > 1 || !changedFields.has('stage_id')) return true
-
-    const time = new Date(log.created_at).getTime()
-    const key = `${String(beforeStageId)}:${String(afterStageId)}:${Math.floor(time / 5000)}`
+    const fromStageId = String(log.before?.stage_id || '')
+    const toStageId = String(log.after?.stage_id || '')
+    const ts = Math.floor(new Date(log.created_at).getTime() / 1000)
     
-    return !moveStageKeys.has(key)
-  })
+    let key: string
+    if (log.action === 'move_stage' || (log.action === 'update' && fromStageId !== toStageId)) {
+      key = `stage:${fromStageId}:${toStageId}:${ts}`
+    } else {
+      key = `${log.action}:${log.id}`
+    }
+    
+    if (seen.has(key)) continue
+    
+    if (log.action === 'update' && fromStageId !== toStageId) {
+      const before = log.before as Record<string, unknown> | null
+      const after = log.after as Record<string, unknown> | null
+      if (before && after) {
+        const fieldsToCheck = ['status', 'title', 'client_name', 'phone_e164', 'notes', 'assigned_to']
+        const otherChanges = fieldsToCheck.some(f => before[f] !== after[f])
+        if (!otherChanges) {
+          const moveStageKey = `stage:${fromStageId}:${toStageId}:${ts}`
+          if (seen.has(moveStageKey)) continue
+        }
+      }
+    }
+    
+    seen.add(key)
+    result.push(log)
+  }
+  
+  return result
 }
 
 export function LeadTimeline({ createdAt, status, stages, auditLogs, actorProfiles }: LeadTimelineProps) {
@@ -288,7 +289,7 @@ export function LeadTimeline({ createdAt, status, stages, auditLogs, actorProfil
     return truncateId(actorId)
   }
 
-  const filteredLogs = useMemo(() => filterDuplicateStageUpdates(auditLogs), [auditLogs])
+  const filteredLogs = useMemo(() => deduplicateTimelineEvents(auditLogs), [auditLogs])
   const reversedLogs = useMemo(() => [...filteredLogs].reverse(), [filteredLogs])
 
   return (
