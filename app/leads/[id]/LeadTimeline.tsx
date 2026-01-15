@@ -240,41 +240,38 @@ function TimelineIcon({ type, status }: { type: string; status?: string }) {
 }
 
 function deduplicateTimelineEvents(logs: AuditLogRow[]): AuditLogRow[] {
-  const seen = new Set<string>()
-  const result: AuditLogRow[] = []
+  const moveStageEvents = new Set<string>()
   
   for (const log of logs) {
-    const fromStageId = String(log.before?.stage_id || '')
-    const toStageId = String(log.after?.stage_id || '')
-    const ts = Math.floor(new Date(log.created_at).getTime() / 1000)
-    
-    let key: string
-    if (log.action === 'move_stage' || (log.action === 'update' && fromStageId !== toStageId)) {
-      key = `stage:${fromStageId}:${toStageId}:${ts}`
-    } else {
-      key = `${log.action}:${log.id}`
-    }
-    
-    if (seen.has(key)) continue
-    
-    if (log.action === 'update' && fromStageId !== toStageId) {
-      const before = log.before as Record<string, unknown> | null
-      const after = log.after as Record<string, unknown> | null
-      if (before && after) {
-        const fieldsToCheck = ['status', 'title', 'client_name', 'phone_e164', 'notes', 'assigned_to']
-        const otherChanges = fieldsToCheck.some(f => before[f] !== after[f])
-        if (!otherChanges) {
-          const moveStageKey = `stage:${fromStageId}:${toStageId}:${ts}`
-          if (seen.has(moveStageKey)) continue
-        }
+    if (log.action === 'move_stage') {
+      const fromId = String(log.before?.stage_id || '')
+      const toId = String(log.after?.stage_id || '')
+      const ts = Math.floor(new Date(log.created_at).getTime() / 1000)
+      for (let delta = -2; delta <= 2; delta++) {
+        moveStageEvents.add(`${fromId}:${toId}:${ts + delta}`)
       }
     }
-    
-    seen.add(key)
-    result.push(log)
   }
   
-  return result
+  return logs.filter(log => {
+    if (log.action !== 'update') return true
+    
+    const before = log.before as Record<string, unknown> | null
+    const after = log.after as Record<string, unknown> | null
+    if (!before || !after) return true
+    
+    const fromId = String(before.stage_id || '')
+    const toId = String(after.stage_id || '')
+    if (fromId === toId) return true
+    
+    const fieldsToCheck = ['status', 'title', 'client_name', 'phone_e164', 'notes', 'assigned_to', 'pipeline_id', 'lead_type_id', 'lead_interest_id', 'lead_source_id', 'budget_range']
+    const hasOtherChanges = fieldsToCheck.some(f => before[f] !== after[f])
+    if (hasOtherChanges) return true
+    
+    const ts = Math.floor(new Date(log.created_at).getTime() / 1000)
+    const key = `${fromId}:${toId}:${ts}`
+    return !moveStageEvents.has(key)
+  })
 }
 
 export function LeadTimeline({ createdAt, status, stages, auditLogs, actorProfiles }: LeadTimelineProps) {

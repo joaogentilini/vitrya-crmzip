@@ -219,10 +219,10 @@ export default async function LeadDetailsPage({
       if (log.action === 'move_stage') {
         const fromId = String(log.before?.stage_id || '')
         const toId = String(log.after?.stage_id || '')
-        const ts = new Date(log.created_at).getTime()
-        for (let delta = -10000; delta <= 10000; delta += 1000) {
-          moveStageKeys.add(`${fromId}:${toId}:${Math.floor((ts + delta) / 1000)}`)
-        }
+        const ts = Math.floor(new Date(log.created_at).getTime() / 1000)
+        moveStageKeys.add(`${fromId}:${toId}:${ts}`)
+        moveStageKeys.add(`${fromId}:${toId}:${ts - 1}`)
+        moveStageKeys.add(`${fromId}:${toId}:${ts + 1}`)
       }
     }
 
@@ -244,8 +244,7 @@ export default async function LeadDetailsPage({
       if (changedFields.length === 1 && changedFields[0] === 'stage_id') {
         const ts = new Date(log.created_at).getTime()
         const key = `${String(before.stage_id)}:${String(after.stage_id)}:${Math.floor(ts / 1000)}`
-        if (moveStageKeys.has(key)) return false
-        return false
+        return !moveStageKeys.has(key)
       }
       
       return true
