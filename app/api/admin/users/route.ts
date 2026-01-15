@@ -74,22 +74,22 @@ export async function POST(request: NextRequest) {
     const authResult = await validateAdminOrGestor(supabase)
     
     if (!authResult) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+      return NextResponse.json({ error: 'Não autorizado' }, { status: 401 })
     }
 
     const body = await request.json()
     const { email, password, full_name, phone_e164, role } = body
 
     if (!email || !password || !full_name || !role) {
-      return NextResponse.json({ error: 'Missing required fields' }, { status: 400 })
+      return NextResponse.json({ error: 'Preencha todos os campos obrigatórios' }, { status: 400 })
     }
 
     if (!['admin', 'gestor', 'corretor'].includes(role)) {
-      return NextResponse.json({ error: 'Invalid role' }, { status: 400 })
+      return NextResponse.json({ error: 'Cargo inválido' }, { status: 400 })
     }
 
     if (role === 'admin' && authResult.profile.role !== 'admin') {
-      return NextResponse.json({ error: 'Only admins can create admin users' }, { status: 403 })
+      return NextResponse.json({ error: 'Apenas admins podem criar usuários admin' }, { status: 403 })
     }
 
     const adminSupabase = await getAdminSupabase()
@@ -112,7 +112,7 @@ export async function POST(request: NextRequest) {
     }
 
     if (!authUser.user) {
-      return NextResponse.json({ error: 'Failed to create user' }, { status: 500 })
+      return NextResponse.json({ error: 'Falha ao criar usuário' }, { status: 500 })
     }
 
     const { error: profileError } = await adminSupabase
@@ -130,7 +130,7 @@ export async function POST(request: NextRequest) {
     if (profileError) {
       console.error('[POST /api/admin/users] Profile error:', profileError)
       await adminSupabase.auth.admin.deleteUser(authUser.user.id)
-      return NextResponse.json({ error: 'Failed to create profile' }, { status: 500 })
+      return NextResponse.json({ error: 'Falha ao criar perfil do usuário' }, { status: 500 })
     }
 
     await adminSupabase
