@@ -48,6 +48,8 @@ export function CreateLeadForm({ pipelines, stages, leadTypes = [], leadInterest
   const [leadTypeId, setLeadTypeId] = useState<string>('')
   const [leadInterestId, setLeadInterestId] = useState<string>('')
   const [leadSourceId, setLeadSourceId] = useState<string>('')
+  const [email, setEmail] = useState('')
+  const [emailError, setEmailError] = useState<string | undefined>()
   const [notes, setNotes] = useState('')
 
   const [duplicateLead, setDuplicateLead] = useState<DuplicateCheckResult['lead'] | null>(null)
@@ -96,6 +98,7 @@ export function CreateLeadForm({ pipelines, stages, leadTypes = [], leadInterest
     let isValid = true
     setClientNameError(undefined)
     setPhoneError(undefined)
+    setEmailError(undefined)
 
     if (!clientName.trim()) {
       setClientNameError('O nome do cliente é obrigatório')
@@ -155,6 +158,7 @@ export function CreateLeadForm({ pipelines, stages, leadTypes = [], leadInterest
         title: clientName.trim(),
         clientName: clientName.trim(),
         phoneRaw: phone.trim(),
+        email: email.trim() || undefined,
         pipelineId: pipelineId || undefined, 
         stageId: stageId || undefined,
         leadTypeId: leadTypeId || undefined,
@@ -164,11 +168,12 @@ export function CreateLeadForm({ pipelines, stages, leadTypes = [], leadInterest
       })
 
       if (!result.ok) {
-        // Handle specific error codes
         if (result.code === 'PHONE_DUPLICATE') {
           setPhoneError(result.message)
         } else if (result.code === 'PHONE_INVALID') {
           setPhoneError(result.message)
+        } else if (result.code === 'EMAIL_INVALID') {
+          setEmailError(result.message)
         } else if (result.code === 'VALIDATION_ERROR') {
           setClientNameError(result.message)
         } else {
@@ -181,6 +186,7 @@ export function CreateLeadForm({ pipelines, stages, leadTypes = [], leadInterest
       // Success - reset form
       setClientName('')
       setPhone('')
+      setEmail('')
       setLeadTypeId('')
       setLeadInterestId('')
       setLeadSourceId('')
@@ -188,6 +194,7 @@ export function CreateLeadForm({ pipelines, stages, leadTypes = [], leadInterest
       setDuplicateLead(null)
       setClientNameError(undefined)
       setPhoneError(undefined)
+      setEmailError(undefined)
       success('Lead criado com sucesso!')
       router.refresh()
     })
@@ -250,6 +257,23 @@ export function CreateLeadForm({ pipelines, stages, leadTypes = [], leadInterest
               </Link>
             </div>
           )}
+        </div>
+
+        <div>
+          <Input
+            name="email"
+            label="Email"
+            type="email"
+            placeholder="email@exemplo.com"
+            value={email}
+            onChange={(e) => {
+              setEmail(e.target.value)
+              if (emailError) setEmailError(undefined)
+            }}
+            error={emailError}
+            disabled={isPending}
+            autoComplete="email"
+          />
         </div>
 
         <div>
