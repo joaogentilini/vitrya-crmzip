@@ -327,6 +327,14 @@ export function LeadDetailsClient({
             </div>
             <div>
               <p className="text-xs text-[var(--muted-foreground)] mb-1">
+                Email
+              </p>
+              <p className="text-sm font-medium text-[var(--foreground)]">
+                {lead.email || "—"}
+              </p>
+            </div>
+            <div>
+              <p className="text-xs text-[var(--muted-foreground)] mb-1">
                 Tipo
               </p>
               <p className="text-sm font-medium text-[var(--foreground)]">
@@ -472,7 +480,7 @@ export function LeadDetailsClient({
             </CardHeader>
 
             <CardContent>
-              {lead.client_name || lead.phone_raw || lead.phone_e164 ? (
+              {lead.client_name || lead.phone_raw || lead.phone_e164 || lead.email ? (
                 <div className="space-y-3">
                   {lead.client_name && (
                     <div>
@@ -492,6 +500,17 @@ export function LeadDetailsClient({
                       </p>
                       <p className="text-sm font-medium text-[var(--foreground)]">
                         {lead.phone_raw || lead.phone_e164}
+                      </p>
+                    </div>
+                  )}
+
+                  {lead.email && (
+                    <div>
+                      <p className="text-xs text-[var(--muted-foreground)] mb-1">
+                        Email
+                      </p>
+                      <p className="text-sm font-medium text-[var(--foreground)]">
+                        {lead.email}
                       </p>
                     </div>
                   )}
