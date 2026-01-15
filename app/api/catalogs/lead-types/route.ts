@@ -76,10 +76,9 @@ export async function POST(request: NextRequest) {
         .single()
 
       if (error) {
-        console.error('[API lead-types POST update] Error:', error)
+        console.error('[API lead-types POST] Update error:', error.message)
         return NextResponse.json({ error: error.message }, { status: 500 })
       }
-      console.log('[API lead-types POST update] Success:', data)
       return NextResponse.json({ data })
     } else {
       const { data, error } = await supabase
@@ -93,13 +92,12 @@ export async function POST(request: NextRequest) {
         .single()
 
       if (error) {
-        console.error('[API lead-types POST insert] Error:', error)
         if (error.code === '23505') {
           return NextResponse.json({ error: 'Já existe um item com esse nome' }, { status: 409 })
         }
+        console.error('[API lead-types POST] Insert error:', error.message)
         return NextResponse.json({ error: error.message }, { status: 500 })
       }
-      console.log('[API lead-types POST insert] Success:', data)
       return NextResponse.json({ data })
     }
   } catch (err) {

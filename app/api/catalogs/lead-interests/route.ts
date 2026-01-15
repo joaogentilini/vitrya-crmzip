@@ -22,7 +22,6 @@ export async function GET() {
       return NextResponse.json({ error: error.message }, { status: 500 })
     }
 
-    console.log('[API lead-interests GET] Success, count:', data?.length || 0)
     return NextResponse.json({ data: data || [] })
   } catch (err) {
     console.error('[API lead-interests GET] Error:', err)
@@ -69,10 +68,9 @@ export async function POST(request: NextRequest) {
         .single()
 
       if (error) {
-        console.error('[API lead-interests POST update] Error:', error)
+        console.error('[API lead-interests POST] Update error:', error.message)
         return NextResponse.json({ error: error.message }, { status: 500 })
       }
-      console.log('[API lead-interests POST update] Success:', data)
       return NextResponse.json({ data })
     } else {
       const { data, error } = await supabase
@@ -86,13 +84,12 @@ export async function POST(request: NextRequest) {
         .single()
 
       if (error) {
-        console.error('[API lead-interests POST insert] Error:', error)
         if (error.code === '23505') {
           return NextResponse.json({ error: 'Já existe um item com esse nome' }, { status: 409 })
         }
+        console.error('[API lead-interests POST] Insert error:', error.message)
         return NextResponse.json({ error: error.message }, { status: 500 })
       }
-      console.log('[API lead-interests POST insert] Success:', data)
       return NextResponse.json({ data })
     }
   } catch (err) {

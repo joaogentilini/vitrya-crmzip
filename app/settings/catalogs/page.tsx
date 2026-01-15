@@ -53,12 +53,6 @@ export default async function CatalogsPage() {
   const leadInterests: CatalogItem[] = interestsRes.data || []
   const leadSources: CatalogItem[] = sourcesRes.data || []
 
-  console.log('[CatalogsPage] Loaded catalogs:', {
-    types: leadTypes.length,
-    interests: leadInterests.length,
-    sources: leadSources.length,
-  })
-
   return (
     <CatalogsClient
       userEmail={userEmail}
