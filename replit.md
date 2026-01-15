@@ -38,7 +38,7 @@ Preferred communication style: Simple, everyday language.
 
 ### Data Model
 - **Core Entities**: Pipelines, Pipeline Stages, Leads, Lead Stage Changes, Lead Audit Logs, Lead Notes, Profiles, Tasks, Lead Catalogs (Types, Interests, Sources).
-- **Lead Fields**: title, client_name, phone_raw, phone_e164 (E.164 normalized), lead_type_id, lead_interest_id, lead_source_id, budget_range, notes.
+- **Lead Fields**: title, client_name, phone_raw, phone_e164 (E.164 normalized), email, lead_type_id, lead_interest_id, lead_source_id, budget_range, notes.
 - **Lead Lifecycle**: Supports creation, status changes (open, won, lost), and detailed activity logging.
 - **Phone Validation**: Brazilian phone normalization to E.164 format (+55XXXXXXXXXXX); unique constraint on phone_e164 prevents duplicate leads.
 - **Task Management**: Tasks linked to leads with types, due dates, and assignment capabilities.
@@ -50,7 +50,7 @@ Preferred communication style: Simple, everyday language.
 - **RLS**: Everyone can read catalogs, only admins can modify.
 
 ### Key Features
-- **Lead Management**: Create, view, edit leads with full client profile (name, phone, type, interest, source, notes); Kanban board with drag-and-drop; phone duplicate prevention.
+- **Lead Management**: Create, view, edit leads with full client profile (name, phone, email, type, interest, source, notes); Kanban board with drag-and-drop; phone duplicate prevention.
 - **Catalog Management**: Admin interface for managing lead types, interests, and sources at /settings/catalogs.
 - **Task System**: Create, complete, reschedule, and cancel tasks associated with leads. Overdue and no-action indicators.
 - **Timeline**: Detailed audit trail of lead activities, stage changes, and notes added.
@@ -74,6 +74,7 @@ Preferred communication style: Simple, everyday language.
 - `app/blocked/page.tsx` - Page shown to inactive users
 - `docs/migrations/20260114_0307_leads_schema_rls_audit.sql` - Migration for leads table schema, RLS policies, and audit trigger
 - `docs/migrations/20260115_lead_notes.sql` - Migration for lead_notes table with RLS policies
+- `docs/migrations/20260115_add_email_column.sql` - Migration to add email column to leads table
 - `app/leads/[id]/LeadNotes.tsx` - Lead notes UI component with add/delete functionality
 - `app/api/leads/[leadId]/notes/route.ts` - API for fetching and creating notes
 - `app/api/lead-notes/[id]/route.ts` - API for deleting notes
