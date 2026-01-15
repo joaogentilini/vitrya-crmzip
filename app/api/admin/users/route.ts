@@ -2,6 +2,8 @@ import { createClient } from '@/lib/supabaseServer'
 import { createClient as createAdminClient } from '@supabase/supabase-js'
 import { NextRequest, NextResponse } from 'next/server'
 
+export const runtime = 'nodejs'
+
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!
 
@@ -109,14 +111,15 @@ export async function POST(request: NextRequest) {
 
     const { error: profileError } = await adminSupabase
       .from('profiles')
-      .insert({
+      .upsert({
         id: authUser.user.id,
         full_name,
         email,
         phone_e164: phone_e164 || null,
         role,
-        is_active: true
-      })
+        is_active: true,
+        updated_at: new Date().toISOString()
+      }, { onConflict: 'id' })
 
     if (profileError) {
       console.error('[POST /api/admin/users] Profile error:', profileError)
