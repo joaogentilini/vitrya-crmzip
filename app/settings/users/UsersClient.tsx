@@ -64,7 +64,12 @@ export function UsersClient({ userEmail, users, currentUserId, currentUserRole }
     return true
   })
 
-  const handleToggleActive = async (userId: string, currentActive: boolean) => {
+  const handleToggleActive = async (userId: string, userName: string, currentActive: boolean) => {
+    if (currentActive) {
+      const confirmed = confirm(`Deseja desativar "${userName}"?\n\nAo desativar, o usuário será bloqueado e não poderá acessar o sistema.`)
+      if (!confirmed) return
+    }
+
     startTransition(async () => {
       try {
         const resp = await fetch(`/api/admin/users/${userId}`, {
@@ -189,6 +194,7 @@ export function UsersClient({ userEmail, users, currentUserId, currentUserRole }
                     <th className="text-left px-4 py-3 text-sm font-medium text-[var(--muted-foreground)]">Usuário</th>
                     <th className="text-left px-4 py-3 text-sm font-medium text-[var(--muted-foreground)]">Role</th>
                     <th className="text-left px-4 py-3 text-sm font-medium text-[var(--muted-foreground)]">Status</th>
+                    <th className="text-left px-4 py-3 text-sm font-medium text-[var(--muted-foreground)]">Criado em</th>
                     <th className="text-right px-4 py-3 text-sm font-medium text-[var(--muted-foreground)]">Ações</th>
                   </tr>
                 </thead>
@@ -232,13 +238,18 @@ export function UsersClient({ userEmail, users, currentUserId, currentUserRole }
                         </span>
                       </td>
                       <td className="px-4 py-3">
+                        <span className="text-sm text-[var(--muted-foreground)]">
+                          {new Date(user.created_at).toLocaleDateString('pt-BR')}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3">
                         <div className="flex items-center justify-end gap-2">
                           {user.id !== currentUserId && (
                             <>
                               <Button
                                 variant="ghost"
                                 size="sm"
-                                onClick={() => handleToggleActive(user.id, user.is_active)}
+                                onClick={() => handleToggleActive(user.id, user.full_name, user.is_active)}
                                 disabled={isPending}
                               >
                                 {user.is_active ? 'Desativar' : 'Ativar'}
@@ -262,7 +273,7 @@ export function UsersClient({ userEmail, users, currentUserId, currentUserRole }
                   ))}
                   {filteredUsers.length === 0 && (
                     <tr>
-                      <td colSpan={4} className="px-4 py-8 text-center text-[var(--muted-foreground)]">
+                      <td colSpan={5} className="px-4 py-8 text-center text-[var(--muted-foreground)]">
                         Nenhum usuário encontrado
                       </td>
                     </tr>
