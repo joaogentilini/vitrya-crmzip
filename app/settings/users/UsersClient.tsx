@@ -337,9 +337,10 @@ function CreateUserModal({ onClose, onSuccess, currentUserRole }: CreateUserModa
           body: JSON.stringify(formData)
         })
         
+        const data = await resp.json().catch(() => ({ error: 'Erro de comunicação com servidor' }))
+        
         if (!resp.ok) {
-          const data = await resp.json()
-          throw new Error(data.error || 'Erro ao criar usuário')
+          throw new Error(data.error || data.details || 'Erro ao criar usuário')
         }
         
         success('Usuário criado com sucesso')

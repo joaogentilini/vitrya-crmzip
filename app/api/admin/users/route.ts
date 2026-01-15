@@ -102,7 +102,13 @@ export async function POST(request: NextRequest) {
 
     if (authError) {
       console.error('[POST /api/admin/users] Auth error:', authError)
-      return NextResponse.json({ error: authError.message }, { status: 400 })
+      let errorMsg = authError.message
+      if (authError.message.includes('already been registered')) {
+        errorMsg = 'Este email já está cadastrado'
+      } else if (authError.message.includes('password')) {
+        errorMsg = 'Senha inválida - use no mínimo 6 caracteres'
+      }
+      return NextResponse.json({ error: errorMsg }, { status: 400 })
     }
 
     if (!authUser.user) {
