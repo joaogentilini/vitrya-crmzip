@@ -46,6 +46,7 @@ export function EditLeadModal({
   const [title, setTitle] = useState(lead.title)
   const [clientName, setClientName] = useState(lead.client_name || '')
   const [phoneRaw, setPhoneRaw] = useState(lead.phone_raw || '')
+  const [email, setEmail] = useState(lead.email || '')
   const [leadTypeId, setLeadTypeId] = useState(lead.lead_type_id || '')
   const [leadInterestId, setLeadInterestId] = useState(lead.lead_interest_id || '')
   const [leadSourceId, setLeadSourceId] = useState(lead.lead_source_id || '')
@@ -55,12 +56,14 @@ export function EditLeadModal({
   const [stageId, setStageId] = useState(lead.stage_id || '')
   const [titleError, setTitleError] = useState<string | undefined>()
   const [phoneError, setPhoneError] = useState<string | undefined>()
+  const [emailError, setEmailError] = useState<string | undefined>()
 
   useEffect(() => {
     if (open) {
       setTitle(lead.title)
       setClientName(lead.client_name || '')
       setPhoneRaw(lead.phone_raw || '')
+      setEmail(lead.email || '')
       setLeadTypeId(lead.lead_type_id || '')
       setLeadInterestId(lead.lead_interest_id || '')
       setLeadSourceId(lead.lead_source_id || '')
@@ -70,6 +73,7 @@ export function EditLeadModal({
       setStageId(lead.stage_id || '')
       setTitleError(undefined)
       setPhoneError(undefined)
+      setEmailError(undefined)
     }
   }, [open, lead])
 
@@ -119,6 +123,7 @@ export function EditLeadModal({
         title: title.trim(),
         clientName: clientName.trim() || undefined,
         phoneRaw: phoneRaw.trim() || undefined,
+        email: email.trim() || null,
         leadTypeId: leadTypeId || null,
         leadInterestId: leadInterestId || null,
         leadSourceId: leadSourceId || null,
@@ -131,6 +136,8 @@ export function EditLeadModal({
       if (!result.ok) {
         if (result.code === 'PHONE_DUPLICATE' || result.code === 'PHONE_INVALID') {
           setPhoneError(result.message)
+        } else if (result.code === 'EMAIL_INVALID') {
+          setEmailError(result.message)
         } else if (result.code === 'VALIDATION_ERROR') {
           setTitleError(result.message)
         } else {
@@ -206,6 +213,19 @@ export function EditLeadModal({
               error={phoneError}
               disabled={isPending}
               placeholder="(11) 99999-9999"
+            />
+
+            <Input
+              label="Email"
+              type="email"
+              value={email}
+              onChange={(e) => {
+                setEmail(e.target.value)
+                if (emailError) setEmailError(undefined)
+              }}
+              error={emailError}
+              disabled={isPending}
+              placeholder="email@exemplo.com"
             />
 
             <div className="grid grid-cols-2 gap-4">
