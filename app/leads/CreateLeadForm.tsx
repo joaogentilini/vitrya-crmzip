@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo, useRef, useState, useTransition, useCallback } from 'react'
+import { useMemo, useRef, useState, useTransition, useCallback, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { createLeadAction, checkLeadByPhoneAction, DuplicateCheckResult } from './actions'
@@ -26,15 +26,23 @@ type CatalogItem = {
   name: string
 }
 
+type CorretorProfile = {
+  id: string
+  full_name: string
+}
+
 type Props = {
   pipelines: PipelineRow[]
   stages: StageRow[]
   leadTypes?: CatalogItem[]
   leadInterests?: CatalogItem[]
   leadSources?: CatalogItem[]
+  corretores?: CorretorProfile[]
+  isAdminOrGestor?: boolean
+  currentUserId?: string
 }
 
-export function CreateLeadForm({ pipelines, stages, leadTypes = [], leadInterests = [], leadSources = [] }: Props) {
+export function CreateLeadForm({ pipelines, stages, leadTypes = [], leadInterests = [], leadSources = [], corretores = [], isAdminOrGestor = false, currentUserId = '' }: Props) {
   const router = useRouter()
   const formRef = useRef<HTMLFormElement>(null)
   const [isPending, startTransition] = useTransition()
@@ -51,6 +59,13 @@ export function CreateLeadForm({ pipelines, stages, leadTypes = [], leadInterest
   const [email, setEmail] = useState('')
   const [emailError, setEmailError] = useState<string | undefined>()
   const [notes, setNotes] = useState('')
+  const [ownerUserId, setOwnerUserId] = useState<string>(currentUserId)
+
+  useEffect(() => {
+    if (currentUserId && !ownerUserId) {
+      setOwnerUserId(currentUserId)
+    }
+  }, [currentUserId, ownerUserId])
 
   const [duplicateLead, setDuplicateLead] = useState<DuplicateCheckResult['lead'] | null>(null)
   const [isCheckingPhone, setIsCheckingPhone] = useState(false)
@@ -165,6 +180,7 @@ export function CreateLeadForm({ pipelines, stages, leadTypes = [], leadInterest
         leadInterestId: leadInterestId || undefined,
         leadSourceId: leadSourceId || undefined,
         notes: notes.trim() || undefined,
+        ownerUserId: ownerUserId || undefined,
       })
 
       if (!result.ok) {
@@ -191,6 +207,7 @@ export function CreateLeadForm({ pipelines, stages, leadTypes = [], leadInterest
       setLeadInterestId('')
       setLeadSourceId('')
       setNotes('')
+      setOwnerUserId(currentUserId)
       setDuplicateLead(null)
       setClientNameError(undefined)
       setPhoneError(undefined)
@@ -326,6 +343,24 @@ export function CreateLeadForm({ pipelines, stages, leadTypes = [], leadInterest
             ))}
           </select>
         </div>
+
+        {isAdminOrGestor && corretores.length > 0 && (
+          <div>
+            <label className="block text-sm font-medium mb-1.5 text-[var(--foreground)]">
+              Responsável
+            </label>
+            <select
+              value={ownerUserId}
+              onChange={(e) => setOwnerUserId(e.target.value)}
+              disabled={isPending}
+              className={selectClass}
+            >
+              {corretores.map((c) => (
+                <option key={c.id} value={c.id}>{c.full_name}</option>
+              ))}
+            </select>
+          </div>
+        )}
 
         <div>
           <label className="block text-sm font-medium mb-1.5 text-[var(--foreground)]">

@@ -21,6 +21,7 @@ type CreateLeadInput = {
   leadSourceId?: string
   budgetRange?: string
   notes?: string
+  ownerUserId?: string
 }
 
 type UpdateLeadInput = {
@@ -215,6 +216,29 @@ export async function createLeadAction(data: CreateLeadInput): Promise<ActionRes
     }
   }
 
+  // 6.5 Determine owner_user_id (admin/gestor can choose, others default to self)
+  let ownerUserId = actorId
+  if (data.ownerUserId && data.ownerUserId !== actorId) {
+    const { data: actorProfile } = await supabase
+      .from('profiles')
+      .select('role')
+      .eq('id', actorId)
+      .single()
+    
+    if (actorProfile?.role === 'admin' || actorProfile?.role === 'gestor') {
+      // Validate that the target user exists and is active
+      const { data: targetProfile } = await supabase
+        .from('profiles')
+        .select('id, is_active')
+        .eq('id', data.ownerUserId)
+        .single()
+      
+      if (targetProfile && targetProfile.is_active !== false) {
+        ownerUserId = data.ownerUserId
+      }
+    }
+  }
+
   // 7. Build payload
   const payload = {
     title: data.title.trim(),
@@ -223,8 +247,8 @@ export async function createLeadAction(data: CreateLeadInput): Promise<ActionRes
     stage_id: stageId,
     user_id: actorId,
     created_by: actorId,
-    assigned_to: actorId,
-    owner_user_id: actorId,
+    assigned_to: ownerUserId,
+    owner_user_id: ownerUserId,
     client_name: data.clientName?.trim() || data.title.trim(),
     phone_raw: data.phoneRaw?.trim() || null,
     phone_e164: phoneE164,

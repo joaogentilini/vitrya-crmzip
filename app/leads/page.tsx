@@ -72,7 +72,7 @@ async function LeadsContent() {
 
   const { data: leadsRaw } = await supabase
     .from('leads')
-    .select('id, title, status, pipeline_id, stage_id, created_at, client_name, phone_raw, lead_type_id, lead_interest_id, lead_source_id, owner_user_id')
+    .select('id, title, status, pipeline_id, stage_id, created_at, client_name, phone_raw, email, lead_type_id, lead_interest_id, lead_source_id, owner_user_id')
     .order('created_at', { ascending: false })
     .limit(200)
 
@@ -183,6 +183,9 @@ async function LeadsContent() {
         leadTypes={leadTypes}
         leadInterests={leadInterests}
         leadSources={leadSources}
+        corretores={corretores}
+        isAdminOrGestor={isAdminOrGestor}
+        currentUserId={currentProfile?.id || ''}
       />
 
       <LeadsList 

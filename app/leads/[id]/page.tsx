@@ -95,7 +95,7 @@ export default async function LeadDetailsPage({
 
   const { data: lead, error } = await supabase
     .from('leads')
-    .select('id, title, status, pipeline_id, stage_id, created_at, created_by, assigned_to, client_name, phone_raw, phone_e164, lead_type_id, lead_interest_id, lead_source_id, budget_range, notes, owner_user_id')
+    .select('id, title, status, pipeline_id, stage_id, created_at, created_by, assigned_to, client_name, phone_raw, phone_e164, email, lead_type_id, lead_interest_id, lead_source_id, budget_range, notes, owner_user_id')
     .eq('id', id)
     .single()
 
