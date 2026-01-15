@@ -4,6 +4,7 @@ export const revalidate = 0
 import { createClient } from '@/lib/supabaseServer'
 import { redirect } from 'next/navigation'
 import { AgendaClient } from './AgendaClient'
+import { ensureUserProfile } from '@/lib/auth'
 
 interface Task {
   id: string
@@ -94,23 +95,19 @@ async function getProfiles() {
 
 export default async function AgendaPage({ searchParams }: { searchParams: Promise<{ broker?: string; view?: string }> }) {
   const params = await searchParams
-  const supabase = await createClient()
-
-  const { data: userRes, error: authError } = await supabase.auth.getUser()
-  if (authError || !userRes?.user) {
+  
+  const profile = await ensureUserProfile()
+  if (!profile) {
     redirect('/')
   }
+  
+  if (!profile.is_active) {
+    redirect('/blocked')
+  }
 
-  const userId = userRes.user.id
-  const userEmail = userRes.user.email
-
-  const { data: profile } = await supabase
-    .from('profiles')
-    .select('role, full_name')
-    .eq('id', userId)
-    .single()
-
-  const isAdmin = profile?.role === 'admin'
+  const userId = profile.id
+  const userEmail = profile.email
+  const isAdmin = profile.role === 'admin'
   const view = (params.view === 'week' ? 'week' : 'today') as 'today' | 'week'
 
   const [agendaData, profiles] = await Promise.all([

@@ -2,17 +2,26 @@ export const dynamic = 'force-dynamic'
 export const revalidate = 0
 
 import { createClient } from '@/lib/supabaseServer'
+import { redirect } from 'next/navigation'
 import { KanbanBoard } from './KanbanBoard'
 import { LeadsAppShell } from '../LeadsAppShell'
 import { EmptyState, emptyStateIcons } from '@/components/ui/EmptyState'
 import Link from 'next/link'
 import { Button } from '@/components/ui/Button'
+import { ensureUserProfile } from '@/lib/auth'
 
 export default async function LeadsKanbanPage() {
-  const supabase = await createClient()
+  const profile = await ensureUserProfile()
+  if (!profile) {
+    redirect('/')
+  }
+  
+  if (!profile.is_active) {
+    redirect('/blocked')
+  }
 
-  const { data: userRes } = await supabase.auth.getUser()
-  const userEmail = userRes?.user?.email
+  const userEmail = profile.email
+  const supabase = await createClient()
 
   const { data: pipelines } = await supabase
     .from('pipelines')

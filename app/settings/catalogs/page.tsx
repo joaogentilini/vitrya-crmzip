@@ -4,6 +4,7 @@ export const revalidate = 0
 import { createClient } from '@/lib/supabaseServer'
 import { redirect } from 'next/navigation'
 import { CatalogsClient } from './CatalogsClient'
+import { ensureUserProfile } from '@/lib/auth'
 
 interface CatalogItem {
   id: string
@@ -14,25 +15,21 @@ interface CatalogItem {
 }
 
 export default async function CatalogsPage() {
-  const supabase = await createClient()
-
-  const { data: userRes, error: authError } = await supabase.auth.getUser()
-  if (authError || !userRes?.user) {
+  const profile = await ensureUserProfile()
+  if (!profile) {
     redirect('/')
   }
+  
+  if (!profile.is_active) {
+    redirect('/blocked')
+  }
 
-  const userId = userRes.user.id
-  const userEmail = userRes.user.email
-
-  const { data: profile } = await supabase
-    .from('profiles')
-    .select('role')
-    .eq('id', userId)
-    .single()
-
-  if (profile?.role !== 'admin') {
+  if (profile.role !== 'admin') {
     redirect('/leads')
   }
+
+  const userEmail = profile.email
+  const supabase = await createClient()
 
   const [typesRes, interestsRes, sourcesRes] = await Promise.all([
     supabase

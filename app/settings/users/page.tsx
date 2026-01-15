@@ -4,31 +4,25 @@ export const revalidate = 0
 import { createClient } from '@/lib/supabaseServer'
 import { redirect } from 'next/navigation'
 import { UsersClient } from './UsersClient'
+import { ensureUserProfile } from '@/lib/auth'
 
 export default async function UsersPage() {
-  const supabase = await createClient()
-
-  const { data: userRes, error: authError } = await supabase.auth.getUser()
-  if (authError || !userRes?.user) {
+  const profile = await ensureUserProfile()
+  if (!profile) {
     redirect('/')
   }
-
-  const userId = userRes.user.id
-  const userEmail = userRes.user.email
-
-  const { data: profile } = await supabase
-    .from('profiles')
-    .select('role, is_active')
-    .eq('id', userId)
-    .single()
-
-  if (!profile?.is_active) {
+  
+  if (!profile.is_active) {
     redirect('/blocked')
   }
 
-  if (profile?.role !== 'admin' && profile?.role !== 'gestor') {
+  if (profile.role !== 'admin' && profile.role !== 'gestor') {
     redirect('/dashboard')
   }
+
+  const userEmail = profile.email
+  const userId = profile.id
+  const supabase = await createClient()
 
   const { data: users } = await supabase
     .from('profiles')
@@ -37,7 +31,7 @@ export default async function UsersPage() {
 
   return (
     <UsersClient
-      userEmail={userEmail}
+      userEmail={userEmail ?? undefined}
       users={users || []}
       currentUserId={userId}
       currentUserRole={profile.role}

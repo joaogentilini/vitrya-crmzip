@@ -4,27 +4,24 @@ export const revalidate = 0
 import { createClient } from '@/lib/supabaseServer'
 import { redirect } from 'next/navigation'
 import { AutomationsClient } from './AutomationsClient'
+import { ensureUserProfile } from '@/lib/auth'
 
 export default async function AutomationsPage() {
-  const supabase = await createClient()
-
-  const { data: userRes, error: authError } = await supabase.auth.getUser()
-  if (authError || !userRes?.user) {
+  const profile = await ensureUserProfile()
+  if (!profile) {
     redirect('/')
   }
+  
+  if (!profile.is_active) {
+    redirect('/blocked')
+  }
 
-  const userId = userRes.user.id
-  const userEmail = userRes.user.email
-
-  const { data: profile } = await supabase
-    .from('profiles')
-    .select('role')
-    .eq('id', userId)
-    .single()
-
-  if (profile?.role !== 'admin') {
+  if (profile.role !== 'admin') {
     redirect('/leads')
   }
+
+  const userEmail = profile.email
+  const supabase = await createClient()
 
   const { data: settings } = await supabase
     .from('automation_settings')

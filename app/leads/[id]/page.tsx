@@ -2,9 +2,10 @@ export const dynamic = 'force-dynamic'
 export const revalidate = 0
 
 import { createClient } from '@/lib/supabaseServer'
-import { notFound } from 'next/navigation'
+import { notFound, redirect } from 'next/navigation'
 import { LeadsAppShell } from '../LeadsAppShell'
 import { LeadDetailsClient } from './LeadDetailsClient'
+import { ensureUserProfile } from '@/lib/auth'
 
 type LeadRow = {
   id: string
@@ -78,11 +79,19 @@ export default async function LeadDetailsPage({
   params: Promise<{ id: string }> 
 }) {
   const { id } = await params
-  const supabase = await createClient()
   
-  const { data: userRes } = await supabase.auth.getUser()
-  const userEmail = userRes?.user?.email
-  const currentUserId = userRes?.user?.id || ''
+  const profile = await ensureUserProfile()
+  if (!profile) {
+    redirect('/')
+  }
+  
+  if (!profile.is_active) {
+    redirect('/blocked')
+  }
+
+  const userEmail = profile.email
+  const currentUserId = profile.id
+  const supabase = await createClient()
 
   const { data: lead, error } = await supabase
     .from('leads')

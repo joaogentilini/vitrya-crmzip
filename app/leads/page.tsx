@@ -2,11 +2,13 @@ export const dynamic = 'force-dynamic'
 export const revalidate = 0
 
 import { createClient } from '@/lib/supabaseServer'
+import { redirect } from 'next/navigation'
 import { CreateLeadForm } from './CreateLeadForm'
 import { LeadsAppShell } from './LeadsAppShell'
 import { LeadsList } from './LeadsList'
 import { PageSkeleton } from '@/components/ui/Skeleton'
 import { Suspense } from 'react'
+import { ensureUserProfile } from '@/lib/auth'
 
 type LeadRow = {
   id: string
@@ -199,12 +201,17 @@ async function LeadsContent() {
 }
 
 export default async function LeadsPage() {
-  const supabase = await createClient()
-  const { data: userRes } = await supabase.auth.getUser()
-  const userEmail = userRes?.user?.email
+  const profile = await ensureUserProfile()
+  if (!profile) {
+    redirect('/')
+  }
+  
+  if (!profile.is_active) {
+    redirect('/blocked')
+  }
 
   return (
-    <LeadsAppShell userEmail={userEmail} pageTitle="Lista de Leads">
+    <LeadsAppShell userEmail={profile.email} pageTitle="Lista de Leads">
       <Suspense fallback={<PageSkeleton />}>
         <LeadsContent />
       </Suspense>
