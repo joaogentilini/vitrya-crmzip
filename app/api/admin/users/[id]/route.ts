@@ -105,16 +105,24 @@ export async function PATCH(
       return NextResponse.json({ error: 'Failed to update user' }, { status: 500 })
     }
 
-    await adminSupabase
-      .from('user_audit_logs')
-      .insert({
-        actor_id: authResult.user.id,
-        target_user_id: id,
-        action: is_active === false ? 'user_deactivated' : 
-                is_active === true ? 'user_activated' : 
-                role ? 'role_changed' : 'user_updated',
-        details: auditDetails
-      })
+    // Non-blocking audit log - don't fail user update if audit fails
+    try {
+      const { error: auditError } = await adminSupabase
+        .from('user_audit_logs')
+        .insert({
+          actor_id: authResult.user.id,
+          target_user_id: id,
+          action: is_active === false ? 'user_deactivated' : 
+                  is_active === true ? 'user_activated' : 
+                  role ? 'role_changed' : 'user_updated',
+          details: auditDetails
+        })
+      if (auditError) {
+        console.warn('[PATCH /api/admin/users/[id]] Audit log failed (non-blocking):', auditError.message)
+      }
+    } catch (auditErr) {
+      console.warn('[PATCH /api/admin/users/[id]] Audit log exception (non-blocking):', auditErr)
+    }
 
     return NextResponse.json({ success: true, user: updatedProfile })
   } catch (err) {
