@@ -223,9 +223,29 @@ export function CatalogsClient({ userEmail, leadTypes, leadInterests, leadSource
           </CardHeader>
           <CardContent>
             {items.length === 0 ? (
-              <p className="text-sm text-[var(--muted-foreground)] text-center py-8">
-                Nenhum item cadastrado
-              </p>
+              <div className="text-center py-12">
+                <div className="w-12 h-12 mx-auto mb-4 rounded-full bg-[var(--muted)] flex items-center justify-center">
+                  <svg className="w-6 h-6 text-[var(--muted-foreground)]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
+                  </svg>
+                </div>
+                <h3 className="text-sm font-medium text-[var(--foreground)] mb-1">
+                  Nenhum {tabLabels[activeTab].slice(0, -1).toLowerCase()} cadastrado
+                </h3>
+                <p className="text-sm text-[var(--muted-foreground)] mb-4">
+                  Adicione o primeiro item usando o campo acima
+                </p>
+                <Button 
+                  variant="outline" 
+                  size="sm"
+                  onClick={() => document.querySelector<HTMLInputElement>('input[placeholder]')?.focus()}
+                >
+                  <svg className="w-4 h-4 mr-1.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                  </svg>
+                  Adicionar {tabLabels[activeTab].slice(0, -1)}
+                </Button>
+              </div>
             ) : (
               <div className="space-y-2">
                 {items.map((item, index) => (
