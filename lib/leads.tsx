@@ -15,6 +15,7 @@ export type LeadRow = {
   client_name?: string | null
   phone_raw?: string | null
   phone_e164?: string | null
+  email?: string | null
   lead_type_id?: string | null
   lead_interest_id?: string | null
   lead_source_id?: string | null

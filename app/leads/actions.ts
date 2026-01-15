@@ -4,12 +4,18 @@ import { revalidatePath } from 'next/cache'
 import { createClient } from '@/lib/supabaseServer'
 import { normalizeBrazilianPhone } from '@/lib/phone'
 
+function isValidEmail(email: string): boolean {
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+  return emailRegex.test(email)
+}
+
 type CreateLeadInput = {
   title: string
   pipelineId?: string
   stageId?: string
   clientName?: string
   phoneRaw?: string
+  email?: string
   leadTypeId?: string
   leadInterestId?: string
   leadSourceId?: string
@@ -24,6 +30,7 @@ type UpdateLeadInput = {
   stageId?: string | null
   clientName?: string
   phoneRaw?: string
+  email?: string | null
   leadTypeId?: string | null
   leadInterestId?: string | null
   leadSourceId?: string | null
@@ -198,7 +205,17 @@ export async function createLeadAction(data: CreateLeadInput): Promise<ActionRes
     }
   }
 
-  // 6. Build payload
+  // 6. Validate email if provided
+  const emailValue = data.email?.trim() || null
+  if (emailValue && !isValidEmail(emailValue)) {
+    return {
+      ok: false,
+      code: 'EMAIL_INVALID',
+      message: 'Email inválido'
+    }
+  }
+
+  // 7. Build payload
   const payload = {
     title: data.title.trim(),
     status: 'open',
@@ -211,6 +228,7 @@ export async function createLeadAction(data: CreateLeadInput): Promise<ActionRes
     client_name: data.clientName?.trim() || data.title.trim(),
     phone_raw: data.phoneRaw?.trim() || null,
     phone_e164: phoneE164,
+    email: emailValue,
     lead_type_id: data.leadTypeId || null,
     lead_interest_id: data.leadInterestId || null,
     lead_source_id: data.leadSourceId || null,
@@ -313,6 +331,22 @@ export async function updateLeadAction(data: UpdateLeadInput): Promise<ActionRes
   if (data.leadSourceId !== undefined) updateData.lead_source_id = data.leadSourceId
   if (data.budgetRange !== undefined) updateData.budget_range = data.budgetRange
   if (data.notes !== undefined) updateData.notes = data.notes
+
+  // Handle email update
+  if (data.email !== undefined) {
+    if (data.email && data.email.trim()) {
+      if (!isValidEmail(data.email.trim())) {
+        return {
+          ok: false,
+          code: 'EMAIL_INVALID',
+          message: 'Email inválido'
+        }
+      }
+      updateData.email = data.email.trim()
+    } else {
+      updateData.email = null
+    }
+  }
 
   // Handle phone update
   if (data.phoneRaw !== undefined) {
