@@ -9,6 +9,7 @@ interface NavItem {
   href: string
   label: string
   icon: ReactNode
+  children?: NavItem[]
 }
 
 const navItems: NavItem[] = [
@@ -49,23 +50,43 @@ const navItems: NavItem[] = [
     ),
   },
   {
-    href: '/settings/catalogs',
-    label: 'Catálogos',
-    icon: (
-      <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
-      </svg>
-    ),
-  },
-  {
-    href: '/settings/automations',
-    label: 'Automações',
+    href: '/settings',
+    label: 'Configurações',
     icon: (
       <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
       </svg>
     ),
+    children: [
+      {
+        href: '/settings/users',
+        label: 'Usuários',
+        icon: (
+          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
+          </svg>
+        ),
+      },
+      {
+        href: '/settings/catalogs',
+        label: 'Catálogos',
+        icon: (
+          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
+          </svg>
+        ),
+      },
+      {
+        href: '/settings/automations',
+        label: 'Automações',
+        icon: (
+          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+          </svg>
+        ),
+      },
+    ],
   },
 ]
 
@@ -90,6 +111,7 @@ export function AppShell({
   const router = useRouter()
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [userMenuOpen, setUserMenuOpen] = useState(false)
+  const [settingsOpen, setSettingsOpen] = useState(() => pathname?.startsWith('/settings') || false)
 
   const closeSidebar = useCallback(() => setSidebarOpen(false), [])
   const closeUserMenu = useCallback(() => setUserMenuOpen(false), [])
@@ -142,7 +164,68 @@ export function AppShell({
         <nav className="flex-1 p-3 space-y-1 overflow-y-auto">
           {navItems.map((item) => {
             const isActive = pathname === item.href
-            const isParentActive = pathname?.startsWith(item.href + '/')
+            const isParentActive = pathname?.startsWith(item.href + '/') || (item.href === '/settings' && pathname?.startsWith('/settings'))
+            const hasChildren = item.children && item.children.length > 0
+
+            if (hasChildren) {
+              return (
+                <div key={item.href}>
+                  <button
+                    onClick={() => setSettingsOpen(!settingsOpen)}
+                    className={`
+                      w-full flex items-center justify-between gap-3 px-3 py-2.5 rounded-[var(--radius)] text-sm font-medium
+                      transition-all duration-150
+                      focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)]
+                      ${isParentActive
+                        ? 'bg-[var(--sidebar-hover)] text-white'
+                        : 'text-[var(--sidebar-muted)] hover:bg-[var(--sidebar-hover)] hover:text-white'
+                      }
+                    `}
+                  >
+                    <span className="flex items-center gap-3">
+                      {item.icon}
+                      {item.label}
+                    </span>
+                    <svg 
+                      className={`w-4 h-4 transition-transform duration-200 ${settingsOpen ? 'rotate-180' : ''}`} 
+                      fill="none" 
+                      viewBox="0 0 24 24" 
+                      stroke="currentColor"
+                    >
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                    </svg>
+                  </button>
+                  {settingsOpen && (
+                    <div className="mt-1 ml-4 space-y-1">
+                      {item.children!.map((child) => {
+                        const isChildActive = pathname === child.href
+                        return (
+                          <Link
+                            key={child.href}
+                            href={child.href}
+                            onClick={closeSidebar}
+                            aria-current={isChildActive ? 'page' : undefined}
+                            className={`
+                              flex items-center gap-3 px-3 py-2 rounded-[var(--radius)] text-sm font-medium
+                              transition-all duration-150
+                              focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)]
+                              ${isChildActive
+                                ? 'bg-[var(--sidebar-active)] text-white shadow-sm'
+                                : 'text-[var(--sidebar-muted)] hover:bg-[var(--sidebar-hover)] hover:text-white'
+                              }
+                            `}
+                          >
+                            {child.icon}
+                            {child.label}
+                          </Link>
+                        )
+                      })}
+                    </div>
+                  )}
+                </div>
+              )
+            }
+
             return (
               <Link
                 key={item.href}
