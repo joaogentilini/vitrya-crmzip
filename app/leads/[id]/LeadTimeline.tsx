@@ -47,7 +47,7 @@ function formatTaskDueAt(dueAt: unknown): string {
 function summarizeAuditEvent(
   log: AuditLogRow, 
   stages: Map<string, StageRow>
-): { title: string; details: string | null; icon: 'create' | 'update' | 'move' | 'status' | 'delete' | 'task' } {
+): { title: string; details: string | null; icon: 'create' | 'update' | 'move' | 'status' | 'delete' | 'task' | 'note' } {
   const { action, before, after } = log
 
   if (action === 'create') {
@@ -56,6 +56,15 @@ function summarizeAuditEvent(
 
   if (action === 'delete') {
     return { title: 'Lead removido', details: null, icon: 'delete' }
+  }
+
+  if (action === 'update' && after?.note_added) {
+    const preview = after?.note_preview ? String(after.note_preview) : null
+    return {
+      title: 'Nota adicionada',
+      details: preview ? (preview.length > 40 ? preview.substring(0, 40) + '...' : preview) : null,
+      icon: 'note'
+    }
   }
 
   if (action === 'task_create') {
@@ -208,6 +217,14 @@ function TimelineIcon({ type, status }: { type: string; status?: string }) {
         <div className={`${baseClass} bg-[var(--primary)]/80`}>
           <svg className="w-4 h-4 text-[var(--primary-foreground)]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
+          </svg>
+        </div>
+      )
+    case 'note':
+      return (
+        <div className={`${baseClass} bg-[var(--info)]`}>
+          <svg className="w-4 h-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 8h10M7 12h4m1 8l-4-4H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-3l-4 4z" />
           </svg>
         </div>
       )

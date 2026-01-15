@@ -82,6 +82,7 @@ export default async function LeadDetailsPage({
   
   const { data: userRes } = await supabase.auth.getUser()
   const userEmail = userRes?.user?.email
+  const currentUserId = userRes?.user?.id || ''
 
   const { data: lead, error } = await supabase
     .from('leads')
@@ -240,6 +241,7 @@ export default async function LeadDetailsPage({
         leadInterests={leadInterests}
         leadSources={leadSources}
         corretores={corretores}
+        currentUserId={currentUserId}
       />
     </LeadsAppShell>
   )
