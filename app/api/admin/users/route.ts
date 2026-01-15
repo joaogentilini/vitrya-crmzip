@@ -6,6 +6,10 @@ const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!
 
 async function getAdminSupabase() {
+  if (!supabaseUrl || !supabaseServiceKey) {
+    console.error('[getAdminSupabase] Missing SUPABASE_SERVICE_ROLE_KEY or NEXT_PUBLIC_SUPABASE_URL')
+    throw new Error('Missing Supabase service role configuration')
+  }
   return createAdminClient(supabaseUrl, supabaseServiceKey, {
     auth: {
       autoRefreshToken: false,
@@ -18,13 +22,19 @@ async function validateAdminOrGestor(supabase: Awaited<ReturnType<typeof createC
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return null
 
-  const { data: profile } = await supabase
+  const { data: profile, error: profileError } = await supabase
     .from('profiles')
     .select('id, role, is_active')
     .eq('id', user.id)
     .single()
 
-  if (!profile || !profile.is_active) return null
+  if (profileError) {
+    console.error('[validateAdminOrGestor] Profile fetch error:', profileError)
+    return null
+  }
+
+  if (!profile) return null
+  if (profile.is_active === false) return null
   if (profile.role !== 'admin' && profile.role !== 'gestor') return null
 
   return { user, profile }
@@ -133,7 +143,21 @@ export async function POST(request: NextRequest) {
       }
     })
   } catch (err) {
+    const errorMessage = err instanceof Error ? err.message : 'Unknown error'
     console.error('[POST /api/admin/users] Error:', err)
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
+    
+    if (errorMessage.includes('Missing Supabase service role')) {
+      return NextResponse.json({ 
+        ok: false, 
+        error: 'Configuração do servidor incompleta', 
+        details: 'SUPABASE_SERVICE_ROLE_KEY não configurada' 
+      }, { status: 500 })
+    }
+    
+    return NextResponse.json({ 
+      ok: false, 
+      error: 'Internal server error',
+      details: errorMessage
+    }, { status: 500 })
   }
 }

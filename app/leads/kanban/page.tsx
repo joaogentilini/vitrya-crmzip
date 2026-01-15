@@ -16,7 +16,7 @@ export default async function LeadsKanbanPage() {
     redirect('/')
   }
   
-  if (!profile.is_active) {
+  if (profile && profile.is_active === false) {
     redirect('/blocked')
   }
 

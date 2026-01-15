@@ -12,7 +12,7 @@ export default async function AutomationsPage() {
     redirect('/')
   }
   
-  if (!profile.is_active) {
+  if (profile && profile.is_active === false) {
     redirect('/blocked')
   }
 

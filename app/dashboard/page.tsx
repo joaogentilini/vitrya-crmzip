@@ -87,7 +87,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
     redirect('/')
   }
   
-  if (!profile.is_active) {
+  if (profile && profile.is_active === false) {
     redirect('/blocked')
   }
 
