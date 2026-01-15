@@ -20,7 +20,7 @@ async function getAdminSupabase() {
   })
 }
 
-async function validateAdminOrGestor(supabase: Awaited<ReturnType<typeof createClient>>) {
+async function validateAdmin(supabase: Awaited<ReturnType<typeof createClient>>) {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return null
 
@@ -31,13 +31,13 @@ async function validateAdminOrGestor(supabase: Awaited<ReturnType<typeof createC
     .single()
 
   if (profileError) {
-    console.error('[validateAdminOrGestor] Profile fetch error:', profileError)
+    console.error('[validateAdmin] Profile fetch error:', profileError)
     return null
   }
 
   if (!profile) return null
   if (profile.is_active === false) return null
-  if (profile.role !== 'admin' && profile.role !== 'gestor') return null
+  if (profile.role !== 'admin') return null
 
   return { user, profile }
 }
@@ -45,10 +45,10 @@ async function validateAdminOrGestor(supabase: Awaited<ReturnType<typeof createC
 export async function GET() {
   try {
     const supabase = await createClient()
-    const authResult = await validateAdminOrGestor(supabase)
+    const authResult = await validateAdmin(supabase)
     
     if (!authResult) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+      return NextResponse.json({ error: 'Não autorizado' }, { status: 401 })
     }
 
     const { data: users, error } = await supabase
@@ -69,15 +69,29 @@ export async function GET() {
 }
 
 export async function POST(request: NextRequest) {
+  console.log('[POST /api/admin/users] Request received')
+  
+  // Early check for service role key
+  if (!process.env.SUPABASE_SERVICE_ROLE_KEY) {
+    console.error('[POST /api/admin/users] SUPABASE_SERVICE_ROLE_KEY not configured')
+    return NextResponse.json({ 
+      error: 'Configuração do servidor incompleta',
+      details: 'Service role key ausente. Configure SUPABASE_SERVICE_ROLE_KEY nas variáveis de ambiente.'
+    }, { status: 500 })
+  }
+
   try {
     const supabase = await createClient()
-    const authResult = await validateAdminOrGestor(supabase)
+    const authResult = await validateAdmin(supabase)
+    
+    console.log('[POST /api/admin/users] Auth result:', authResult ? `User ${authResult.user.id} role ${authResult.profile.role}` : 'null')
     
     if (!authResult) {
-      return NextResponse.json({ error: 'Não autorizado' }, { status: 401 })
+      return NextResponse.json({ error: 'Apenas administradores podem criar usuários' }, { status: 403 })
     }
 
     const body = await request.json()
+    console.log('[POST /api/admin/users] Request body:', { email: body.email, role: body.role, full_name: body.full_name })
     const { email, password, full_name, phone_e164, role } = body
 
     if (!email || !password || !full_name || !role) {
@@ -86,10 +100,6 @@ export async function POST(request: NextRequest) {
 
     if (!['admin', 'gestor', 'corretor'].includes(role)) {
       return NextResponse.json({ error: 'Cargo inválido' }, { status: 400 })
-    }
-
-    if (role === 'admin' && authResult.profile.role !== 'admin') {
-      return NextResponse.json({ error: 'Apenas admins podem criar usuários admin' }, { status: 403 })
     }
 
     const adminSupabase = await getAdminSupabase()
@@ -101,7 +111,7 @@ export async function POST(request: NextRequest) {
     })
 
     if (authError) {
-      console.error('[POST /api/admin/users] Auth error:', authError)
+      console.error('[POST /api/admin/users] Auth error:', authError.message, authError.status)
       let errorMsg = authError.message
       if (authError.message.includes('already been registered')) {
         errorMsg = 'Este email já está cadastrado'
@@ -128,19 +138,34 @@ export async function POST(request: NextRequest) {
       }, { onConflict: 'id' })
 
     if (profileError) {
-      console.error('[POST /api/admin/users] Profile error:', profileError)
+      console.error('[POST /api/admin/users] Profile upsert error:', profileError.message, profileError.code)
+      // Rollback: delete auth user if profile creation fails
       await adminSupabase.auth.admin.deleteUser(authUser.user.id)
-      return NextResponse.json({ error: 'Falha ao criar perfil do usuário' }, { status: 500 })
+      return NextResponse.json({ 
+        error: 'Falha ao criar perfil do usuário'
+      }, { status: 500 })
     }
 
-    await adminSupabase
-      .from('user_audit_logs')
-      .insert({
-        actor_id: authResult.user.id,
-        target_user_id: authUser.user.id,
-        action: 'user_created',
-        details: { role, email }
-      })
+    console.log('[POST /api/admin/users] Profile created for user:', authUser.user.id)
+
+    // Non-blocking audit log - don't fail user creation if audit fails
+    try {
+      const { error: auditError } = await adminSupabase
+        .from('user_audit_logs')
+        .insert({
+          actor_id: authResult.user.id,
+          target_user_id: authUser.user.id,
+          action: 'user_created',
+          details: { role, email }
+        })
+      if (auditError) {
+        console.warn('[POST /api/admin/users] Audit log failed (non-blocking):', auditError.message)
+      }
+    } catch (auditErr) {
+      console.warn('[POST /api/admin/users] Audit log exception (non-blocking):', auditErr)
+    }
+
+    console.log('[POST /api/admin/users] User created successfully:', authUser.user.id)
 
     return NextResponse.json({ 
       success: true, 
@@ -153,20 +178,16 @@ export async function POST(request: NextRequest) {
     })
   } catch (err) {
     const errorMessage = err instanceof Error ? err.message : 'Unknown error'
-    console.error('[POST /api/admin/users] Error:', err)
+    console.error('[POST /api/admin/users] Error:', errorMessage)
     
     if (errorMessage.includes('Missing Supabase service role')) {
       return NextResponse.json({ 
-        ok: false, 
-        error: 'Configuração do servidor incompleta', 
-        details: 'SUPABASE_SERVICE_ROLE_KEY não configurada' 
+        error: 'Configuração do servidor incompleta. Contate o administrador.'
       }, { status: 500 })
     }
     
     return NextResponse.json({ 
-      ok: false, 
-      error: 'Internal server error',
-      details: errorMessage
+      error: 'Erro interno do servidor'
     }, { status: 500 })
   }
 }
