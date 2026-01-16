@@ -1,0 +1,87 @@
+We will execute in this exact order. Do not skip steps.
+
+========================
+STEP 1 — Responsible (full_name) + allow admin/gestor/corretor
+========================
+Goal:
+- "Responsável" must display profiles.full_name (not uuid, not "—").
+- Admin and Gestor must also be valid responsibles (not only brokers).
+
+Data:
+- leads fields: assigned_to, owner_user_id, created_by
+- profiles fields: id, full_name, role, email, is_active
+
+Rules:
+- Responsible user id resolution order:
+  1) assigned_to
+  2) owner_user_id
+  3) created_by
+- Dropdown options for assigning:
+  - profiles.is_active = true
+  - profiles.role IN ('admin','gestor','corretor')
+- Permissions:
+  - admin/gestor can assign to anyone in the dropdown
+  - corretor can assign only to themselves (auth.uid()) (dropdown restricted or disabled)
+
+Tasks:
+1) Update Lead Details data fetch to include responsibleName:
+   - resolve responsibleId using the order above
+   - fetch profiles.full_name for responsibleId
+2) Update UI to show responsibleName, fallback "Sem responsável".
+3) Implement an "Atribuir responsável" dropdown:
+   - list assignable users (profiles filtered above, sorted by full_name)
+   - Save updates leads.assigned_to
+4) Server-side validation:
+   - fetch current user's profile.role and enforce permission rules
+   - return structured error { ok:false, code:'FORBIDDEN' } on violation
+5) Refresh/revalidate:
+   - revalidatePath(`/leads/${leadId}`) and router.refresh()
+
+Deliverables:
+- Files changed
+- 3-step test:
+  - As admin: assign a lead to another user, name updates
+  - As broker: cannot pick other users
+  - Ensure no "—" when assigned_to exists
+
+========================
+STEP 2 — Rename actions: Ganho/Perder => Comprou/Não Comprou
+========================
+Requirement:
+- "Marcar Ganho" => "Comprou"
+- "Marcar Perdido" => "Não Comprou"
+Constraints:
+- Keep DB statuses unchanged: won/lost remain won/lost
+- Only change UI labels/text (buttons, dialogs, toasts, confirmations)
+
+Tasks:
+1) Search and replace relevant hardcoded labels in lead detail and kanban/list.
+2) Update toast/confirm messages to match the new wording.
+
+Deliverables:
+- Files changed
+- Quick manual test on UI
+
+========================
+STEP 3 — Status badge mapping (open/won/lost)
+========================
+Requirement:
+- open => "Aberto"
+- won  => "Comprou"
+- lost => "Não Comprou"
+Constraints:
+- Do NOT change logic or DB values
+- Only displayed labels
+
+Tasks:
+1) Find the single source mapping (StatusBadge component or label map).
+2) Update mapping to the labels above.
+3) Ensure list, kanban card, and detail header all use the same mapping.
+
+Deliverables:
+- Files changed
+- Confirm: a won lead shows badge "Comprou", lost shows "Não Comprou", open shows "Aberto"
+
+Important:
+- Keep code clean, no duplicated logic for labels; centralize mapping.
+- Provide a short summary of what was changed and how to test.
