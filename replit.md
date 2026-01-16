@@ -80,8 +80,10 @@ Preferred communication style: Simple, everyday language.
 - `app/api/leads/[leadId]/notes/route.ts` - API for fetching and creating notes
 - `app/api/lead-notes/[id]/route.ts` - API for deleting notes
 - `docs/migrations/20260116_lead_to_client_conversion.sql` - Migration for people, clients tables and lead conversion fields
-- `app/api/leads/[leadId]/convert/route.ts` - API for converting leads to clients
+- `docs/migrations/20260116_fix_recursive_triggers.sql` - Fix for "stack depth limit exceeded" error in catalog triggers
+- `app/api/leads/[leadId]/convert/route.ts` - API for converting leads to clients (uses owner_user_id, not owner_id)
 - `app/leads/[id]/ConvertLeadModal.tsx` - Modal for lead to client conversion
+- `app/perfil/page.tsx` - User profile editing page
 
 ## External Dependencies
 - **Supabase**:
