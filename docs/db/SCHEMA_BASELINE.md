@@ -215,21 +215,32 @@ Tarefas associadas a leads.
 ---
 
 ### people
-Cadastro unificado de pessoas.
+Cadastro unificado de pessoas (clientes, proprietários, fornecedores, etc).
 
 | Coluna | Tipo | Descrição |
 |--------|------|-----------|
 | `id` | uuid PK | Identificador único |
-| `full_name` | text | Nome completo |
+| `full_name` | text NOT NULL | Nome completo |
 | `phone_e164` | text | Telefone E.164 |
 | `email` | text | Email |
+| `document_id` | text | CPF/CNPJ ou documento |
+| `kind_tags` | text[] | Tipos: comprador, vendedor, proprietario, inquilino, investidor, fornecedor |
 | `notes` | text | Observações |
+| `owner_profile_id` | uuid FK | Responsável/corretor (carteira) |
+| `created_by_profile_id` | uuid FK | Quem criou |
 | `created_at` | timestamptz | Data de criação |
 | `updated_at` | timestamptz | Última atualização |
+
+**FKs:**
+- `owner_profile_id → profiles(id) ON DELETE SET NULL`
+- `created_by_profile_id → profiles(id) ON DELETE SET NULL`
 
 **Índices:**
 - `idx_people_phone_e164`
 - `idx_people_email`
+- `idx_people_owner_profile_id`
+- `idx_people_created_by_profile_id`
+- `idx_people_document_id`
 
 ---
 
@@ -295,7 +306,7 @@ Todas as tabelas sensíveis têm RLS habilitado:
 | `lead_notes` | ✅ | Segue ownership do lead |
 | `lead_audit_logs` | ✅ | Segue ownership do lead |
 | `tasks` | ✅ | Segue ownership do lead ou assigned_to |
-| `people` | ✅ | Todos lêem, owner/admin edita |
+| `people` | ✅ | Admin/gestor vê todos, corretor vê carteira própria |
 | `clients` | ✅ | Owner ou admin/gestor |
 | `pipelines` | ✅ | Todos lêem, admin gerencia |
 | `pipeline_stages` | ✅ | Todos lêem, admin gerencia |

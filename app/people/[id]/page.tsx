@@ -12,6 +12,29 @@ interface PageProps {
   params: Promise<{ id: string }>
 }
 
+const kindTagLabels: Record<string, string> = {
+  comprador: 'Comprador',
+  vendedor: 'Vendedor',
+  proprietario: 'Proprietário',
+  inquilino: 'Inquilino',
+  investidor: 'Investidor',
+  fornecedor: 'Fornecedor'
+}
+
+const clientTypeLabels: Record<string, string> = {
+  buyer: 'Comprador',
+  seller: 'Vendedor',
+  tenant: 'Locatário',
+  landlord: 'Locador',
+  investor: 'Investidor',
+}
+
+const statusLabels: Record<string, string> = {
+  open: 'Aberto',
+  won: 'Comprou',
+  lost: 'Não Comprou',
+}
+
 export default async function PersonPage({ params }: PageProps) {
   const { id } = await params
   
@@ -31,7 +54,7 @@ export default async function PersonPage({ params }: PageProps) {
 
   const { data: client } = await supabase
     .from('clients')
-    .select('*, owner:profiles!clients_owner_id_fkey(id, full_name, email)')
+    .select('*, owner:profiles!clients_owner_user_id_fkey(id, full_name, email)')
     .eq('person_id', id)
     .single()
 
@@ -41,25 +64,23 @@ export default async function PersonPage({ params }: PageProps) {
     .eq('person_id', id)
     .order('created_at', { ascending: false })
 
-  const clientTypeLabels: Record<string, string> = {
-    buyer: 'Comprador',
-    seller: 'Vendedor',
-    tenant: 'Locatário',
-    landlord: 'Locador',
-    investor: 'Investidor',
-  }
+  const { data: ownerProfile } = person.owner_profile_id ? await supabase
+    .from('profiles')
+    .select('id, full_name, email')
+    .eq('id', person.owner_profile_id)
+    .single() : { data: null }
 
-  const statusLabels: Record<string, string> = {
-    open: 'Aberto',
-    won: 'Comprou',
-    lost: 'Não Comprou',
-  }
+  const { data: creatorProfile } = person.created_by_profile_id ? await supabase
+    .from('profiles')
+    .select('id, full_name, email')
+    .eq('id', person.created_by_profile_id)
+    .single() : { data: null }
 
   return (
     <main className="p-6 space-y-6">
       <div className="flex items-center gap-2 text-sm text-[var(--muted-foreground)]">
-        <Link href="/leads" className="hover:text-[var(--foreground)] transition-colors">
-          Leads
+        <Link href="/people" className="hover:text-[var(--foreground)] transition-colors">
+          Pessoas
         </Link>
         <span>/</span>
         <span className="text-[var(--foreground)]">{person.full_name}</span>
@@ -74,11 +95,21 @@ export default async function PersonPage({ params }: PageProps) {
               </div>
               <div>
                 <h1 className="text-xl font-bold">{person.full_name}</h1>
-                {client && (
-                  <span className="inline-flex items-center px-2 py-0.5 text-xs font-medium rounded-full bg-[#294487] text-white mt-1">
-                    Cliente
-                  </span>
-                )}
+                <div className="flex flex-wrap gap-1 mt-1">
+                  {client && (
+                    <span className="inline-flex items-center px-2 py-0.5 text-xs font-medium rounded-full bg-[#294487] text-white">
+                      Cliente
+                    </span>
+                  )}
+                  {person.kind_tags?.map((tag: string) => (
+                    <span 
+                      key={tag}
+                      className="inline-flex items-center px-2 py-0.5 text-xs font-medium rounded-full bg-[var(--muted)] text-[var(--muted-foreground)]"
+                    >
+                      {kindTagLabels[tag] || tag}
+                    </span>
+                  ))}
+                </div>
               </div>
             </CardTitle>
           </div>
@@ -97,6 +128,34 @@ export default async function PersonPage({ params }: PageProps) {
                 <p className="text-sm font-medium text-[var(--foreground)]">{person.email}</p>
               </div>
             )}
+            {person.document_id && (
+              <div>
+                <p className="text-xs text-[var(--muted-foreground)] mb-1">CPF/CNPJ</p>
+                <p className="text-sm font-medium text-[var(--foreground)]">{person.document_id}</p>
+              </div>
+            )}
+            {ownerProfile && (
+              <div>
+                <p className="text-xs text-[var(--muted-foreground)] mb-1">Responsável</p>
+                <p className="text-sm font-medium text-[var(--foreground)]">
+                  {ownerProfile.full_name || ownerProfile.email || '—'}
+                </p>
+              </div>
+            )}
+            {creatorProfile && (
+              <div>
+                <p className="text-xs text-[var(--muted-foreground)] mb-1">Criado por</p>
+                <p className="text-sm font-medium text-[var(--foreground)]">
+                  {creatorProfile.full_name || creatorProfile.email || '—'}
+                </p>
+              </div>
+            )}
+            <div>
+              <p className="text-xs text-[var(--muted-foreground)] mb-1">Cadastrado em</p>
+              <p className="text-sm font-medium text-[var(--foreground)]">
+                {new Date(person.created_at).toLocaleDateString('pt-BR')}
+              </p>
+            </div>
             {client?.types && client.types.length > 0 && (
               <div>
                 <p className="text-xs text-[var(--muted-foreground)] mb-1">Tipo de Cliente</p>
@@ -107,17 +166,19 @@ export default async function PersonPage({ params }: PageProps) {
             )}
             {client?.owner && (
               <div>
-                <p className="text-xs text-[var(--muted-foreground)] mb-1">Responsável</p>
+                <p className="text-xs text-[var(--muted-foreground)] mb-1">Corretor (Cliente)</p>
                 <p className="text-sm font-medium text-[var(--foreground)]">
                   {(client.owner as { full_name?: string; email?: string })?.full_name || (client.owner as { full_name?: string; email?: string })?.email || '—'}
                 </p>
               </div>
             )}
           </div>
-          {client?.notes && (
+          {(person.notes || client?.notes) && (
             <div className="mt-4 pt-4 border-t border-[var(--border)]">
               <p className="text-xs text-[var(--muted-foreground)] mb-1">Observações</p>
-              <p className="text-sm text-[var(--foreground)] whitespace-pre-wrap">{client.notes}</p>
+              <p className="text-sm text-[var(--foreground)] whitespace-pre-wrap">
+                {person.notes || client?.notes}
+              </p>
             </div>
           )}
         </CardContent>
@@ -159,8 +220,8 @@ export default async function PersonPage({ params }: PageProps) {
       )}
 
       <div className="flex gap-2">
-        <Link href="/leads">
-          <Button variant="outline">Voltar para Leads</Button>
+        <Link href="/people">
+          <Button variant="outline">Voltar para Pessoas</Button>
         </Link>
       </div>
     </main>
