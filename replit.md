@@ -37,12 +37,13 @@ Preferred communication style: Simple, everyday language.
 - **Admin UI**: /settings/users page for user management (admin/gestor only).
 
 ### Data Model
-- **Core Entities**: Pipelines, Pipeline Stages, Leads, Lead Stage Changes, Lead Audit Logs, Lead Notes, Profiles, Tasks, Lead Catalogs (Types, Interests, Sources).
-- **Lead Fields**: title, client_name, phone_raw, phone_e164 (E.164 normalized), email, lead_type_id, lead_interest_id, lead_source_id, budget_range, notes.
-- **Lead Lifecycle**: Supports creation, status changes (open, won, lost), and detailed activity logging.
+- **Core Entities**: Pipelines, Pipeline Stages, Leads, Lead Stage Changes, Lead Audit Logs, Lead Notes, Profiles, Tasks, Lead Catalogs (Types, Interests, Sources), People, Clients.
+- **Lead Fields**: title, client_name, phone_raw, phone_e164 (E.164 normalized), email, lead_type_id, lead_interest_id, lead_source_id, budget_range, notes, person_id, client_id, is_converted, converted_at.
+- **Lead Lifecycle**: Supports creation, status changes (open, won, lost), conversion to client, and detailed activity logging.
 - **Phone Validation**: Brazilian phone normalization to E.164 format (+55XXXXXXXXXXX); unique constraint on phone_e164 prevents duplicate leads.
 - **Task Management**: Tasks linked to leads with types, due dates, and assignment capabilities.
 - **Lead Notes**: Notes attached to leads (lead_notes table); RLS respects lead ownership; notes appear in timeline as 'Nota adicionada'.
+- **Lead to Client Conversion**: Leads can be converted to clients via POST /api/leads/[leadId]/convert. Creates/links person record, creates/updates client record, marks lead as converted with audit log.
 
 ### Catalog System
 - **Tables**: lead_types, lead_interests, lead_sources - each with id, name, position, is_active, timestamps.
@@ -78,6 +79,9 @@ Preferred communication style: Simple, everyday language.
 - `app/leads/[id]/LeadNotes.tsx` - Lead notes UI component with add/delete functionality
 - `app/api/leads/[leadId]/notes/route.ts` - API for fetching and creating notes
 - `app/api/lead-notes/[id]/route.ts` - API for deleting notes
+- `docs/migrations/20260116_lead_to_client_conversion.sql` - Migration for people, clients tables and lead conversion fields
+- `app/api/leads/[leadId]/convert/route.ts` - API for converting leads to clients
+- `app/leads/[id]/ConvertLeadModal.tsx` - Modal for lead to client conversion
 
 ## External Dependencies
 - **Supabase**:
