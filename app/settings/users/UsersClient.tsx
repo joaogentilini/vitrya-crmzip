@@ -80,8 +80,11 @@ export function UsersClient({ userEmail, users, currentUserId, currentUserRole }
         })
         
         if (!resp.ok) {
-          const data = await resp.json()
-          throw new Error(data.error || 'Erro ao atualizar usuário')
+          const data = await resp.json().catch(() => ({}))
+          const requestId = data.error?.requestId || data.requestId
+          const baseMsg = typeof data.error === 'string' ? data.error : (data.error?.message || 'Erro ao atualizar usuário')
+          const errorMsg = requestId ? `${baseMsg} (ID: ${requestId})` : baseMsg
+          throw new Error(errorMsg)
         }
         
         success(currentActive ? 'Usuário desativado' : 'Usuário ativado')
@@ -102,8 +105,11 @@ export function UsersClient({ userEmail, users, currentUserId, currentUserRole }
         })
         
         if (!resp.ok) {
-          const data = await resp.json()
-          throw new Error(data.error || 'Erro ao alterar role')
+          const data = await resp.json().catch(() => ({}))
+          const requestId = data.error?.requestId || data.requestId
+          const baseMsg = typeof data.error === 'string' ? data.error : (data.error?.message || 'Erro ao alterar role')
+          const errorMsg = requestId ? `${baseMsg} (ID: ${requestId})` : baseMsg
+          throw new Error(errorMsg)
         }
         
         success('Role alterado com sucesso')
@@ -124,8 +130,11 @@ export function UsersClient({ userEmail, users, currentUserId, currentUserRole }
         })
         
         if (!resp.ok) {
-          const data = await resp.json()
-          throw new Error(data.error || 'Erro ao enviar email')
+          const data = await resp.json().catch(() => ({}))
+          const requestId = data.error?.requestId || data.requestId
+          const baseMsg = typeof data.error === 'string' ? data.error : (data.error?.message || 'Erro ao enviar email')
+          const errorMsg = requestId ? `${baseMsg} (ID: ${requestId})` : baseMsg
+          throw new Error(errorMsg)
         }
         
         success('Email de redefinição enviado')
@@ -357,7 +366,10 @@ function CreateUserModal({ onClose, onSuccess, currentUserRole }: CreateUserModa
         const data = await resp.json().catch(() => ({ error: 'Erro de comunicação com servidor' }))
         
         if (!resp.ok) {
-          throw new Error(data.error || data.details || 'Erro ao criar usuário')
+          const requestId = data.error?.requestId || data.requestId
+          const baseMsg = typeof data.error === 'string' ? data.error : (data.error?.message || data.details || 'Erro ao criar usuário')
+          const errorMsg = requestId ? `${baseMsg} (ID: ${requestId})` : baseMsg
+          throw new Error(errorMsg)
         }
         
         success('Usuário criado com sucesso')
@@ -490,7 +502,10 @@ function EditUserModal({ user, onClose, onSuccess, currentUserRole }: EditUserMo
             statusText: resp.statusText,
             body: data
           })
-          throw new Error(data.error || 'Erro ao atualizar usuário')
+          const requestId = data.error?.requestId || data.requestId
+          const baseMsg = typeof data.error === 'string' ? data.error : (data.error?.message || 'Erro ao atualizar usuário')
+          const errorMsg = requestId ? `${baseMsg} (ID: ${requestId})` : baseMsg
+          throw new Error(errorMsg)
         }
         
         success('Usuário atualizado com sucesso')
