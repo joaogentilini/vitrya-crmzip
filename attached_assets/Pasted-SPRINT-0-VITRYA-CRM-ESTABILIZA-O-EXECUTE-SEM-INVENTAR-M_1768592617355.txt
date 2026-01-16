@@ -1,0 +1,56 @@
+SPRINT 0 — VITRYA CRM (ESTABILIZAÇÃO) — EXECUTE SEM INVENTAR
+
+MISSÃO: congelar a base do CRM pra parar de quebrar. NÃO mexa em UI/estética. NÃO refatore grande. NÃO altere arquitetura (Opção B premium fica como caminho futuro). Só estabilidade, migrations, doctor e logs.
+
+ENTREGAR NO FINAL:
+1) migrations versionadas + docs
+2) “doctor check” do banco (RPC + tela admin)
+3) logs úteis + tratamento mínimo de erro 500
+4) smoke test + notas de deploy EasyPanel
+5) lista de arquivos alterados + comandos
+
+REGRAS:
+- mudanças pequenas e seguras
+- não abrir RLS/policies
+- não apagar nada existente no banco
+- 3 commits no máximo (docs baseline / doctor / error handling)
+
+PASSO 1) MIGRATIONS (fonte única de verdade)
+- Criar /supabase/migrations (ou usar se já existir)
+- Criar docs/db/MIGRATIONS.md (como aplicar em dev/prod + regra “nunca editar migration aplicada”)
+- Criar migration baseline (não recriar banco, só versionar organização)
+- Criar migration só para objetos do doctor (functions/views), sem mexer em tabelas atuais
+
+PASSO 2) DOCTOR CHECK (banco consistente)
+- Criar função SQL: public.vitrya_doctor() retornando JSON:
+  { ok, missing_tables, missing_columns, missing_triggers, rls_disabled, notes }
+- Ela deve checar EXISTÊNCIA REAL no schema atual:
+  - leads, pipelines, stages, catalogs, profiles/users, timeline/notes (o que existir)
+  - colunas críticas (pipeline_id, stage_id, role, is_active etc.)
+  - triggers críticas (log stage change / validate stage pipeline)
+  - RLS habilitado em tabelas sensíveis
+- Expor no app:
+  - endpoint /api/admin/doctor (somente admin/gestor)
+  - página /admin/doctor mostrando o JSON
+
+PASSO 3) LOGS + ERRO 500 (mínimo útil)
+- Criar logger simples (dev: completo / prod: com contexto e sem secrets)
+- Criar helper try/catch para rotas API com requestId = uuid
+- Aplicar em endpoints críticos (mínimo 2):
+  - criar usuário (o que estava dando 500)
+  - criar lead / mover kanban (se necessário)
+- Front: mostrar erro amigável com requestId (“Falha ao salvar. ID: xxxx”)
+
+PASSO 4) SMOKE TEST + DEPLOY DOCS
+- Criar docs/sprint0-smoke-test.md com checklist:
+  login admin → leads → cria lead → kanban move → catálogos → usuários cria/edita → /admin/doctor ok:true
+- Criar docs/deploy-easypanel.md:
+  env vars necessárias + build/start + como aplicar migrations + rollback app
+
+EXECUTE AGORA.
+No final, responda com:
+- resumo do que fez
+- arquivos alterados
+- migrations criadas
+- como testar local
+- como subir no EasyPanel
