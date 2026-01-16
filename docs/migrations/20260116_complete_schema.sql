@@ -8,7 +8,7 @@
 CREATE TABLE IF NOT EXISTS public.pipelines (
     id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
     name text NOT NULL,
-    type text NOT NULL DEFAULT 'leads',
+    type text NOT NULL DEFAULT 'sales',
     description text,
     created_at timestamptz DEFAULT now(),
     updated_at timestamptz DEFAULT now()
@@ -18,7 +18,7 @@ CREATE TABLE IF NOT EXISTS public.pipelines (
 DO $$
 BEGIN
     IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'pipelines' AND column_name = 'type') THEN
-        ALTER TABLE public.pipelines ADD COLUMN type text NOT NULL DEFAULT 'leads';
+        ALTER TABLE public.pipelines ADD COLUMN type text NOT NULL DEFAULT 'sales';
     END IF;
 END $$;
 
@@ -182,7 +182,7 @@ END $$;
 -- 9) SEED DEFAULT PIPELINE
 -- ============================================================
 INSERT INTO public.pipelines (id, name, type)
-VALUES ('00000000-0000-0000-0000-000000000001', 'Pipeline Principal', 'leads')
+VALUES ('00000000-0000-0000-0000-000000000001', 'Pipeline Principal', 'sales')
 ON CONFLICT (id) DO NOTHING;
 
 INSERT INTO public.pipeline_stages (pipeline_id, name, position)
