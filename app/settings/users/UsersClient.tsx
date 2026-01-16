@@ -294,8 +294,8 @@ export function UsersClient({ userEmail, users, currentUserId, currentUserRole }
           <CreateUserModal
             onClose={() => setShowCreateModal(false)}
             onSuccess={() => {
-              setShowCreateModal(false)
               router.refresh()
+              setTimeout(() => setShowCreateModal(false), 100)
             }}
             currentUserRole={currentUserRole}
           />
@@ -306,8 +306,8 @@ export function UsersClient({ userEmail, users, currentUserId, currentUserRole }
             user={editingUser}
             onClose={() => setEditingUser(null)}
             onSuccess={() => {
-              setEditingUser(null)
               router.refresh()
+              setTimeout(() => setEditingUser(null), 100)
             }}
             currentUserRole={currentUserRole}
           />
