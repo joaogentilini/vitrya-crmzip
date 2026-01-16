@@ -1,0 +1,64 @@
+REPLIT AGENT — IMPLEMENTAR “EDITAR USUÁRIO” (CRUD de Profiles)
+
+Contexto:
+- Já existe página /settings/users listando usuários (profiles) e ações de desativar e reset senha.
+- Criar usuário funciona.
+- Precisamos adicionar opção de EDITAR usuários.
+
+Objetivo (Fase 1 — somente perfil):
+1) Permitir editar dados do usuário na tabela public.profiles:
+   - full_name (string)
+   - phone_e164 (string | null)
+   - role (string) — deve respeitar constraint do banco (ex.: admin/gestor/corretor)
+   - is_active (boolean)
+2) A edição deve ser feita via endpoint admin e UI com modal de edição.
+
+Requisitos técnicos:
+A) Backend
+- Criar endpoint: app/api/admin/users/[id]/route.ts com PATCH
+- PATCH deve:
+  1) Validar autenticação e garantir role=admin (mesma lógica usada no POST /api/admin/users)
+  2) Ler body JSON com campos opcionais: { full_name?, phone_e164?, role?, is_active? }
+  3) Validar que pelo menos 1 campo foi enviado
+  4) Atualizar profiles:
+     supabaseAdmin.from('profiles').update(payload).eq('id', params.id).select().single()
+  5) Retornar 200 com o profile atualizado
+  6) Tratar erros corretamente:
+     - 401/403 se não autorizado
+     - 400 se payload inválido
+     - 422 se role inválida (ou retornar erro do banco com mensagem amigável)
+     - Nunca retornar 500 sem mensagem: logar e devolver {error}
+
+B) Frontend
+- Na página /settings/users:
+  1) Adicionar botão “Editar” em cada linha
+  2) Abrir modal (EditUserModal) preenchido com dados atuais
+  3) Campos no modal:
+     - Nome completo (input)
+     - Telefone (input)
+     - Role (select)
+     - Ativo (switch)
+  4) Botão Salvar:
+     - chama PATCH /api/admin/users/:id
+     - em sucesso, atualiza a lista local sem reload completo
+     - em erro, mostrar mensagem clara (ex.: role inválida, usuário não autorizado etc.)
+
+C) UX/Consistência
+- Reutilizar componentes existentes (Button, Modal, Input, Select, Switch)
+- Enquanto salva, desabilitar botão e mostrar loading
+- Não permitir editar o próprio role se você quiser (opcional), mas se fizer, trate com cuidado.
+- Não mexer em auth.users e email nessa fase.
+
+Verificação:
+1) npm run build (sem erros)
+2) npm run dev
+3) Em /settings/users:
+   - Editar nome e salvar -> refletir na lista
+   - Editar role para valor válido -> salvar ok
+   - Tentar role inválida (se possível via request) -> receber 422 com erro amigável
+   - Editar telefone -> salvar ok
+
+Entrega:
+- Liste arquivos alterados/criados.
+- Explique como testar manualmente.
+- Não criar arquivos “Pasted-*.txt”, prints ou backups; se necessário, atualize .gitignore para ignorá-los.
