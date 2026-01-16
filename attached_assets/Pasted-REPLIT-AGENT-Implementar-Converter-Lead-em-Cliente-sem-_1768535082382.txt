@@ -1,0 +1,62 @@
+REPLIT AGENT — Implementar “Converter Lead em Cliente” (sem duplicar cadastro)
+
+Objetivo:
+Adicionar fluxo de conversão: Lead -> Cliente, usando People como cadastro único.
+
+Regras:
+- Não duplicar dados: Cliente referencia People (person_id).
+- Lead deve ficar vinculado ao cliente/pessoa após conversão.
+- Registrar no histórico/timeline do lead a conversão.
+- Corretor pode converter apenas leads dele; admin/gestor pode converter qualquer.
+
+Banco (Supabase SQL):
+1) Criar tabela public.clients:
+- id uuid pk default gen_random_uuid()
+- person_id uuid not null references public.people(id) on delete restrict
+- owner_id uuid not null
+- status text not null default 'active'
+- types text[] null  (MVP: ex ['buyer','seller','tenant','landlord','investor'])
+- created_at timestamptz default now()
+- updated_at timestamptz default now()
+- unique(person_id)
+
+2) Alterar public.leads (se não existir):
+- add column person_id uuid null references public.people(id)
+- add column client_id uuid null references public.clients(id)
+- add column is_converted boolean not null default false
+- add column converted_at timestamptz null
+
+API:
+1) Criar endpoint: POST /api/leads/[id]/convert
+- Validar auth
+- Checar ownership:
+  - corretor: lead.owner_id == auth.uid()
+  - admin/gestor: ok
+- Buscar lead
+- Resolver person_id:
+  - se leads.person_id existe: usar
+  - senão criar people com dados do lead (nome, telefone, email) e atualizar leads.person_id
+- Upsert client:
+  - insert into clients (person_id, owner_id, types, status)
+  - on conflict(person_id) do update set owner_id, status='active', types=merged (ou substituir)
+- Atualizar lead:
+  - set client_id, is_converted=true, converted_at=now()
+- Registrar no lead timeline/audit: “Convertido em cliente”
+- Retornar 200 com {lead, client, person}
+
+UI:
+1) No LeadDetails (página de lead):
+- Adicionar botão “Converter em Cliente”
+- Ao clicar, abrir modal:
+  - tipos do cliente (multi-select)
+  - confirmar
+- Em sucesso:
+  - mostrar toast “Cliente criado”
+  - mostrar botão “Abrir Cliente” (link para /people/[person_id] ou /clients/[client_id])
+  - marcar badge “Convertido”
+
+Verificação:
+- Converter lead do corretor: OK
+- Converter lead de outro corretor: 403
+- Rodar npm run build
+- Validar timeline/log de conversão
