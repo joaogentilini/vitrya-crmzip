@@ -15,6 +15,7 @@ interface UserProfile {
   id: string
   full_name: string
   email: string | null
+  phone_e164: string | null
   role: UserRole
   is_active: boolean
   created_at: string
@@ -45,6 +46,7 @@ export function UsersClient({ userEmail, users, currentUserId, currentUserRole }
   const { success, error: showError } = useToast()
   const [isPending, startTransition] = useTransition()
   const [showCreateModal, setShowCreateModal] = useState(false)
+  const [editingUser, setEditingUser] = useState<UserProfile | null>(null)
   const [filterRole, setFilterRole] = useState<string>('')
   const [filterActive, setFilterActive] = useState<string>('')
   const [search, setSearch] = useState('')
@@ -245,6 +247,14 @@ export function UsersClient({ userEmail, users, currentUserId, currentUserRole }
                               <Button
                                 variant="ghost"
                                 size="sm"
+                                onClick={() => setEditingUser(user)}
+                                disabled={isPending}
+                              >
+                                Editar
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                size="sm"
                                 onClick={() => handleToggleActive(user.id, user.full_name, user.is_active)}
                                 disabled={isPending}
                               >
@@ -285,6 +295,18 @@ export function UsersClient({ userEmail, users, currentUserId, currentUserRole }
             onClose={() => setShowCreateModal(false)}
             onSuccess={() => {
               setShowCreateModal(false)
+              router.refresh()
+            }}
+            currentUserRole={currentUserRole}
+          />
+        )}
+
+        {editingUser && (
+          <EditUserModal
+            user={editingUser}
+            onClose={() => setEditingUser(null)}
+            onSuccess={() => {
+              setEditingUser(null)
               router.refresh()
             }}
             currentUserRole={currentUserRole}
@@ -413,6 +435,134 @@ function CreateUserModal({ onClose, onSuccess, currentUserRole }: CreateUserModa
               </Button>
               <Button type="submit" disabled={isPending} className="flex-1">
                 {isPending ? 'Criando...' : 'Criar Usuário'}
+              </Button>
+            </div>
+          </form>
+        </CardContent>
+      </Card>
+    </div>
+  )
+}
+
+interface EditUserModalProps {
+  user: UserProfile
+  onClose: () => void
+  onSuccess: () => void
+  currentUserRole: UserRole
+}
+
+function EditUserModal({ user, onClose, onSuccess, currentUserRole }: EditUserModalProps) {
+  const { success, error: showError } = useToast()
+  const [isPending, startTransition] = useTransition()
+  const [formData, setFormData] = useState({
+    full_name: user.full_name,
+    phone_e164: user.phone_e164 || '',
+    role: user.role,
+    is_active: user.is_active
+  })
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault()
+    
+    if (!formData.full_name.trim()) {
+      showError('Nome completo é obrigatório')
+      return
+    }
+
+    startTransition(async () => {
+      try {
+        const resp = await fetch(`/api/admin/users/${user.id}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            full_name: formData.full_name.trim(),
+            phone_e164: formData.phone_e164.trim() || null,
+            role: formData.role,
+            is_active: formData.is_active
+          })
+        })
+        
+        const data = await resp.json().catch(() => ({ error: 'Erro de comunicação com servidor' }))
+        
+        if (!resp.ok) {
+          throw new Error(data.error || 'Erro ao atualizar usuário')
+        }
+        
+        success('Usuário atualizado com sucesso')
+        onSuccess()
+      } catch (err) {
+        showError(err instanceof Error ? err.message : 'Erro ao atualizar usuário')
+      }
+    })
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center">
+      <div className="absolute inset-0 bg-black/50" onClick={onClose} />
+      <Card className="relative z-10 w-full max-w-md mx-4">
+        <CardHeader>
+          <CardTitle>Editar Usuário</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <form onSubmit={handleSubmit} className="space-y-4">
+            <div>
+              <Label htmlFor="edit_full_name">Nome Completo *</Label>
+              <Input
+                id="edit_full_name"
+                value={formData.full_name}
+                onChange={(e) => setFormData(prev => ({ ...prev, full_name: e.target.value }))}
+                placeholder="João Silva"
+                required
+              />
+            </div>
+            
+            <div>
+              <Label htmlFor="edit_phone">Telefone</Label>
+              <Input
+                id="edit_phone"
+                type="tel"
+                value={formData.phone_e164}
+                onChange={(e) => setFormData(prev => ({ ...prev, phone_e164: e.target.value }))}
+                placeholder="+5511999999999"
+              />
+              <p className="text-xs text-[var(--muted-foreground)] mt-1">Formato E.164 (ex: +5511999999999)</p>
+            </div>
+            
+            <div>
+              <Label htmlFor="edit_role">Cargo *</Label>
+              <select
+                id="edit_role"
+                value={formData.role}
+                onChange={(e) => setFormData(prev => ({ ...prev, role: e.target.value as UserRole }))}
+                className="w-full h-10 rounded-[var(--radius)] border border-[var(--input)] bg-[var(--background)] px-3 text-sm"
+              >
+                <option value="corretor">Corretor</option>
+                <option value="gestor">Gestor</option>
+                {currentUserRole === 'admin' && (
+                  <option value="admin">Administrador</option>
+                )}
+              </select>
+            </div>
+
+            <div className="flex items-center gap-3">
+              <label className="relative inline-flex items-center cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={formData.is_active}
+                  onChange={(e) => setFormData(prev => ({ ...prev, is_active: e.target.checked }))}
+                  className="sr-only peer"
+                />
+                <div className="w-11 h-6 bg-[var(--muted)] peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-[var(--ring)] rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[var(--success)]"></div>
+                <span className="ml-3 text-sm font-medium text-[var(--foreground)]">Usuário Ativo</span>
+              </label>
+            </div>
+
+            <div className="flex gap-2 pt-4">
+              <Button type="button" variant="outline" onClick={onClose} className="flex-1">
+                Cancelar
+              </Button>
+              <Button type="submit" disabled={isPending} className="flex-1">
+                {isPending ? 'Salvando...' : 'Salvar'}
               </Button>
             </div>
           </form>

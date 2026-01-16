@@ -54,17 +54,17 @@ export async function PATCH(
     }
 
     const body = await request.json()
-    const { role, is_active, full_name } = body
+    const { role, is_active, full_name, phone_e164 } = body
 
     const updates: Record<string, unknown> = {}
     const auditDetails: Record<string, unknown> = {}
 
     if (role !== undefined) {
       if (!['admin', 'gestor', 'corretor'].includes(role)) {
-        return NextResponse.json({ error: 'Invalid role' }, { status: 400 })
+        return NextResponse.json({ error: 'Cargo inválido. Valores aceitos: admin, gestor, corretor' }, { status: 422 })
       }
       if (role === 'admin' && authResult.profile.role !== 'admin') {
-        return NextResponse.json({ error: 'Only admins can assign admin role' }, { status: 403 })
+        return NextResponse.json({ error: 'Apenas administradores podem atribuir cargo de admin' }, { status: 403 })
       }
       updates.role = role
       auditDetails.role_changed = role
@@ -72,7 +72,7 @@ export async function PATCH(
 
     if (is_active !== undefined) {
       if (id === authResult.user.id) {
-        return NextResponse.json({ error: 'Cannot deactivate yourself' }, { status: 400 })
+        return NextResponse.json({ error: 'Você não pode desativar a si mesmo' }, { status: 400 })
       }
       updates.is_active = is_active
       auditDetails.is_active_changed = is_active
@@ -83,9 +83,16 @@ export async function PATCH(
       auditDetails.full_name_changed = full_name
     }
 
-    if (Object.keys(updates).length === 0) {
-      return NextResponse.json({ error: 'No updates provided' }, { status: 400 })
+    if (phone_e164 !== undefined) {
+      updates.phone_e164 = phone_e164 || null
+      auditDetails.phone_e164_changed = phone_e164
     }
+
+    if (Object.keys(updates).length === 0) {
+      return NextResponse.json({ error: 'Nenhum campo para atualizar' }, { status: 400 })
+    }
+
+    updates.updated_at = new Date().toISOString()
 
     const adminSupabase = await getAdminSupabase()
 
@@ -93,7 +100,7 @@ export async function PATCH(
       .from('profiles')
       .update(updates)
       .eq('id', id)
-      .select()
+      .select('id, full_name, email, phone_e164, role, is_active, created_at, updated_at')
       .single()
 
     if (error) {
