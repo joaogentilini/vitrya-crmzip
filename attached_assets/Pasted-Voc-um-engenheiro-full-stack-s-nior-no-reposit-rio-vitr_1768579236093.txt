@@ -1,0 +1,34 @@
+Você é um engenheiro full-stack sênior no repositório vitrya-crm. Corrija 3 problemas:
+
+(1) Lead -> Client conversion está falhando com:
+"PGRST204 Could not find the 'owner_id' column of 'clients'".
+No banco, a tabela public.clients NÃO tem owner_id, ela tem owner_user_id, e agora também tem person_id (uuid).
+Ajuste o endpoint POST /api/leads/[leadId]/convert para:
+- Ler o lead (id, owner_id, name/client_name/title, email, phone_e164, notes).
+- Criar ou reutilizar um registro em public.people (full_name, email, phone_e164, notes) e obter people.id.
+  Regra: se lead.person_id já existir, reutilize. Caso contrário, tente buscar pessoa por phone_e164 (e, se não tiver, por email). Se não encontrar, crie.
+- Criar ou reutilizar um registro em public.clients usando o schema atual:
+  - person_id = people.id
+  - owner_user_id = lead.owner_id
+  - name/email/phone/phone_e164 preenchidos (podem espelhar people/lead)
+  - notes opcional
+  Se já existir client com person_id, reutilize.
+- Atualizar public.leads: set person_id = people.id, client_id = clients.id, is_converted = true, converted_at = now().
+- Retornar JSON com { leadId, personId, clientId } e status 200.
+- Remover qualquer referência a clients.owner_id (usar owner_user_id).
+
+(2) Tela /settings/users: usuários sumiram.
+Verifique o GET do endpoint que lista usuários (provavelmente /api/admin/users). Garanta que ele:
+- Faz select apenas de colunas EXISTENTES em public.profiles (id, email, role, is_active, full_name, created_at, updated_at se existir).
+- Se hoje estiver selecionando colunas inexistentes, corrija para não quebrar (não pode retornar 500).
+- Trate erros do Supabase e retorne status adequado com mensagem clara no JSON.
+
+(3) Catálogos: POST /api/catalogs/lead-interests retorna "stack depth limit exceeded".
+No lado do app:
+- Adicione logs claros do erro do Supabase.
+- Garanta que o handler não está fazendo chamadas recursivas (ex.: chamando o próprio endpoint).
+No lado do banco, assuma que é trigger recursivo: documente em docs/migrations o SQL recomendado para recriar triggers de updated_at sem recursão (NEW.updated_at = now()).
+
+Ao finalizar:
+- Rode npm run build e confirme que passa.
+- Aponte quais arquivos foram alterados.
