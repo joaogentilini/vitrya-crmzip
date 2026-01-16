@@ -47,7 +47,7 @@ function formatTaskDueAt(dueAt: unknown): string {
 function summarizeAuditEvent(
   log: AuditLogRow, 
   stages: Map<string, StageRow>
-): { title: string; details: string | null; icon: 'create' | 'update' | 'move' | 'status' | 'delete' | 'task' | 'note' } {
+): { title: string; details: string | null; icon: 'create' | 'update' | 'move' | 'status' | 'delete' | 'task' | 'note' | 'convert' } {
   const { action, before, after } = log
 
   if (action === 'create') {
@@ -102,6 +102,14 @@ function summarizeAuditEvent(
       title: 'Tarefa cancelada',
       details: taskType,
       icon: 'task'
+    }
+  }
+
+  if (action === 'convert_client') {
+    return {
+      title: 'Convertido em cliente',
+      details: null,
+      icon: 'convert'
     }
   }
 
@@ -225,6 +233,14 @@ function TimelineIcon({ type, status }: { type: string; status?: string }) {
         <div className={`${baseClass} bg-[var(--info)]`}>
           <svg className="w-4 h-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 8h10M7 12h4m1 8l-4-4H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-3l-4 4z" />
+          </svg>
+        </div>
+      )
+    case 'convert':
+      return (
+        <div className={`${baseClass} bg-[#294487]`}>
+          <svg className="w-4 h-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
           </svg>
         </div>
       )
