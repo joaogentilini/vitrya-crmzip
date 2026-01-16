@@ -54,7 +54,7 @@ export async function PATCH(
     }
 
     const body = await request.json()
-    const { role, is_active, full_name, phone_e164 } = body
+    const { role, is_active, full_name } = body
 
     const updates: Record<string, unknown> = {}
     const auditDetails: Record<string, unknown> = {}
@@ -81,10 +81,6 @@ export async function PATCH(
     if (full_name !== undefined) {
       updates.full_name = full_name
       auditDetails.full_name_changed = full_name
-    }
-
-    if (phone_e164 !== undefined) {
-      updates.phone_e164 = phone_e164 || null
     }
 
     if (Object.keys(updates).length === 0) {

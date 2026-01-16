@@ -53,7 +53,7 @@ export async function GET() {
 
     const { data: users, error } = await supabase
       .from('profiles')
-      .select('id, full_name, email, phone_e164, role, is_active, created_at, updated_at')
+      .select('id, full_name, email, role, is_active, created_at, updated_at')
       .order('created_at', { ascending: false })
 
     if (error) {
@@ -125,17 +125,18 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Falha ao criar usuário' }, { status: 500 })
     }
 
+    const profilePayload: Record<string, unknown> = {
+      id: authUser.user.id,
+      full_name,
+      email,
+      role,
+      is_active: true,
+      updated_at: new Date().toISOString()
+    }
+
     const { error: profileError } = await adminSupabase
       .from('profiles')
-      .upsert({
-        id: authUser.user.id,
-        full_name,
-        email,
-        phone_e164: phone_e164 || null,
-        role,
-        is_active: true,
-        updated_at: new Date().toISOString()
-      }, { onConflict: 'id' })
+      .upsert(profilePayload, { onConflict: 'id' })
 
     if (profileError) {
       console.error('[POST /api/admin/users] Profile upsert error:', profileError.message, profileError.code)

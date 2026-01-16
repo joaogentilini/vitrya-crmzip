@@ -15,7 +15,6 @@ interface UserProfile {
   id: string
   full_name: string
   email: string | null
-  phone_e164: string | null
   role: UserRole
   is_active: boolean
   created_at: string
@@ -205,9 +204,6 @@ export function UsersClient({ userEmail, users, currentUserId, currentUserRole }
                         <div>
                           <p className="font-medium text-[var(--foreground)]">{user.full_name}</p>
                           <p className="text-sm text-[var(--muted-foreground)]">{user.email}</p>
-                          {user.phone_e164 && (
-                            <p className="text-xs text-[var(--muted-foreground)]">{user.phone_e164}</p>
-                          )}
                         </div>
                       </td>
                       <td className="px-4 py-3">
@@ -312,7 +308,6 @@ function CreateUserModal({ onClose, onSuccess, currentUserRole }: CreateUserModa
     full_name: '',
     email: '',
     password: '',
-    phone_e164: '',
     role: 'corretor' as UserRole
   })
 
@@ -393,16 +388,6 @@ function CreateUserModal({ onClose, onSuccess, currentUserRole }: CreateUserModa
                 placeholder="Mínimo 6 caracteres"
                 required
                 minLength={6}
-              />
-            </div>
-            
-            <div>
-              <Label htmlFor="phone">Telefone (opcional)</Label>
-              <Input
-                id="phone"
-                value={formData.phone_e164}
-                onChange={(e) => setFormData(prev => ({ ...prev, phone_e164: e.target.value }))}
-                placeholder="+5511999999999"
               />
             </div>
             
