@@ -169,6 +169,27 @@ export default async function LeadDetailsPage({
     corretores = (corretoresRaw ?? []) as { id: string; full_name: string }[]
   }
 
+  // Resolve responsible user ID: assigned_to > owner_user_id > created_by
+  const responsibleUserId = lead.assigned_to || lead.owner_user_id || lead.created_by
+  let responsibleName: string | null = null
+  
+  if (responsibleUserId) {
+    // First check if we already have the profile in corretores
+    const foundInCorretores = corretores.find(c => c.id === responsibleUserId)
+    if (foundInCorretores) {
+      responsibleName = foundInCorretores.full_name
+    } else {
+      // Fetch from profiles
+      const { data: responsibleProfile } = await supabase
+        .from('profiles')
+        .select('full_name')
+        .eq('id', responsibleUserId)
+        .single()
+      
+      responsibleName = responsibleProfile?.full_name || null
+    }
+  }
+
   const { data: allProfilesRaw } = await supabase
     .from('profiles')
     .select('id, full_name, name, email')
@@ -287,6 +308,7 @@ export default async function LeadDetailsPage({
         leadSources={leadSources}
         corretores={corretores}
         currentUserId={currentUserId}
+        responsibleName={responsibleName}
       />
     </LeadsAppShell>
   )

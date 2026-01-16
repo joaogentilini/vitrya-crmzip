@@ -50,6 +50,7 @@ interface LeadDetailsClientProps {
   leadSources?: CatalogItem[];
   corretores?: CorretorProfile[];
   currentUserId: string;
+  responsibleName?: string | null;
 }
 
 export function LeadDetailsClient({
@@ -69,13 +70,13 @@ export function LeadDetailsClient({
   leadSources = [],
   corretores = [],
   currentUserId,
+  responsibleName,
 }: LeadDetailsClientProps) {
   const leadType = leadTypes.find((t) => t.id === lead.lead_type_id);
   const leadInterest = leadInterests.find(
     (i) => i.id === lead.lead_interest_id,
   );
   const leadSource = leadSources.find((s) => s.id === lead.lead_source_id);
-  const currentOwner = corretores.find((c) => c.id === lead.owner_user_id);
   const router = useRouter();
   const { success, error: showError } = useToast();
   const [isPending, startTransition] = useTransition();
@@ -387,7 +388,7 @@ export function LeadDetailsClient({
                 </select>
               ) : (
                 <p className="text-sm font-medium text-[var(--foreground)]">
-                  {currentOwner?.full_name || "—"}
+                  {responsibleName || "Sem responsável"}
                 </p>
               )}
             </div>
