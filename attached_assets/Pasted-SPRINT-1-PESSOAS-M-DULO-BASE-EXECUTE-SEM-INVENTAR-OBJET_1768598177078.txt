@@ -1,0 +1,94 @@
+SPRINT 1 — PESSOAS (MÓDULO BASE) — EXECUTE SEM INVENTAR
+
+OBJETIVO:
+Criar o módulo “Pessoas” como cadastro único (clientes, proprietários, fornecedores, corretores, colaboradores) e base para Sprint 2 (Lead→Pessoa/Cliente).
+Sem redesign. Implementar tabela + RLS + telas (listar/criar/editar) + auditoria mínima.
+
+REGRAS:
+- Respeitar RLS/roles existentes (admin/gestor/corretor + is_active).
+- Não mudar fluxos prontos (leads/kanban/catálogos/usuários).
+- Use nomes reais do repo e padrão de toasts/erros com requestId (igual UsersClient).
+- Tudo versionado em migration(s) novas em supabase/migrations.
+
+PASSO 1) DEFINIR E CRIAR TABELA people (DB)
+1) Ler docs/db/SCHEMA_BASELINE.md e identificar padrões:
+- como vocês nomeiam FKs (ex.: created_by_profile_id)
+- como audit é feito hoje (triggers/set_updated_at)
+- quais roles/policies existem
+2) Criar migration: YYYYMMDDHHMMSS__create_people.sql com:
+- public.people:
+  - id uuid pk default gen_random_uuid()
+  - full_name text not null
+  - email text null
+  - phone_e164 text null
+  - document_id text null (cpf/cnpj ou doc genérico)
+  - kind_tags text[] null (ex.: ["comprador","vendedor","proprietario","inquilino","investidor","fornecedor"])
+  - notes text null
+  - owner_profile_id uuid null (carteira do corretor / responsável)
+  - created_by_profile_id uuid not null
+  - created_at timestamptz default now()
+  - updated_at timestamptz default now()
+- Índices:
+  - people_phone_e164_idx (btree)
+  - people_email_idx (btree)
+  - people_owner_profile_id_idx
+- Unicidade (MVP, sem travar demais):
+  - NÃO fazer UNIQUE rígido agora em email/phone (para evitar bloqueios). Apenas indexar.
+- Trigger updated_at:
+  - usar o mesmo padrão de triggers existentes (trigger_set_updated_at ou equivalente real)
+
+PASSO 2) RLS + POLICIES (DB)
+Criar/ajustar policies em people:
+- Enable RLS
+- admin/gestor: SELECT/INSERT/UPDATE/DELETE ALL
+- corretor:
+  - SELECT: onde owner_profile_id = auth_profile_id OU created_by_profile_id = auth_profile_id
+  - INSERT: created_by_profile_id = auth_profile_id e owner_profile_id default = auth_profile_id (se vier null)
+  - UPDATE: permitido apenas se ele for owner/creator
+  - DELETE: negar para corretor (MVP)
+Obs: Use o mesmo método do projeto para obter profile_id/role (não inventar: copiar padrão de policies existentes).
+
+PASSO 3) AUDITORIA MÍNIMA (DB)
+- Se já existir tabela de audit genérica, reutilizar.
+- Se não existir, criar people_audit_log (mínimo) ou registrar em uma tabela de audit existente:
+  - action, actor_profile_id, people_id, diff, created_at
+- Trigger em people para logar UPDATE/INSERT (mínimo).
+
+PASSO 4) TELAS NO APP (SEM REDESIGN)
+Criar módulo em rotas existentes:
+- Lista: /people
+- Detalhe/Editar: /people/[id]
+- Novo: /people/new (ou modal, seguindo padrão do app)
+
+UI mínima:
+- Listar com busca (nome/telefone/email)
+- Criar/Editar com validação:
+  - full_name obrigatório
+  - email opcional
+  - phone_e164 opcional
+- Permissões:
+  - admin/gestor: vê tudo
+  - corretor: só carteira dele (RLS garante)
+- Tratamento de erro:
+  - exibir toast com requestId se backend retornar (padrão UsersClient)
+
+PASSO 5) MENU/NAVEGAÇÃO
+- Se existe menu lateral, adicionar item “Pessoas”.
+- Se não existir padrão, não criar menu; apenas rota.
+
+PASSO 6) TESTE (OBRIGATÓRIO)
+- Admin:
+  - cria pessoa
+  - lista e edita
+- Corretor:
+  - cria pessoa e vê somente as dele
+  - tenta acessar pessoa de outro corretor → negar (RLS)
+- Smoke: docs/sprint1-smoke-test.md
+
+ENTREGAR:
+- migrations criadas
+- arquivos alterados
+- como testar local
+- commit(s):
+  1) "feat(db): add people table with rls"
+  2) "feat(people): add people pages"
