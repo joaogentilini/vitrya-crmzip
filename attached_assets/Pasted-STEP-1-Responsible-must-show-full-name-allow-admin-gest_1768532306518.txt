@@ -1,0 +1,54 @@
+STEP 1 — Responsible must show full_name + allow admin/gestor/corretor + assign dropdown
+
+You are a senior fullstack engineer working on a Next.js 16 + Supabase CRM.
+
+Goal:
+1) In Lead Details (and anywhere else it appears), the "Responsável" field must show the user's real name from public.profiles.full_name (not UUID).
+2) Admin and Gestor must also be eligible as responsible (not only brokers).
+3) Add an "Atribuir responsável" dropdown to set leads.assigned_to with proper permission rules.
+
+Database:
+- leads: assigned_to, owner_user_id, created_by
+- profiles: id, full_name, role, email, is_active
+
+Rules:
+- Responsible user id resolution order for display:
+  1) assigned_to
+  2) owner_user_id
+  3) created_by
+- Dropdown options:
+  - profiles.is_active = true
+  - profiles.role IN ('admin','gestor','corretor')
+  - order by full_name asc
+- Permissions:
+  - admin/gestor: can assign to ANY dropdown user
+  - corretor: can only assign to auth.uid() (restrict dropdown to self or disable it)
+
+Tasks:
+A) Find Lead Details page implementation (likely app/leads/[id]/page.tsx + LeadDetailsClient or similar).
+B) Implement responsibleName:
+   - resolve responsibleId using the order above
+   - query profiles for responsibleId and get full_name
+   - pass responsibleName to the UI and render it
+   - fallback "Sem responsável" if no profile found
+C) Implement list of assignable users (server action or route) reading from public.profiles with the filters above.
+D) Implement server action to update responsible:
+   - input: leadId, assignedToUserId
+   - read current user's profile.role
+   - enforce permissions
+   - update leads.assigned_to = assignedToUserId
+   - return structured { ok:true } or { ok:false, code:'FORBIDDEN'|'NOT_FOUND'|'UPDATE_ERROR', message }
+E) UI:
+   - Add dropdown labeled "Responsável"
+   - Add Save button
+   - Show toast on success/failure
+   - router.refresh() and/or revalidatePath(`/leads/${leadId}`)
+
+Acceptance tests:
+1) As admin: assign lead to another user => UI shows that user's full_name as Responsável after refresh.
+2) As broker: cannot assign other users (dropdown restricted/disabled).
+3) Existing leads without assigned_to still show responsibleName using owner_user_id/created_by fallback.
+
+Deliverables:
+- List of files changed
+- Short test checklist
