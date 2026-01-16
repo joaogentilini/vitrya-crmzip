@@ -81,6 +81,7 @@ Preferred communication style: Simple, everyday language.
 - `app/api/lead-notes/[id]/route.ts` - API for deleting notes
 - `docs/migrations/20260116_lead_to_client_conversion.sql` - Migration for people, clients tables and lead conversion fields
 - `docs/migrations/20260116_fix_recursive_triggers.sql` - Fix for "stack depth limit exceeded" error in catalog triggers
+- `docs/migrations/20260116_fix_schema_stabilization.sql` - Complete schema stabilization with all tables, constraints, RLS, triggers and seed data
 - `app/api/leads/[leadId]/convert/route.ts` - API for converting leads to clients (uses owner_user_id, not owner_id)
 - `app/leads/[id]/ConvertLeadModal.tsx` - Modal for lead to client conversion
 - `app/perfil/page.tsx` - User profile editing page
