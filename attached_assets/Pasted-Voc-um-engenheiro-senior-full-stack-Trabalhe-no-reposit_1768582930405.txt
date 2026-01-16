@@ -1,0 +1,109 @@
+Você é um engenheiro senior full-stack. Trabalhe no repositório vitrya-crm (Next.js App Router + Supabase).
+
+OBJETIVO: estabilizar o CRM, garantindo que:
+
+Usuários apareçam novamente em /settings/users
+
+Catálogos possam ser editados sem erro (stack depth limit exceeded)
+
+Kanban volte a mostrar pipelines e stages
+
+Conversão Lead → Cliente funcione sem erro PGRST204
+
+Nada que já estava funcionando seja quebrado
+
+CONTEXTOS E ERROS:
+
+/api/leads/[id]/convert retorna 500:
+PGRST204: Could not find the 'status' column of 'clients' in the schema cache
+(antes era owner_id)
+
+/api/catalogs/* POST retorna 500:
+"stack depth limit exceeded"
+
+/leads/kanban mostra "Nenhum pipeline configurado"
+
+/settings/users aparece "Nenhum usuário encontrado"
+
+Banco atual tem leads com owner_user_id preenchido e owner_id nulo.
+
+O banco tem tabela clients com colunas antigas (ex: owner_user_id, created_by etc), mas o código espera colunas como owner_id/status/person_id.
+
+pipelines.type possui constraint permitindo apenas 'sales' e 'rent'
+
+TAREFAS:
+A) Diagnóstico e correção de schema mismatch:
+
+Atualizar o código para usar o schema real atual do Supabase (clients/profiles/leads) OU criar migration SQL compatível.
+
+Prioridade: corrigir clients para ter colunas esperadas pelo código:
+
+person_id uuid
+
+owner_id uuid
+
+status text
+
+types text[]
+
+Garantir que /api/leads/[id]/convert funcione e atualize leads.client_id/is_converted/converted_at
+
+B) Corrigir catálogos:
+
+Identificar a causa do "stack depth limit exceeded" nos endpoints /api/catalogs/lead-types, lead-interests, lead-sources
+
+Corrigir triggers recursivos (set_updated_at / audit) que estão causando loop infinito
+
+Após fix, editar catálogo deve funcionar (PATCH/POST)
+
+C) Corrigir pipelines e kanban:
+
+Garantir que existam pipelines válidos com type IN ('sales','rent')
+
+Garantir que existam stages vinculados aos pipelines
+
+Garantir que Kanban puxe pipelines e stages corretamente
+
+D) Corrigir tela de usuários:
+
+Garantir que /settings/users liste profiles corretamente (admin vê todos)
+
+Garantir que RLS não bloqueie admin/gestor
+
+Garantir que a criação/edição de usuário continue funcionando
+
+REQUISITOS:
+
+Não remover funcionalidades existentes (leads, timeline, notes, finalize)
+
+Criar um arquivo SQL único de correção em docs/migrations chamado:
+20260116_fix_schema_stabilization.sql
+com:
+
+ajustes em clients (add columns faltantes com IF NOT EXISTS)
+
+correção pipelines seed
+
+correção triggers recursivos (catálogos)
+
+correção constraints e valores inválidos
+
+Depois rodar:
+npm run build
+e relatar resultado
+
+ENTREGA:
+
+Código corrigido no repo
+
+Migration SQL criada (docs/migrations/20260116_fix_schema_stabilization.sql)
+
+Checklist de testes manuais:
+
+/settings/users lista usuários
+
+editar catálogos funciona
+
+kanban mostra pipelines
+
+converter lead em cliente funciona
