@@ -49,9 +49,9 @@ export function getStatusBadge(status: string, size: 'sm' | 'lg' = 'sm') {
   const className = size === 'lg' ? 'text-sm px-3 py-1' : ''
   switch (status) {
     case 'won':
-      return <Badge variant="success" className={className}>Ganho</Badge>
+      return <Badge variant="success" className={className}>Comprou</Badge>
     case 'lost':
-      return <Badge variant="destructive" className={className}>Perdido</Badge>
+      return <Badge variant="destructive" className={className}>Não Comprou</Badge>
     default:
       return <Badge variant="secondary" className={className}>Aberto</Badge>
   }
@@ -60,11 +60,11 @@ export function getStatusBadge(status: string, size: 'sm' | 'lg' = 'sm') {
 export function getStatusLabel(status: string): string {
   switch (status) {
     case 'won':
-      return 'ganho'
+      return 'Comprou'
     case 'lost':
-      return 'perdido'
+      return 'Não Comprou'
     default:
-      return 'aberto'
+      return 'Aberto'
   }
 }
 
@@ -75,9 +75,9 @@ export function normalizeError(err: unknown, fallback = 'Erro desconhecido'): st
 }
 
 export function getConfirmFinalizeMessage(status: 'won' | 'lost'): string {
-  return `Marcar como ${status === 'won' ? 'ganho' : 'perdido'}?`
+  return `Marcar como ${status === 'won' ? 'Comprou' : 'Não Comprou'}?`
 }
 
 export function getFinalizeSuccessMessage(status: 'won' | 'lost'): string {
-  return `Lead marcado como ${status === 'won' ? 'ganho' : 'perdido'}!`
+  return `Lead marcado como ${status === 'won' ? 'Comprou' : 'Não Comprou'}!`
 }

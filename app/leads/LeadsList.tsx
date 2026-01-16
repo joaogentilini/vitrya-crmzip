@@ -263,8 +263,8 @@ export function LeadsList({ leads, pipelines, stages, taskStatus = [], corretore
               >
                 <option value="">Todos Status</option>
                 <option value="open">Aberto</option>
-                <option value="won">Ganho</option>
-                <option value="lost">Perdido</option>
+                <option value="won">Comprou</option>
+                <option value="lost">Não Comprou</option>
               </select>
 
               {isAdminOrGestor && corretores.length > 0 && (

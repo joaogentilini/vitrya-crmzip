@@ -274,7 +274,7 @@ export function LeadDetailsClient({
                         d="M5 13l4 4L19 7"
                       />
                     </svg>
-                    Marcar Ganho
+                    Marcar Comprou
                   </Button>
                   <Button
                     variant="destructive"
@@ -294,7 +294,7 @@ export function LeadDetailsClient({
                         d="M6 18L18 6M6 6l12 12"
                       />
                     </svg>
-                    Marcar Perdido
+                    Marcar Não Comprou
                   </Button>
                 </>
               )}

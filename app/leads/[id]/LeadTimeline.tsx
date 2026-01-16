@@ -127,8 +127,8 @@ function summarizeAuditEvent(
     if (before?.status !== after?.status) {
       const statusLabels: Record<string, string> = {
         open: 'Aberto',
-        won: 'Ganho',
-        lost: 'Perdido'
+        won: 'Comprou',
+        lost: 'Não Comprou'
       }
       const fromStatus = statusLabels[String(before?.status)] || String(before?.status)
       const toStatus = statusLabels[String(after?.status)] || String(after?.status)
@@ -349,7 +349,7 @@ export function LeadTimeline({ createdAt, status, stages, auditLogs, actorProfil
               <p className="text-sm font-medium text-[var(--foreground)]">
                 Lead marcado como{' '}
                 <span className={status === 'won' ? 'text-[var(--success)]' : 'text-[var(--destructive)]'}>
-                  {status === 'won' ? 'Ganho' : 'Perdido'}
+                  {status === 'won' ? 'Comprou' : 'Não Comprou'}
                 </span>
               </p>
             </div>

@@ -183,7 +183,7 @@ export function DashboardClient({ userEmail, isAdmin, profiles, selectedBroker, 
               <CardContent className="pt-6">
                 <div className="flex items-center justify-between">
                   <div>
-                    <p className="text-sm font-medium text-[var(--muted-foreground)]">Leads Ganhos</p>
+                    <p className="text-sm font-medium text-[var(--muted-foreground)]">Compraram</p>
                     <p className="text-3xl font-bold text-[var(--success)]">{data.wonCount}</p>
                   </div>
                   <div className="w-12 h-12 rounded-full bg-[var(--success)] flex items-center justify-center">
@@ -199,7 +199,7 @@ export function DashboardClient({ userEmail, isAdmin, profiles, selectedBroker, 
               <CardContent className="pt-6">
                 <div className="flex items-center justify-between">
                   <div>
-                    <p className="text-sm font-medium text-[var(--muted-foreground)]">Leads Perdidos</p>
+                    <p className="text-sm font-medium text-[var(--muted-foreground)]">Não Compraram</p>
                     <p className="text-3xl font-bold text-[var(--muted-foreground)]">{data.lostCount}</p>
                   </div>
                   <div className="w-12 h-12 rounded-full bg-[var(--muted)] flex items-center justify-center">
