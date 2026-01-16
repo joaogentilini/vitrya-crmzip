@@ -1,0 +1,59 @@
+REPLIT AGENT — PASSO 1 (OBRIGATÓRIO) — Corrigir pipeline.type para respeitar constraint do Supabase
+
+Contexto:
+- Supabase/Postgres: tabela public.pipelines tem CHECK constraint pipelines_type_check permitindo SOMENTE: 'sales' e 'rent'.
+- O projeto ainda tenta inserir/seedar pipeline com type='leads', causando erro SQL 23514.
+- Já mexi no banco para manter o padrão sales/rent. Agora o CÓDIGO/SEEDS precisam ser corrigidos para nunca mais usar 'leads' como pipeline.type.
+
+Objetivo:
+1) Encontrar e corrigir TODOS os lugares que usam pipeline.type fora de 'sales' | 'rent' (especialmente 'leads').
+2) Padronizar:
+   - 'leads' -> 'sales'
+   - Locação -> 'rent'
+3) Garantir que tipos/validações no código restrinjam pipeline.type a 'sales' | 'rent'.
+
+Tarefas (execute em ordem):
+A) Auditoria (busca global)
+- Rode buscas no repo por:
+  - "type = 'leads'"
+  - "type: 'leads'"
+  - '"leads"' (em contexto de pipeline)
+  - "Pipeline Principal"
+  - "pipelines" + "leads"
+  - qualquer enum/union de PipelineType
+
+B) Correções
+1) Em arquivos .sql (migrations/seed):
+- Trocar inserts/updates para usar:
+  - vendas: 'sales'
+  - locação: 'rent'
+- Se houver seed de "Pipeline Principal", deve ser type='sales'.
+
+2) Em TS/TSX:
+- Se existir tipo/enum de pipeline type, defina/ajuste para:
+  - type PipelineType = 'sales' | 'rent'
+- Atualize constantes/mapeamentos:
+  - onde estiver 'leads' como pipeline type -> 'sales'
+- Atualize qualquer validação/if/branch que compara pipeline.type com 'leads' para 'sales'.
+
+C) Verificação (não pule)
+1) Rode:
+   - npm ci
+   - npm run build
+2) Rode:
+   - npm run dev
+3) Faça sanity check nas rotas:
+   - /leads
+   - /leads/kanban
+   - /settings/users
+4) Se existir seed local, execute e confirme que NÃO ocorre mais erro 23514 de pipelines_type_check.
+
+Entrega:
+- Liste os arquivos modificados.
+- Explique em 1 linha cada mudança.
+- Confirme que não existe mais nenhuma ocorrência de pipeline.type='leads' no repo (faça uma busca final).
+
+Regras:
+- NÃO adicione arquivos de backup, prints, ou "Pasted-*.txt".
+- NÃO comitar .env.local.
+- Se precisar atualizar .gitignore, faça.
