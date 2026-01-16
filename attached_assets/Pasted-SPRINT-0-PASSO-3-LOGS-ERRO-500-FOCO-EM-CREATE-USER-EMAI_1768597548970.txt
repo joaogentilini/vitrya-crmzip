@@ -1,0 +1,55 @@
+SPRINT 0 — PASSO 3 (LOGS + ERRO 500) — FOCO EM CREATE USER + EMAILS
+
+OBJETIVO:
+Quando der 500, ter log útil + requestId + mensagem amigável no front. Corrigir a “cegueira” de erro, NÃO fazer redesign.
+Foco primário: fluxo de criar usuário que hoje dá 500. Foco secundário: fluxo de salvar email (se existir) / qualquer ponto que hoje falha silenciosamente.
+
+REGRAS:
+- Sem refatoração grande.
+- Não logar secrets/tokens.
+- Não alterar RLS/policies.
+- Alterar apenas os endpoints críticos e os pontos de UI correspondentes.
+
+PASSO 3.1 — PADRÃO DE ERRO (server)
+1) Criar/confirmar util de logging e resposta padrão:
+- Criar lib/server/error.ts (ou caminho real do repo) com:
+  - makeRequestId(): uuid
+  - logError({ requestId, scope, userId, route, details })
+  - apiError(status, { requestId, code, message })
+2) Padrão de retorno em erro:
+- status 500
+- JSON: { error: { code: "INTERNAL", message: "Falha ao processar", requestId } }
+
+PASSO 3.2 — APLICAR NO CREATE USER (OBRIGATÓRIO)
+1) Localizar a rota exata que cria usuário (route handler / server action).
+2) Envolver com try/catch:
+- Em catch: gerar requestId, logar contexto (route, payload sanitizado, userId do ator), retornar erro padrão.
+3) Melhorar logs dentro do fluxo:
+- Logar etapas: “start”, “validated”, “supabase call ok”, “db insert ok”
+- Se erro vindo do Supabase/Postgres: logar code/message/details (sem vazar tokens).
+4) Se o 500 for por validação/payload:
+- Retornar 400 com { error: { code:"VALIDATION", message:"...", requestId } }.
+
+PASSO 3.3 — FRONT: MOSTRAR REQUEST ID (OBRIGATÓRIO)
+1) No formulário/tela que cria usuário:
+- Ao receber erro do endpoint, mostrar mensagem: “Falha ao criar usuário. ID do erro: <requestId>”
+- Se vier 400/VALIDATION: mostrar erro amigável.
+2) Não mudar layout geral; usar o padrão existente (toast/alert) do projeto.
+
+PASSO 3.4 — “EMAILS NÃO SALVAM” (SE EXISTIR NO PROJETO)
+1) Localizar o fluxo de salvar email (campo email em Pessoa/Lead/Usuário — o que existir no CRM atual).
+2) Aplicar o MESMO padrão:
+- logs + requestId + resposta consistente
+- mensagem de erro visível no front
+
+PASSO 3.5 — TESTE (OBRIGATÓRIO)
+1) Rodar local e executar:
+- criar usuário válido (deve funcionar)
+- forçar falha (ex.: email inválido/duplicado) e validar retorno estruturado + requestId
+2) Confirmar que requestId aparece no log do server e na UI.
+
+ENTREGAR:
+- arquivos alterados (lista)
+- quais endpoints foram instrumentados
+- como reproduzir o erro antigo + como ficou agora
+- commit: "chore(obs): standardize api errors and improve 500 diagnostics"
