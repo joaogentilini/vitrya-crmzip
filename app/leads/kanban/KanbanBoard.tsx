@@ -2,6 +2,7 @@
 
 import React, { useMemo, useState, useTransition, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
+import Link from 'next/link'
 import { moveLeadToStageAction } from './actions'
 import { useToast } from '@/components/ui/Toast'
 import { Button } from '@/components/ui/Button'
@@ -29,11 +30,18 @@ type LeadRow = {
   created_at: string | null
 }
 
+type LeadTaskStatus = {
+  lead_id: string
+  is_overdue: boolean
+  has_open_task: boolean
+}
+
 type Props = {
   pipelines: PipelineRow[]
   stages: StageRow[]
   leads: LeadRow[]
   defaultPipelineId: string | null
+  taskStatus?: LeadTaskStatus[]
 }
 
 function LeadCard({ 
@@ -41,13 +49,15 @@ function LeadCard({
   isDragging, 
   disabled, 
   isOptimistic,
-  onFinalize 
+  onFinalize,
+  taskStatus
 }: { 
   lead: LeadRow
   isDragging?: boolean
   disabled?: boolean
   isOptimistic?: boolean
   onFinalize?: (leadId: string, status: 'won' | 'lost') => void
+  taskStatus?: LeadTaskStatus
 }) {
   const [mounted, setMounted] = useState(false)
 
@@ -76,7 +86,24 @@ function LeadCard({
       {isOptimistic && (
         <div className="absolute top-2 right-2 w-2 h-2 rounded-full bg-[var(--primary)] animate-pulse" />
       )}
-      <p className="font-medium text-[var(--card-foreground)] text-sm">{lead.title}</p>
+      <div className="flex items-start justify-between gap-2">
+        <Link 
+          href={`/leads/${lead.id}`}
+          className="font-medium text-[var(--card-foreground)] text-sm hover:text-[var(--primary)] hover:underline block"
+          onPointerDown={(e) => e.stopPropagation()}
+          onMouseDown={(e) => e.stopPropagation()}
+          onClick={(e) => e.stopPropagation()}
+        >
+          {lead.title}
+        </Link>
+        {taskStatus && lead.status === 'open' && (
+          taskStatus.is_overdue ? (
+            <Badge variant="destructive" className="text-[10px] px-1 py-0 flex-shrink-0">Atrasado</Badge>
+          ) : !taskStatus.has_open_task ? (
+            <Badge variant="secondary" className="text-[10px] px-1 py-0 flex-shrink-0 opacity-60">Sem ação</Badge>
+          ) : null
+        )}
+      </div>
       <p className="text-xs text-[var(--muted-foreground)] mt-1">
         {formatDate(lead.created_at)}
       </p>
@@ -191,12 +218,18 @@ function DroppableColumn({
   )
 }
 
-export function KanbanBoard({ pipelines, stages, leads, defaultPipelineId }: Props) {
+export function KanbanBoard({ pipelines, stages, leads, defaultPipelineId, taskStatus = [] }: Props) {
   const router = useRouter()
   const { success, error: showError } = useToast()
   const [isPending, startTransition] = useTransition()
   const [activeId, setActiveId] = useState<string | null>(null)
   const [localLeads, setLocalLeads] = useState<LeadRow[]>(leads)
+
+  const taskStatusMap = useMemo(() => {
+    const map = new Map<string, LeadTaskStatus>()
+    taskStatus.forEach(t => map.set(t.lead_id, t))
+    return map
+  }, [taskStatus])
 
   useEffect(() => {
     setLocalLeads(leads)
@@ -251,7 +284,7 @@ export function KanbanBoard({ pipelines, stages, leads, defaultPipelineId }: Pro
 
     startTransition(async () => {
       try {
-        await moveLeadToStageAction({ leadId, pipelineId, toStageId })
+        await moveLeadToStageAction({ leadId, pipelineId, fromStageId: originalStageId, toStageId })
         success('Lead movido com sucesso!')
         router.refresh()
       } catch (err: unknown) {
@@ -321,7 +354,8 @@ export function KanbanBoard({ pipelines, stages, leads, defaultPipelineId }: Pro
                         lead={l} 
                         disabled={isPending} 
                         isOptimistic={isPending && activeId === null && leads.find(sl => sl.id === l.id)?.stage_id !== l.stage_id} 
-                        onFinalize={onFinalizeLead} 
+                        onFinalize={onFinalizeLead}
+                        taskStatus={taskStatusMap.get(l.id)}
                       />
                     </DraggableCard>
                   ))}
@@ -336,7 +370,7 @@ export function KanbanBoard({ pipelines, stages, leads, defaultPipelineId }: Pro
           })}
         </div>
         <DragOverlay dropAnimation={{ sideEffects: defaultDropAnimationSideEffects({ styles: { active: { opacity: '0.5' } } }) }}>
-          {activeLead ? <LeadCard lead={activeLead} isDragging /> : null}
+          {activeLead ? <LeadCard lead={activeLead} isDragging taskStatus={taskStatusMap.get(activeLead.id)} /> : null}
         </DragOverlay>
       </DndContext>
     </div>

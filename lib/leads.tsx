@@ -12,6 +12,17 @@ export type LeadRow = {
   created_at: string
   created_by?: string | null
   assigned_to?: string | null
+  client_name?: string | null
+  phone_raw?: string | null
+  phone_e164?: string | null
+  email?: string | null
+  lead_type_id?: string | null
+  lead_interest_id?: string | null
+  lead_source_id?: string | null
+  budget_range?: string | null
+  notes?: string | null
+  owner_user_id?: string | null
+  updated_at?: string | null
 }
 
 export type PipelineRow = {

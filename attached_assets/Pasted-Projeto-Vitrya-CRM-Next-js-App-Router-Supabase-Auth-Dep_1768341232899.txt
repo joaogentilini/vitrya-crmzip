@@ -1,0 +1,46 @@
+Projeto: Vitrya CRM (Next.js App Router + Supabase Auth)
+Deploy: Easypanel apontando para o branch DEV (joaogentilini/vitrya-crmzip, branch: dev)
+
+PROBLEMAS ATUAIS:
+1) Depois do login aparece uma tela intermediária “Logado como... / Ir para Leads”.
+2) Ao clicar “Ir para Leads”, às vezes dá 404 e a URL vira /auth?next=%2Fleads (rota /auth não existe).
+3) Quero UX profissional: após login deve ir direto para /dashboard.
+
+OBJETIVO FINAL:
+- Login bem-sucedido => redirecionar SEMPRE para /dashboard
+- Usuário já logado que abre "/" => redirecionar automaticamente para /dashboard
+- Rotas privadas (/dashboard, /leads, /leads/kanban, /agenda, /settings) protegidas:
+  - Se não logado, redirecionar para "/" (login real)
+  - Nunca redirecionar para /auth (não existe)
+- Não pode quebrar o deploy do Easypanel
+
+TAREFAS (EXECUTAR TODAS):
+A) Encontrar a tela/fluxo de login:
+   - Localizar onde ocorre o signIn (supabase.auth.signInWithPassword ou equivalente).
+   - Alterar o redirect pós-login para "/dashboard".
+   - Se existe uma tela intermediária “Logado como... / Ir para Leads”, remover ou desativar.
+     (Ao invés disso, redirecionar direto para /dashboard quando detectar user logado.)
+
+B) Corrigir middleware:
+   - Criar/atualizar middleware.ts na raiz do projeto.
+   - Proteger rotas: /dashboard, /leads, /leads/kanban, /agenda, /settings (e subrotas).
+   - Se não autenticado, redirecionar para "/" com query ?next=<rota original>.
+   - Detecção de sessão deve ser robusta com cookies do Supabase:
+     considerar qualquer cookie que comece com "sb-" e contenha "auth-token", "access-token" ou "refresh-token".
+   - Garantir que o middleware NÃO redirecione para /auth.
+
+C) Testes locais:
+   1) Sem login: acessar /dashboard => deve redirecionar para "/?next=/dashboard"
+   2) Fazer login: deve ir direto para /dashboard
+   3) Estando logado: acessar /leads e /leads/kanban => deve abrir normal, sem 404
+
+D) Git:
+   - Commitar todas as mudanças
+   - Push para origin/dev
+   - Informar o SHA do commit final
+
+ENTREGÁVEIS:
+- Lista de arquivos alterados
+- Resumo do que foi mudado
+- O commit SHA final
+- Qual teste eu devo fazer no Easypanel depois do redeploy

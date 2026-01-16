@@ -9,6 +9,7 @@ import { Card, CardContent } from '@/components/ui/Card'
 import { EmptyState, emptyStateIcons } from '@/components/ui/EmptyState'
 import { useToast } from '@/components/ui/Toast'
 import { ClientDate } from './ClientDate'
+import { Badge } from '@/components/ui/Badge'
 import { 
   type LeadRow, 
   type PipelineRow, 
@@ -19,15 +20,53 @@ import {
   getFinalizeSuccessMessage
 } from '@/lib/leads'
 
+function TaskStatusIndicator({ status }: { status?: { is_overdue: boolean; has_open_task: boolean } }) {
+  if (!status) return null
+  
+  if (status.is_overdue) {
+    return <Badge variant="destructive" className="text-xs ml-1">Atrasado</Badge>
+  }
+  
+  if (!status.has_open_task) {
+    return <Badge variant="secondary" className="text-xs ml-1 opacity-60">Sem ação</Badge>
+  }
+  
+  return null
+}
+
 type SortOption = 'recent' | 'name' | 'stage'
+
+type LeadTaskStatus = {
+  lead_id: string
+  next_due_at: string | null
+  is_overdue: boolean
+  has_open_task: boolean
+}
+
+type UserProfile = {
+  id: string
+  full_name: string
+  role: string
+}
+
+type CatalogItem = {
+  id: string
+  name: string
+}
 
 interface LeadsListProps {
   leads: LeadRow[]
   pipelines: PipelineRow[]
   stages: StageRow[]
+  taskStatus?: LeadTaskStatus[]
+  corretores?: UserProfile[]
+  isAdminOrGestor?: boolean
+  leadTypes?: CatalogItem[]
+  leadInterests?: CatalogItem[]
+  leadSources?: CatalogItem[]
 }
 
-export function LeadsList({ leads, pipelines, stages }: LeadsListProps) {
+export function LeadsList({ leads, pipelines, stages, taskStatus = [], corretores = [], isAdminOrGestor = false, leadTypes = [], leadInterests = [], leadSources = [] }: LeadsListProps) {
   const router = useRouter()
   const { success, error: showError } = useToast()
   const [isPending, startTransition] = useTransition()
@@ -36,7 +75,14 @@ export function LeadsList({ leads, pipelines, stages }: LeadsListProps) {
   const [filterPipeline, setFilterPipeline] = useState<string>('')
   const [filterStage, setFilterStage] = useState<string>('')
   const [filterStatus, setFilterStatus] = useState<string>('')
+  const [filterOwner, setFilterOwner] = useState<string>('')
   const [sortBy, setSortBy] = useState<SortOption>('recent')
+
+  const ownerMap = useMemo(() => {
+    const map = new Map<string, UserProfile>()
+    corretores.forEach(c => map.set(c.id, c))
+    return map
+  }, [corretores])
 
   const stageOptions = useMemo(() => {
     if (!filterPipeline) return stages
@@ -54,6 +100,30 @@ export function LeadsList({ leads, pipelines, stages }: LeadsListProps) {
     pipelines.forEach(p => map.set(p.id, p))
     return map
   }, [pipelines])
+
+  const taskStatusMap = useMemo(() => {
+    const map = new Map<string, LeadTaskStatus>()
+    taskStatus.forEach(t => map.set(t.lead_id, t))
+    return map
+  }, [taskStatus])
+
+  const leadTypeMap = useMemo(() => {
+    const map = new Map<string, CatalogItem>()
+    leadTypes.forEach(t => map.set(t.id, t))
+    return map
+  }, [leadTypes])
+
+  const leadInterestMap = useMemo(() => {
+    const map = new Map<string, CatalogItem>()
+    leadInterests.forEach(i => map.set(i.id, i))
+    return map
+  }, [leadInterests])
+
+  const leadSourceMap = useMemo(() => {
+    const map = new Map<string, CatalogItem>()
+    leadSources.forEach(s => map.set(s.id, s))
+    return map
+  }, [leadSources])
 
   const filteredLeads = useMemo(() => {
     let result = [...leads]
@@ -75,6 +145,10 @@ export function LeadsList({ leads, pipelines, stages }: LeadsListProps) {
       result = result.filter(l => l.status === filterStatus)
     }
 
+    if (filterOwner) {
+      result = result.filter(l => l.owner_user_id === filterOwner)
+    }
+
     switch (sortBy) {
       case 'name':
         result.sort((a, b) => a.title.localeCompare(b.title))
@@ -92,7 +166,7 @@ export function LeadsList({ leads, pipelines, stages }: LeadsListProps) {
     }
 
     return result
-  }, [leads, search, filterPipeline, filterStage, filterStatus, sortBy, stageMap])
+  }, [leads, search, filterPipeline, filterStage, filterStatus, filterOwner, sortBy, stageMap])
 
   const handlePipelineChange = useCallback((value: string) => {
     setFilterPipeline(value)
@@ -104,16 +178,19 @@ export function LeadsList({ leads, pipelines, stages }: LeadsListProps) {
     setFilterPipeline('')
     setFilterStage('')
     setFilterStatus('')
+    setFilterOwner('')
     setSortBy('recent')
   }, [])
 
-  const hasActiveFilters = search || filterPipeline || filterStage || filterStatus || sortBy !== 'recent'
+  const hasActiveFilters = search || filterPipeline || filterStage || filterStatus || filterOwner || sortBy !== 'recent'
 
-  const handleMoveStage = useCallback(async (leadId: string, toStageId: string, pipelineId: string) => {
+  const handleMoveStage = useCallback(async (leadId: string, fromStageId: string, toStageId: string, pipelineId: string) => {
+    if (fromStageId === toStageId) return
+    
     startTransition(async () => {
       try {
         const { moveLeadToStageAction } = await import('./kanban/actions')
-        await moveLeadToStageAction({ leadId, pipelineId, toStageId })
+        await moveLeadToStageAction({ leadId, pipelineId, fromStageId, toStageId })
         success('Lead movido com sucesso!')
         router.refresh()
       } catch (err) {
@@ -190,6 +267,19 @@ export function LeadsList({ leads, pipelines, stages }: LeadsListProps) {
                 <option value="lost">Perdido</option>
               </select>
 
+              {isAdminOrGestor && corretores.length > 0 && (
+                <select
+                  value={filterOwner}
+                  onChange={(e) => setFilterOwner(e.target.value)}
+                  className="h-10 rounded-[var(--radius)] border border-[var(--input)] bg-[var(--background)] px-3 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)]"
+                >
+                  <option value="">Todos Responsáveis</option>
+                  {corretores.map(c => (
+                    <option key={c.id} value={c.id}>{c.full_name}</option>
+                  ))}
+                </select>
+              )}
+
               <select
                 value={sortBy}
                 onChange={(e) => setSortBy(e.target.value as SortOption)}
@@ -224,6 +314,7 @@ export function LeadsList({ leads, pipelines, stages }: LeadsListProps) {
                     <tr className="border-b border-[var(--border)]">
                       <th className="text-left px-4 py-3 text-sm font-medium text-[var(--muted-foreground)]">Lead</th>
                       <th className="text-left px-4 py-3 text-sm font-medium text-[var(--muted-foreground)]">Pipeline / Estágio</th>
+                      <th className="text-left px-4 py-3 text-sm font-medium text-[var(--muted-foreground)]">Tipo / Origem</th>
                       <th className="text-left px-4 py-3 text-sm font-medium text-[var(--muted-foreground)]">Status</th>
                       <th className="text-left px-4 py-3 text-sm font-medium text-[var(--muted-foreground)]">Data</th>
                       <th className="text-right px-4 py-3 text-sm font-medium text-[var(--muted-foreground)]">Ações</th>
@@ -233,6 +324,8 @@ export function LeadsList({ leads, pipelines, stages }: LeadsListProps) {
                     {filteredLeads.map((lead) => {
                       const pipeline = pipelineMap.get(lead.pipeline_id || '')
                       const stage = stageMap.get(lead.stage_id || '')
+                      const leadType = leadTypeMap.get(lead.lead_type_id || '')
+                      const leadSource = leadSourceMap.get(lead.lead_source_id || '')
                       const availableStages = stages.filter(s => s.pipeline_id === lead.pipeline_id)
 
                       return (
@@ -244,6 +337,9 @@ export function LeadsList({ leads, pipelines, stages }: LeadsListProps) {
                             >
                               {lead.title}
                             </Link>
+                            {lead.client_name && lead.client_name !== lead.title && (
+                              <p className="text-xs text-[var(--muted-foreground)] mt-0.5">{lead.client_name}</p>
+                            )}
                           </td>
                           <td className="px-4 py-3">
                             <span className="text-sm text-[var(--muted-foreground)]">
@@ -251,7 +347,17 @@ export function LeadsList({ leads, pipelines, stages }: LeadsListProps) {
                             </span>
                           </td>
                           <td className="px-4 py-3">
-                            {getStatusBadge(lead.status)}
+                            <span className="text-sm text-[var(--muted-foreground)]">
+                              {leadType?.name || '—'} / {leadSource?.name || '—'}
+                            </span>
+                          </td>
+                          <td className="px-4 py-3">
+                            <div className="flex items-center gap-1 flex-wrap">
+                              {getStatusBadge(lead.status)}
+                              {lead.status === 'open' && (
+                                <TaskStatusIndicator status={taskStatusMap.get(lead.id)} />
+                              )}
+                            </div>
                           </td>
                           <td className="px-4 py-3 text-sm text-[var(--muted-foreground)]">
                             <ClientDate value={lead.created_at} />
@@ -270,7 +376,7 @@ export function LeadsList({ leads, pipelines, stages }: LeadsListProps) {
                               {lead.status === 'open' && lead.pipeline_id && availableStages.length > 1 && (
                                 <select
                                   value={lead.stage_id || ''}
-                                  onChange={(e) => handleMoveStage(lead.id, e.target.value, lead.pipeline_id!)}
+                                  onChange={(e) => handleMoveStage(lead.id, lead.stage_id || '', e.target.value, lead.pipeline_id!)}
                                   disabled={isPending}
                                   className="h-8 rounded-[var(--radius)] border border-[var(--input)] bg-[var(--background)] px-2 text-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)] disabled:opacity-50"
                                 >
@@ -321,6 +427,8 @@ export function LeadsList({ leads, pipelines, stages }: LeadsListProps) {
             {filteredLeads.map((lead) => {
               const pipeline = pipelineMap.get(lead.pipeline_id || '')
               const stage = stageMap.get(lead.stage_id || '')
+              const leadType = leadTypeMap.get(lead.lead_type_id || '')
+              const leadSource = leadSourceMap.get(lead.lead_source_id || '')
               const availableStages = stages.filter(s => s.pipeline_id === lead.pipeline_id)
 
               return (
@@ -334,15 +442,26 @@ export function LeadsList({ leads, pipelines, stages }: LeadsListProps) {
                         <p className="font-medium text-[var(--foreground)] hover:text-[var(--primary)] truncate">
                           {lead.title}
                         </p>
+                        {lead.client_name && lead.client_name !== lead.title && (
+                          <p className="text-xs text-[var(--muted-foreground)] mt-0.5">{lead.client_name}</p>
+                        )}
                         <p className="text-xs text-[var(--muted-foreground)] mt-1">
                           {pipeline?.name} / {stage?.name}
                         </p>
+                        {(leadType || leadSource) && (
+                          <p className="text-xs text-[var(--muted-foreground)] mt-0.5">
+                            {leadType?.name || '—'} / {leadSource?.name || '—'}
+                          </p>
+                        )}
                         <p className="text-xs text-[var(--muted-foreground)] mt-0.5">
                           <ClientDate value={lead.created_at} />
                         </p>
                       </Link>
-                      <div className="flex-shrink-0">
+                      <div className="flex-shrink-0 flex flex-wrap items-center gap-1">
                         {getStatusBadge(lead.status)}
+                        {lead.status === 'open' && (
+                          <TaskStatusIndicator status={taskStatusMap.get(lead.id)} />
+                        )}
                       </div>
                     </div>
 
@@ -351,7 +470,7 @@ export function LeadsList({ leads, pipelines, stages }: LeadsListProps) {
                         {lead.pipeline_id && availableStages.length > 1 && (
                           <select
                             value={lead.stage_id || ''}
-                            onChange={(e) => handleMoveStage(lead.id, e.target.value, lead.pipeline_id!)}
+                            onChange={(e) => handleMoveStage(lead.id, lead.stage_id || '', e.target.value, lead.pipeline_id!)}
                             disabled={isPending}
                             className="flex-1 h-9 rounded-[var(--radius)] border border-[var(--input)] bg-[var(--background)] px-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)] disabled:opacity-50"
                           >

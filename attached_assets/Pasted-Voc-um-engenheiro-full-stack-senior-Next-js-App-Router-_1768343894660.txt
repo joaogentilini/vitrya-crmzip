@@ -1,0 +1,105 @@
+Você é um engenheiro full-stack senior (Next.js App Router + Supabase). 
+Objetivo: implementar “Lead Completo” no Vitrya CRM + catálogos configuráveis (Tipo, Interesse, Origem) + bloqueio de duplicidade por telefone.
+Não quebrar login -> /dashboard, /leads e /leads/kanban.
+
+CONTEXTO
+- Projeto: vitrya-crm (Next.js App Router + Supabase Auth + Postgres + RLS já existente/planejada).
+- Hoje: Leads existem e pipeline/kanban funcionam, mas lead ainda não possui “ficha completa”.
+- Precisamos: campos obrigatórios e catálogos configuráveis.
+
+REQUISITOS FUNCIONAIS (LEAD)
+1) Lead deve ter campos (mínimo Vitrya):
+   - client_name (text, obrigatório)
+   - phone_raw (text, obrigatório, como digitado)
+   - phone_e164 (text, obrigatório, normalizado)  <-- usado para deduplicação
+   - lead_type_id (uuid FK para catálogo configurável)  <-- “Tipo”
+   - lead_interest_id (uuid FK para catálogo configurável) <-- “Interesse”
+   - lead_source_id (uuid FK para catálogo configurável)  <-- “Origem”
+   - budget_range (text ou enum simples, opcional por agora)
+   - notes (text, opcional)
+   - owner_user_id (uuid, será usado depois para permissões; preencha como auth.uid() quando existir sessão)
+   - created_at, updated_at
+2) Criar/Editar Lead:
+   - Form de criação deve exigir: client_name, phone, tipo, interesse, origem.
+   - Após criar, lead deve aparecer em /leads e /leads/kanban com as mesmas funcionalidades atuais.
+3) Tela /leads/[id] deve exibir ficha completa e permitir edição dos campos.
+
+CATÁLOGOS CONFIGURÁVEIS (TIPO/INTERESSE/ORIGEM)
+4) Criar três tabelas de catálogo:
+   - lead_types(id uuid pk, name text unique, is_active bool default true, position int default 0, created_at)
+   - lead_interests(id uuid pk, name text unique, is_active bool default true, position int default 0, created_at)
+   - lead_sources(id uuid pk, name text unique, is_active bool default true, position int default 0, created_at)
+5) Seed inicial:
+   - interests: Casa, Apartamento, Terreno, Comercial, Industrial, MCMV (Minha Casa Minha Vida), Na Planta
+   - types: Compra, Venda, Locação, Investimento
+   - sources: Instagram, Tráfego Pago, Indicação, OLX, Portal, WhatsApp, Outros
+6) Tela de configurações:
+   - /settings/leads (ou /settings/catalogs) com três abas: Tipos / Interesses / Origens
+   - Permitir (admin/gestor): criar, renomear, reordenar (position), ativar/desativar.
+   - Corretor (por ora) pode apenas ler e usar no formulário.
+
+DUPLICIDADE POR TELEFONE (MUITO IMPORTANTE)
+7) Normalização:
+   - Implementar função server-side para normalizar telefone BR para E.164 (ex.: +55XXXXXXXXXXX).
+   - Remover tudo que não for dígito, lidar com 55 opcional, DDD obrigatório.
+   - Se número inválido, retornar erro amigável.
+8) Validação UX:
+   - No formulário, ao sair do campo telefone (onBlur), consultar endpoint/action:
+     - checkLeadByPhone(phone_e164) -> retorna lead existente (id, client_name, stage, updated_at) ou null
+   - Se existir:
+     - Mostrar aviso: “Já existe cadastro com esse telefone”
+     - Mostrar link/botão “Abrir lead existente”
+     - Por padrão, BLOQUEAR criação duplicada (não permitir salvar).
+9) Garantia no banco:
+   - Criar UNIQUE INDEX em leads(phone_e164) (se ainda não há multi-tenant).
+   - Tratar erro de unique violation no createLeadAction e mostrar mensagem clara.
+
+COMPATIBILIDADE COM O QUE JÁ EXISTE
+10) Não quebrar /leads e /leads/kanban:
+   - Ajustar queries para incluir joins nos catálogos (type/interest/source) e exibir labels.
+   - Onde o UI hoje mostra “title”, manter, mas adicionar client_name e telefone como destaque.
+   - Se existirem leads antigos sem esses campos, tratar com fallback (exibir “(Lead antigo)” e permitir editar para completar).
+
+REQUISITOS TÉCNICOS (NEXT.JS)
+A) Criar server actions:
+   - createLeadAction(input) -> valida obrigatórios, normaliza telefone, checa duplicidade, insere lead
+   - updateLeadAction(id, input)
+   - checkLeadByPhoneAction(phone_raw) -> normaliza e procura por phone_e164
+   - listCatalogAction(kind) -> retorna ativos ordenados (type/interest/source)
+   - adminUpsertCatalogAction(kind, item)
+B) UI:
+   - Atualizar CreateLeadForm com selects alimentados pelos catálogos.
+   - Adicionar aviso de duplicidade com link para /leads/[id].
+   - Criar settings page para gerenciar catálogos (CRUD + ativo + posição).
+C) DB/Migrações:
+   - SQL para criar tabelas, seeds, alterar leads com novas colunas, índices e FKs.
+   - backfill mínimo para leads antigos:
+     - phone_e164 null
+     - client_name = COALESCE(client_name, title, 'Lead antigo')
+     - permitir salvar após edição.
+
+SEGURANÇA
+- Manter políticas existentes funcionando.
+- Se RLS de leads existir, garantir inserts/updates ainda funcionem com auth.
+- Para as páginas de settings, colocar check server-side (role) se já existir; se ainda não existir módulo de roles, restringir temporariamente por “admin check” simples via env flag ou comentário TODO, mas não deixar aberto.
+
+TESTES (OBRIGATÓRIOS)
+1) Criar lead novo com todos obrigatórios -> aparece em /leads e /kanban.
+2) Tentar criar lead com mesmo telefone -> bloqueia e direciona ao existente.
+3) Desativar um interesse no settings -> não aparece mais no formulário.
+4) Build (npm run build) sem erros.
+
+ENTREGÁVEIS
+- Commits claros e organizados.
+- Código limpo, sem libs desnecessárias.
+
+EXECUÇÃO
+1) Checklist curto do plano.
+2) Implementar SQL/migração primeiro.
+3) Implementar normalização e actions.
+4) Atualizar forms e páginas.
+5) Rodar build e corrigir.
+
+IMPORTANTE
+- “Tipo”, “Interesse” e “Origem” devem ser CONFIGURÁVEIS via UI.
+- Anti-duplicidade por telefone deve existir em UX e no banco (unique index).

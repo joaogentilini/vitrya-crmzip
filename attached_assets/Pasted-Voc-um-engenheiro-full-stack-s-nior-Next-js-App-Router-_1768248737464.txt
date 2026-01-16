@@ -1,0 +1,88 @@
+Você é um engenheiro full-stack sênior (Next.js App Router + TypeScript + Supabase) e designer de sistemas focado em CRM imobiliário. Trabalhe no repositório `vitrya-crm`. Objetivo: implementar a ETAPA 3 (Opção A): **registrar explicitamente a ação move_stage** ao mover um lead no Kanban, garantindo que a Timeline (Histórico) mostre “Movido de X → Y” com clareza.
+
+REGRAS CRÍTICAS (OBRIGATÓRIAS)
+1) NÃO refatore telas antigas. Faça mudanças mínimas e localizadas.
+2) Não enfraquecer RLS. Não usar service_role no client.
+3) Inserções no `lead_audit_logs` devem respeitar RLS e usar `createClient()` no servidor (Server Action).
+4) Não quebrar drag-and-drop do Kanban.
+5) Build deve passar e não pode introduzir hydration mismatch.
+
+CONTEXTO
+- Já existe a tela do lead com Timeline consumindo `public.lead_audit_logs`.
+- A tabela `public.lead_audit_logs` tem: lead_id, actor_id, action, before, after, created_at.
+- Existe trigger para update/delete. Create é logado no createLeadAction.
+- Admin é `profiles.role='admin'` via `public.is_admin()`.
+- Leads têm `stage_id`, `pipeline_id`, `assigned_to`, `user_id`, etc.
+- Kanban já move lead de estágio (há algum fluxo que atualiza `leads.stage_id`).
+
+OBJETIVO EXATO
+Quando o usuário arrastar um lead de uma etapa para outra no Kanban:
+1) Atualizar `leads.stage_id` (isso já existe — mantenha).
+2) Criar um registro explícito em `lead_audit_logs` com:
+   - action: 'move_stage'
+   - actor_id: auth.uid() (usuário logado)
+   - lead_id: id do lead
+   - before: JSON com pelo menos { stage_id: <oldStageId> }
+   - after: JSON com pelo menos { stage_id: <newStageId> }
+   - (Opcional, se já tiver acesso aos nomes): incluir stage_name no before/after também
+3) Garantir que na Timeline o evento apareça como “Movido de Etapa A → Etapa B”.
+   - Se a Timeline atual já consegue deduzir isso via before/after.stage_id, ótimo.
+   - Se não, ajustar apenas o gerador de resumo para action 'move_stage' usando before/after.stage_id.
+
+ENTREGÁVEIS (obrigatórios)
+
+A) Criar Server Action: `moveLeadStageAction`
+- Local preferencial: `app/leads/actions.ts` (ou arquivo actions específico do kanban se já existir).
+- Assinatura sugerida:
+  moveLeadStageAction({ leadId: string, fromStageId: string, toStageId: string })
+- Implementação:
+  1) `const supabase = await createClient()`
+  2) `const user = await supabase.auth.getUser()` -> obter actorId
+  3) Fazer update no lead:
+     `update { stage_id: toStageId } where id=leadId`
+     - Atenção: não fazer select gigante; apenas o necessário
+  4) Inserir log:
+     `insert into lead_audit_logs({ lead_id, actor_id, action:'move_stage', before:{stage_id:fromStageId}, after:{stage_id:toStageId} })`
+  5) Revalidate:
+     - `/leads`
+     - `/leads/kanban` (se existir)
+     - `/leads/${leadId}` (para atualizar Timeline)
+
+B) Integrar no Kanban
+- Encontrar o arquivo do Kanban (ex.: `app/leads/kanban/...` ou `KanbanBoard`).
+- Onde hoje ocorre a mudança de etapa (onDragEnd / handler), substituir a chamada existente (ou complementar) para usar `moveLeadStageAction`.
+- Importante:
+  - Não quebrar DnD
+  - Garantir que o clique no link do título continua funcionando (já foi ajustado anteriormente)
+  - Usar transição/optimistic UI apenas se já existir; não é obrigatório criar.
+
+C) Ajustar Timeline para 'move_stage' (se necessário)
+- Local: componente/mapper da timeline já criado na etapa anterior.
+- Para action='move_stage':
+  - Se conseguir mapear stageId→nome, mostrar “Movido de {nomeFrom} → {nomeTo}”.
+  - Se não tiver nomes disponíveis, mostrar “Movido de etapa” e incluir IDs truncados.
+- Não renderizar JSON inteiro.
+
+D) Proteções
+- Se `fromStageId === toStageId`, não atualizar nem criar log.
+- Try/catch para insert do audit:
+  - Se o audit falhar, não deve impedir o update do lead (mas deve logar no console do servidor).
+- Garantir que o log de move_stage não duplica com triggers:
+  - O trigger de UPDATE vai gerar um evento action='update' também.
+  - Para evitar “duplicado visual” na Timeline, implementar regra na Timeline:
+    - quando houver um evento 'move_stage' para o mesmo lead e timestamp muito próximo, ocultar o 'update' que só mudou stage_id
+    - OU preferencialmente: no resumo do 'update', se a mudança for apenas stage_id e já existe move_stage, mostrar o update como “Atualização” sem duplicar. (Faça isso com mínima lógica.)
+
+CRITÉRIOS DE ACEITE (testes manuais)
+1) Arrastar um lead no Kanban muda a coluna e persiste no banco.
+2) Após mover, ao abrir `/leads/[id]`, a Timeline mostra um evento 'move_stage' com resumo “Movido de X → Y”.
+3) Usuário sem permissão não consegue mover (RLS bloqueia).
+4) Admin consegue mover qualquer lead.
+5) Build passa e dev server sem erros.
+
+SAÍDA (obrigatória)
+- Commit com mensagem clara.
+- Listar arquivos alterados.
+- Instruções de teste em 5 passos.
+
+Agora implemente com cuidado, seguindo as regras.

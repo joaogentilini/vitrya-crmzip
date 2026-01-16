@@ -1,154 +1,89 @@
 # Vitrya CRM
 
 ## Overview
-
-Vitrya CRM is a customer relationship management application built with Next.js 16 and Supabase. The application provides lead management functionality with a Kanban board interface for visualizing and managing leads through different pipeline stages. Users can create leads, move them between stages via drag-and-drop, and mark them as won or lost.
+Vitrya CRM is a customer relationship management application built with Next.js 16 and Supabase, designed for lead management with a Kanban board interface. It allows users to visualize and manage leads through various pipeline stages, including creation, drag-and-drop stage movement, and marking leads as won or lost. The project aims to provide a robust and intuitive platform for sales process optimization, incorporating features like task management, executive dashboards, and automated lead nurturing.
 
 ## User Preferences
-
 Preferred communication style: Simple, everyday language.
 
 ## System Architecture
+### Frontend
+- **Framework**: Next.js 16 (App Router)
+- **UI Pattern**: React Server Components for data fetching, Client Components for interactivity.
+- **Styling**: Tailwind CSS v4 with custom CSS properties for Vitrya brand theming.
+- **Design System**: Custom component library (`components/ui/`) with Vitrya design tokens and a brand color palette (Mirage, Cobalt, Off-White, Pumpkin Orange, Deep Teal).
+- **Drag-and-Drop**: `@dnd-kit` for Kanban board interactions.
+- **Fonts**: Inter, loaded via `next/font`.
+- **App Shell**: Fixed dark sidebar, light content area, responsive navigation, and full keyboard navigation support.
 
-### Frontend Architecture
-- **Framework**: Next.js 16 with App Router
-- **UI Pattern**: React Server Components for data fetching, Client Components for interactivity
-- **Styling**: Tailwind CSS v4 with CSS custom properties for theming (light/dark mode auto-detection)
-- **Design System**: Custom component library in `components/ui/` with consistent styling tokens
-- **Drag-and-Drop**: @dnd-kit library suite (core, sortable, utilities) for Kanban board interactions
-- **Fonts**: Geist font family loaded via next/font
-
-### Design System Components
-Located in `components/ui/`:
-- **Button**: Primary, secondary, ghost, outline, destructive, link variants with loading states
-- **Input**: Form input with label, hint, error state, and accessibility support (aria-describedby)
-- **Textarea**: Multi-line text input with label, hint, error state
-- **Select**: Styled select dropdown with label and error handling
-- **Card**: Container component with Header, Title, Description, Content, Footer sub-components
-- **Badge**: Status badges with success, warning, destructive, secondary variants
-- **Skeleton**: Loading placeholder components (Skeleton, CardSkeleton, TableRowSkeleton, PageSkeleton, KanbanSkeleton)
-- **EmptyState**: Zero-state display with icon presets, title, description, and action/CTA
-- **InlineError**: Error state with retry button for data loading failures
-- **Toast**: Toast notification system with ToastProvider context (success, error, warning, info)
-
-### App Shell Layout
-Located in `components/layout/AppShell.tsx`:
-- Responsive sidebar navigation with mobile hamburger menu (Escape to close)
-- Header with branding, page title breadcrumb, "Novo Lead" primary action button, and user dropdown menu
-- Navigation items with active/parent-active states: Leads list, Kanban board
-- User menu with avatar initial, email display, and sign-out action
-- Full keyboard navigation support with focus-visible styles
-- Used by authenticated pages via `LeadsAppShell` wrapper
-
-### Backend Architecture
-- **API Pattern**: Mix of Server Actions (`'use server'`) and Route Handlers (`/api/*`)
-- **Server Actions**: Used for lead creation (`createLeadAction`), lead update (`updateLeadAction`), lead movement (`moveLeadToStageAction`)
-- **Route Handlers**: REST endpoints at `/api/leads/finalize` for finalizing leads, `/api/health` for health checks
-- **Data Fetching**: Server Components fetch data directly using Supabase client, with `force-dynamic` and `revalidate = 0` for real-time data
-
-### State Management
-- **Server State**: Managed via Server Components with `revalidatePath()` for cache invalidation
-- **Client State**: React `useState` for form inputs and UI state, `useTransition` for pending states
-- **Auth State**: Supabase auth listeners with `onAuthStateChange` for session management
-- **Toast State**: Context-based toast notifications via `ToastProvider`
+### Backend
+- **API Pattern**: Mix of Server Actions (`'use server'`) for lead operations and Route Handlers (`/api/*`) for specific endpoints (e.g., lead finalization, health checks, automations).
+- **Data Fetching**: Server Components directly use Supabase client with `force-dynamic` and `revalidate = 0` for real-time data.
+- **State Management**: Server state via Server Components with `revalidatePath()`; client state via React `useState`, `useTransition`; auth state via Supabase auth listeners; toast notifications via `ToastProvider`.
 
 ### Authentication & Authorization
-- **Provider**: Supabase Auth with email/password authentication
-- **Client-side**: Browser client created via `@supabase/ssr` `createBrowserClient`
-- **Server-side**: Server client created via `@supabase/ssr` `createServerClient` with cookie handling
-- **User Context**: User ID extracted from session for data ownership (created_by, assigned_to fields)
+- **Provider**: Supabase Auth (email/password).
+- **Client/Server Integration**: `@supabase/ssr` for both browser and server-side client creation with cookie handling.
+- **User Context**: User ID from session for data ownership.
+- **Role System**: Three roles (admin, gestor, corretor) with cascading permissions.
+- **First User Bootstrap**: First authenticated user automatically becomes admin via ensureUserProfile.
+- **Route Protection**: Inactive users blocked at /blocked page; role-based access to settings.
+
+### User Management
+- **Profiles Table**: id, role, full_name, email, is_active, created_at, updated_at.
+- **Roles**: admin (full access), gestor (manage users/leads), corretor (own leads only).
+- **Lead Ownership**: owner_user_id field on leads; RLS filters by role; admin/gestor can reassign.
+- **API Routes**: /api/admin/users using service role key for privileged operations (create user, change role, reset password).
+- **Admin UI**: /settings/users page for user management (admin/gestor only).
 
 ### Data Model
-The application uses a pipeline-based lead management system:
-- **Pipelines**: Top-level containers for organizing sales processes
-- **Pipeline Stages**: Ordered stages within each pipeline (by position)
-- **Leads**: Individual opportunities with title, status (open/won/lost), pipeline assignment, and stage assignment
-- **Lead Stage Changes**: Audit log of stage movements with from/to stage and timestamp
+- **Core Entities**: Pipelines, Pipeline Stages, Leads, Lead Stage Changes, Lead Audit Logs, Lead Notes, Profiles, Tasks, Lead Catalogs (Types, Interests, Sources).
+- **Lead Fields**: title, client_name, phone_raw, phone_e164 (E.164 normalized), email, lead_type_id, lead_interest_id, lead_source_id, budget_range, notes.
+- **Lead Lifecycle**: Supports creation, status changes (open, won, lost), and detailed activity logging.
+- **Phone Validation**: Brazilian phone normalization to E.164 format (+55XXXXXXXXXXX); unique constraint on phone_e164 prevents duplicate leads.
+- **Task Management**: Tasks linked to leads with types, due dates, and assignment capabilities.
+- **Lead Notes**: Notes attached to leads (lead_notes table); RLS respects lead ownership; notes appear in timeline as 'Nota adicionada'.
 
-## Project Structure
+### Catalog System
+- **Tables**: lead_types, lead_interests, lead_sources - each with id, name, position, is_active, timestamps.
+- **Management**: Admin page at /settings/catalogs with tabs for Types, Interesses, and Origens. Toggle active/inactive, reorder, add/edit items.
+- **RLS**: Everyone can read catalogs, only admins can modify.
 
-```
-app/
-  page.tsx              # Login page with form accessibility
-  layout.tsx            # Root layout with ToastProvider
-  globals.css           # Design tokens, animations, and Tailwind v4 theme
-  leads/
-    page.tsx            # Leads list page with search, filters, sorting
-    LeadsList.tsx       # Client component with table/card layout
-    CreateLeadForm.tsx  # Lead creation form with validation
-    LeadsAppShell.tsx   # App shell wrapper for leads pages
-    ClientDate.tsx      # Hydration-safe date component
-    actions.ts          # Server actions: createLeadAction, updateLeadAction
-    [id]/
-      page.tsx          # Lead details 360° page
-      LeadDetailsClient.tsx  # Details view with timeline, cards, actions
-      EditLeadModal.tsx # Edit lead modal with validation
-    kanban/
-      page.tsx          # Kanban board page with AppShell
-      KanbanBoard.tsx   # Drag-and-drop Kanban component
-      actions.ts        # moveLeadToStageAction
-  auth/
-    callback/           # Supabase auth callback
-    reset/              # Password reset page
-    auth-code-error/    # Auth error display
-  api/
-    health/             # Health check endpoint
-    leads/finalize/     # Lead finalization endpoint
+### Key Features
+- **Lead Management**: Create, view, edit leads with full client profile (name, phone, email, type, interest, source, notes); Kanban board with drag-and-drop; phone duplicate prevention.
+- **Catalog Management**: Admin interface for managing lead types, interests, and sources at /settings/catalogs.
+- **Task System**: Create, complete, reschedule, and cancel tasks associated with leads. Overdue and no-action indicators.
+- **Timeline**: Detailed audit trail of lead activities, stage changes, and notes added.
+- **Automations**: Rules for auto-creating tasks based on lead events (e.g., creation, inactivity, stage movement), with anti-duplication and audit logging.
+- **Dashboard**: Executive metrics, lead overview, and upcoming tasks.
+- **Agenda**: Task calendar with daily/weekly views and direct task actions.
+- **User Interface**: Comprehensive design system with accessible and responsive components.
 
-components/
-  ui/                   # Design system components
-    Button.tsx          # Button with variants and loading state
-    Input.tsx           # Input with label, hint, error, accessibility
-    Textarea.tsx        # Textarea with label, hint, error
-    Select.tsx          # Select dropdown with label and error
-    Card.tsx            # Card container with sub-components
-    Badge.tsx           # Status badges
-    Skeleton.tsx        # Loading skeletons (Page, Kanban, Card, TableRow)
-    EmptyState.tsx      # Empty state with icon presets
-    InlineError.tsx     # Error state with retry button
-    Toast.tsx           # Toast notification system
-    index.ts            # Component exports
-  layout/
-    AppShell.tsx        # Main navigation layout with user menu
-
-lib/
-  supabaseClient.ts     # Browser Supabase client
-  supabaseServer.ts     # Server Supabase client
-```
+## Important Files
+- `lib/phone.ts` - Brazilian phone normalization to E.164 format
+- `lib/catalogs.ts` - Catalog CRUD operations (lead types, interests, sources)
+- `lib/automations.ts` - Automation rules and task creation
+- `lib/auth.ts` - Authentication helpers including ensureUserProfile and getCurrentUserProfile
+- `lib/authHelpers.ts` - Role check utilities (isAdmin, isAdminOrGestor, hasRole)
+- `app/leads/actions.ts` - Server actions for lead CRUD, phone duplicate checking, and owner reassignment
+- `app/leads/[id]/EditLeadModal.tsx` - Full lead editing modal with all catalog fields
+- `app/leads/LeadsList.tsx` - Lead list with catalog labels display
+- `app/api/admin/users/` - API routes for user management (create, update, reset password)
+- `app/settings/users/` - User management page with create user modal
+- `app/settings/catalogs/` - Admin catalog management page
+- `app/blocked/page.tsx` - Page shown to inactive users
+- `docs/migrations/20260114_0307_leads_schema_rls_audit.sql` - Migration for leads table schema, RLS policies, and audit trigger
+- `docs/migrations/20260115_lead_notes.sql` - Migration for lead_notes table with RLS policies
+- `docs/migrations/20260115_add_email_column.sql` - Migration to add email column to leads table
+- `app/leads/[id]/LeadNotes.tsx` - Lead notes UI component with add/delete functionality
+- `app/api/leads/[leadId]/notes/route.ts` - API for fetching and creating notes
+- `app/api/lead-notes/[id]/route.ts` - API for deleting notes
 
 ## External Dependencies
-
-### Supabase (Backend-as-a-Service)
-- **Authentication**: Email/password auth via Supabase Auth
-- **Database**: PostgreSQL database hosted on Supabase
-- **Client Libraries**: `@supabase/supabase-js` and `@supabase/ssr` for browser and server-side access
-- **Environment Variables Required**:
-  - `NEXT_PUBLIC_SUPABASE_URL`: Supabase project URL
-  - `NEXT_PUBLIC_SUPABASE_ANON_KEY`: Supabase anonymous/public key
-
-### Database Tables (Supabase/PostgreSQL)
-- `leads`: id, title, status, pipeline_id, stage_id, created_by, assigned_to, created_at
-- `pipelines`: id, name, created_at
-- `pipeline_stages`: id, pipeline_id, name, position
-- `lead_stage_changes`: id, lead_id, pipeline_id, from_stage_id, to_stage_id, created_at
-
-### UI Libraries
-- `@dnd-kit/core`, `@dnd-kit/sortable`, `@dnd-kit/utilities`: Drag-and-drop functionality for Kanban board
-
-## Recent Changes (January 2026)
-
-### ETAPA 2: Leads Professional
-- **Leads List PRO**: Search input, pipeline/stage/status filters, sorting (recent/name/stage), responsive table/cards
-- **Quick Actions**: View details link, move stage dropdown, mark won/lost buttons on each lead row/card
-- **Lead Details 360°**: New route `/leads/[id]` with header, status badge, pipeline/stage info
-- **Timeline**: Shows lead creation and stage changes from `lead_stage_changes` table
-- **Edit Modal**: Title validation, pipeline/stage selection, loading states, toast feedback
-- **Cards Layout**: Contact, Interest/Origin, Notes, Next action placeholder cards
-- **Server Actions**: Added `updateLeadAction` for editing leads
-
-### ETAPA 1: Base Premium UX/UI
-- **App Shell**: Header with page title, "Novo Lead" button, user menu; sidebar with active states
-- **Design Tokens**: CSS variables for colors, typography, animations
-- **UI Components**: Button, Input, Textarea, Select, Card, Badge, Skeleton, Toast, EmptyState, InlineError
-- **State System**: PageSkeleton, KanbanSkeleton, InlineError with retry
-- **Accessibility**: Focus-visible styles, keyboard navigation, ARIA attributes
+- **Supabase**:
+    - **Authentication**: Email/password authentication.
+    - **Database**: PostgreSQL database.
+    - **Client Libraries**: `@supabase/supabase-js`, `@supabase/ssr`.
+    - **Environment Variables**: `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`.
+- **UI Libraries**:
+    - `@dnd-kit/core`, `@dnd-kit/sortable`, `@dnd-kit/utilities`: For drag-and-drop functionality in the Kanban board.

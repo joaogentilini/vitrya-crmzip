@@ -9,9 +9,19 @@ interface NavItem {
   href: string
   label: string
   icon: ReactNode
+  children?: NavItem[]
 }
 
 const navItems: NavItem[] = [
+  {
+    href: '/dashboard',
+    label: 'Dashboard',
+    icon: (
+      <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
+      </svg>
+    ),
+  },
   {
     href: '/leads',
     label: 'Leads',
@@ -29,6 +39,54 @@ const navItems: NavItem[] = [
         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 17V7m0 10a2 2 0 01-2 2H5a2 2 0 01-2-2V7a2 2 0 012-2h2a2 2 0 012 2m0 10a2 2 0 002 2h2a2 2 0 002-2M9 7a2 2 0 012-2h2a2 2 0 012 2m0 10V7m0 10a2 2 0 002 2h2a2 2 0 002-2V7a2 2 0 00-2-2h-2a2 2 0 00-2 2" />
       </svg>
     ),
+  },
+  {
+    href: '/agenda',
+    label: 'Agenda',
+    icon: (
+      <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+      </svg>
+    ),
+  },
+  {
+    href: '/settings',
+    label: 'Configurações',
+    icon: (
+      <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+      </svg>
+    ),
+    children: [
+      {
+        href: '/settings/users',
+        label: 'Usuários',
+        icon: (
+          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
+          </svg>
+        ),
+      },
+      {
+        href: '/settings/catalogs',
+        label: 'Catálogos',
+        icon: (
+          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
+          </svg>
+        ),
+      },
+      {
+        href: '/settings/automations',
+        label: 'Automações',
+        icon: (
+          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+          </svg>
+        ),
+      },
+    ],
   },
 ]
 
@@ -53,6 +111,7 @@ export function AppShell({
   const router = useRouter()
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [userMenuOpen, setUserMenuOpen] = useState(false)
+  const [settingsOpen, setSettingsOpen] = useState(() => pathname?.startsWith('/settings') || false)
 
   const closeSidebar = useCallback(() => setSidebarOpen(false), [])
   const closeUserMenu = useCallback(() => setUserMenuOpen(false), [])
@@ -77,9 +136,147 @@ export function AppShell({
   }
 
   return (
-    <div className="min-h-screen bg-[var(--background)]">
-      <header className="sticky top-0 z-40 border-b border-[var(--border)] bg-[var(--card)]">
-        <div className="flex h-14 items-center px-4 gap-4">
+    <div className="min-h-screen flex bg-[var(--background)] overflow-x-hidden">
+      <aside
+        className={`
+          fixed inset-y-0 left-0 z-30 w-64 bg-[var(--sidebar-bg)] 
+          transform transition-transform duration-200 ease-in-out
+          lg:translate-x-0 lg:static lg:inset-auto
+          ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'}
+          flex flex-col
+        `}
+        role="navigation"
+        aria-label="Menu principal"
+      >
+        <div className="h-14 flex items-center px-4 border-b border-white/10">
+          <Link 
+            href="/leads" 
+            className="flex items-center gap-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)] rounded-[var(--radius)]"
+          >
+            <div className="w-8 h-8 rounded-lg bg-[var(--primary)] flex items-center justify-center">
+              <span className="text-white font-bold text-sm">V</span>
+            </div>
+            <span className="font-semibold text-lg text-white">Vitrya</span>
+            <span className="text-[var(--sidebar-muted)] text-sm font-normal">CRM</span>
+          </Link>
+        </div>
+
+        <nav className="flex-1 p-3 space-y-1 overflow-y-auto">
+          {navItems.map((item) => {
+            const isActive = pathname === item.href
+            const isParentActive = pathname?.startsWith(item.href + '/') || (item.href === '/settings' && pathname?.startsWith('/settings'))
+            const hasChildren = item.children && item.children.length > 0
+
+            if (hasChildren) {
+              return (
+                <div key={item.href}>
+                  <button
+                    onClick={() => setSettingsOpen(!settingsOpen)}
+                    className={`
+                      w-full flex items-center justify-between gap-3 px-3 py-2.5 rounded-[var(--radius)] text-sm font-medium
+                      transition-all duration-150
+                      focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)]
+                      ${isParentActive
+                        ? 'bg-[var(--sidebar-hover)] text-white'
+                        : 'text-[var(--sidebar-muted)] hover:bg-[var(--sidebar-hover)] hover:text-white'
+                      }
+                    `}
+                  >
+                    <span className="flex items-center gap-3">
+                      {item.icon}
+                      {item.label}
+                    </span>
+                    <svg 
+                      className={`w-4 h-4 transition-transform duration-200 ${settingsOpen ? 'rotate-180' : ''}`} 
+                      fill="none" 
+                      viewBox="0 0 24 24" 
+                      stroke="currentColor"
+                    >
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                    </svg>
+                  </button>
+                  {settingsOpen && (
+                    <div className="mt-1 ml-4 space-y-1">
+                      {item.children!.map((child) => {
+                        const isChildActive = pathname === child.href
+                        return (
+                          <Link
+                            key={child.href}
+                            href={child.href}
+                            onClick={closeSidebar}
+                            aria-current={isChildActive ? 'page' : undefined}
+                            className={`
+                              flex items-center gap-3 px-3 py-2 rounded-[var(--radius)] text-sm font-medium
+                              transition-all duration-150
+                              focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)]
+                              ${isChildActive
+                                ? 'bg-[var(--sidebar-active)] text-white shadow-sm'
+                                : 'text-[var(--sidebar-muted)] hover:bg-[var(--sidebar-hover)] hover:text-white'
+                              }
+                            `}
+                          >
+                            {child.icon}
+                            {child.label}
+                          </Link>
+                        )
+                      })}
+                    </div>
+                  )}
+                </div>
+              )
+            }
+
+            return (
+              <Link
+                key={item.href}
+                href={item.href}
+                onClick={closeSidebar}
+                aria-current={isActive ? 'page' : undefined}
+                className={`
+                  flex items-center gap-3 px-3 py-2.5 rounded-[var(--radius)] text-sm font-medium
+                  transition-all duration-150
+                  focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)]
+                  ${isActive
+                    ? 'bg-[var(--sidebar-active)] text-white shadow-sm'
+                    : isParentActive
+                      ? 'bg-[var(--sidebar-hover)] text-white'
+                      : 'text-[var(--sidebar-muted)] hover:bg-[var(--sidebar-hover)] hover:text-white'
+                  }
+                `}
+              >
+                {item.icon}
+                {item.label}
+              </Link>
+            )
+          })}
+        </nav>
+
+        <div className="p-3 border-t border-white/10">
+          {showNewLeadButton && (
+            <Button 
+              size="sm" 
+              onClick={handleNewLead} 
+              className="w-full"
+            >
+              <svg className="w-4 h-4 mr-1.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+              </svg>
+              Novo Lead
+            </Button>
+          )}
+        </div>
+      </aside>
+
+      {sidebarOpen && (
+        <div
+          className="fixed inset-0 z-20 bg-black/50 lg:hidden"
+          onClick={closeSidebar}
+          aria-hidden="true"
+        />
+      )}
+
+      <div className="flex-1 flex flex-col min-w-0 overflow-x-hidden">
+        <header className="sticky top-0 z-40 h-14 border-b border-[var(--border)] bg-[var(--card)] flex items-center px-4 gap-4">
           <button
             onClick={() => setSidebarOpen(!sidebarOpen)}
             className="lg:hidden p-2 rounded-[var(--radius)] hover:bg-[var(--accent)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)]"
@@ -91,21 +288,10 @@ export function AppShell({
             </svg>
           </button>
 
-          <Link 
-            href="/leads" 
-            className="flex items-center gap-2 font-semibold text-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)] rounded-[var(--radius)]"
-          >
-            <span className="text-[var(--primary)]">Vitrya</span>
-            <span className="text-[var(--muted-foreground)]">CRM</span>
-          </Link>
-
           {pageTitle && (
-            <>
-              <span className="text-[var(--muted-foreground)] hidden sm:inline">/</span>
-              <h1 className="text-base font-medium text-[var(--foreground)] hidden sm:inline">
-                {pageTitle}
-              </h1>
-            </>
+            <h1 className="text-base font-semibold text-[var(--foreground)]">
+              {pageTitle}
+            </h1>
           )}
 
           <div className="flex-1" />
@@ -127,7 +313,7 @@ export function AppShell({
                 aria-label="Menu do usuário"
                 aria-expanded={userMenuOpen}
               >
-                <div className="w-8 h-8 rounded-full bg-[var(--primary)] text-[var(--primary-foreground)] flex items-center justify-center text-sm font-medium">
+                <div className="w-8 h-8 rounded-full bg-[var(--secondary)] text-[var(--secondary-foreground)] flex items-center justify-center text-sm font-medium">
                   {userEmail.charAt(0).toUpperCase()}
                 </div>
                 <svg className="w-4 h-4 text-[var(--muted-foreground)] hidden sm:block" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -168,74 +354,12 @@ export function AppShell({
               )}
             </div>
           )}
-        </div>
-      </header>
+        </header>
 
-      <div className="flex">
-        <aside
-          className={`
-            fixed inset-y-0 left-0 z-30 w-64 bg-[var(--card)] border-r border-[var(--border)]
-            transform transition-transform duration-200 ease-in-out
-            lg:translate-x-0 lg:static lg:inset-auto
-            ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'}
-            pt-14 lg:pt-0
-          `}
-          role="navigation"
-          aria-label="Menu principal"
-        >
-          <div className="flex flex-col h-full">
-            <nav className="flex-1 p-4 space-y-1">
-              {navItems.map((item) => {
-                const isActive = pathname === item.href
-                const isParentActive = pathname?.startsWith(item.href + '/')
-                return (
-                  <Link
-                    key={item.href}
-                    href={item.href}
-                    onClick={closeSidebar}
-                    aria-current={isActive ? 'page' : undefined}
-                    className={`
-                      flex items-center gap-3 px-3 py-2.5 rounded-[var(--radius)] text-sm font-medium
-                      transition-colors
-                      focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)]
-                      ${isActive
-                        ? 'bg-[var(--primary)] text-[var(--primary-foreground)] shadow-sm'
-                        : isParentActive
-                          ? 'bg-[var(--accent)] text-[var(--accent-foreground)]'
-                          : 'text-[var(--muted-foreground)] hover:bg-[var(--accent)] hover:text-[var(--accent-foreground)]'
-                      }
-                    `}
-                  >
-                    {item.icon}
-                    {item.label}
-                  </Link>
-                )
-              })}
-            </nav>
-
-            <div className="p-4 border-t border-[var(--border)] lg:hidden">
-              {showNewLeadButton && (
-                <Button size="sm" onClick={handleNewLead} className="w-full">
-                  <svg className="w-4 h-4 mr-1.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-                  </svg>
-                  Novo Lead
-                </Button>
-              )}
-            </div>
+        <main className="flex-1 p-4 sm:p-6 lg:p-8 overflow-x-hidden">
+          <div className="max-w-[1280px] mx-auto w-full">
+            {children}
           </div>
-        </aside>
-
-        {sidebarOpen && (
-          <div
-            className="fixed inset-0 z-20 bg-black/50 lg:hidden"
-            onClick={closeSidebar}
-            aria-hidden="true"
-          />
-        )}
-
-        <main className="flex-1 p-4 sm:p-6 lg:p-8 min-h-[calc(100vh-3.5rem)]">
-          {children}
         </main>
       </div>
     </div>

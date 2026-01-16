@@ -1,8 +1,9 @@
 'use client'
 
-import { useMemo, useRef, useState, useTransition } from 'react'
+import { useMemo, useRef, useState, useTransition, useCallback, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
-import { createLeadAction } from './actions'
+import Link from 'next/link'
+import { createLeadAction, checkLeadByPhoneAction, DuplicateCheckResult } from './actions'
 import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
 import { useToast } from '@/components/ui/Toast'
@@ -20,20 +21,54 @@ type StageRow = {
   position: number
 }
 
+type CatalogItem = {
+  id: string
+  name: string
+}
+
+type CorretorProfile = {
+  id: string
+  full_name: string
+}
+
 type Props = {
   pipelines: PipelineRow[]
   stages: StageRow[]
+  leadTypes?: CatalogItem[]
+  leadInterests?: CatalogItem[]
+  leadSources?: CatalogItem[]
+  corretores?: CorretorProfile[]
+  isAdminOrGestor?: boolean
+  currentUserId?: string
 }
 
-export function CreateLeadForm({ pipelines, stages }: Props) {
+export function CreateLeadForm({ pipelines, stages, leadTypes = [], leadInterests = [], leadSources = [], corretores = [], isAdminOrGestor = false, currentUserId = '' }: Props) {
   const router = useRouter()
   const formRef = useRef<HTMLFormElement>(null)
   const [isPending, startTransition] = useTransition()
   const { success, error: showError } = useToast()
 
   const [pipelineId, setPipelineId] = useState<string>(pipelines?.[0]?.id ?? '')
-  const [title, setTitle] = useState('')
-  const [titleError, setTitleError] = useState<string | undefined>()
+  const [clientName, setClientName] = useState('')
+  const [clientNameError, setClientNameError] = useState<string | undefined>()
+  const [phone, setPhone] = useState('')
+  const [phoneError, setPhoneError] = useState<string | undefined>()
+  const [leadTypeId, setLeadTypeId] = useState<string>('')
+  const [leadInterestId, setLeadInterestId] = useState<string>('')
+  const [leadSourceId, setLeadSourceId] = useState<string>('')
+  const [email, setEmail] = useState('')
+  const [emailError, setEmailError] = useState<string | undefined>()
+  const [notes, setNotes] = useState('')
+  const [ownerUserId, setOwnerUserId] = useState<string>(currentUserId)
+
+  useEffect(() => {
+    if (currentUserId && !ownerUserId) {
+      setOwnerUserId(currentUserId)
+    }
+  }, [currentUserId, ownerUserId])
+
+  const [duplicateLead, setDuplicateLead] = useState<DuplicateCheckResult['lead'] | null>(null)
+  const [isCheckingPhone, setIsCheckingPhone] = useState(false)
 
   const stageOptions = useMemo(() => {
     return stages
@@ -51,15 +86,50 @@ export function CreateLeadForm({ pipelines, stages }: Props) {
     setStageId(first?.id ?? '')
   }
 
+  const checkPhoneDuplicate = useCallback(async (phoneValue: string) => {
+    if (!phoneValue || phoneValue.length < 10) {
+      setDuplicateLead(null)
+      return
+    }
+
+    setIsCheckingPhone(true)
+    try {
+      const result = await checkLeadByPhoneAction(phoneValue)
+      if (result.exists && result.lead) {
+        setDuplicateLead(result.lead)
+        setPhoneError('Já existe um lead com esse telefone')
+      } else {
+        setDuplicateLead(null)
+        setPhoneError(undefined)
+      }
+    } catch (err) {
+      console.error('Error checking phone:', err)
+    } finally {
+      setIsCheckingPhone(false)
+    }
+  }, [])
+
   function validateForm(): boolean {
     let isValid = true
-    setTitleError(undefined)
+    setClientNameError(undefined)
+    setPhoneError(undefined)
+    setEmailError(undefined)
 
-    if (!title.trim()) {
-      setTitleError('O título é obrigatório')
+    if (!clientName.trim()) {
+      setClientNameError('O nome do cliente é obrigatório')
       isValid = false
-    } else if (title.trim().length < 3) {
-      setTitleError('O título deve ter pelo menos 3 caracteres')
+    } else if (clientName.trim().length < 2) {
+      setClientNameError('O nome deve ter pelo menos 2 caracteres')
+      isValid = false
+    }
+
+    if (!phone.trim()) {
+      setPhoneError('O telefone é obrigatório')
+      isValid = false
+    }
+
+    if (duplicateLead) {
+      setPhoneError('Já existe um lead com esse telefone')
       isValid = false
     }
 
@@ -70,6 +140,21 @@ export function CreateLeadForm({ pipelines, stages }: Props) {
 
     if (!stageId) {
       showError('Selecione um estágio.')
+      isValid = false
+    }
+
+    if (!leadTypeId) {
+      showError('Selecione o tipo do lead.')
+      isValid = false
+    }
+
+    if (!leadInterestId) {
+      showError('Selecione o interesse do lead.')
+      isValid = false
+    }
+
+    if (!leadSourceId) {
+      showError('Selecione a origem do lead.')
       isValid = false
     }
 
@@ -84,90 +169,254 @@ export function CreateLeadForm({ pipelines, stages }: Props) {
     }
 
     startTransition(async () => {
-      try {
-        await createLeadAction({ title: title.trim(), pipelineId, stageId })
-        setTitle('')
-        setTitleError(undefined)
-        success('Lead criado com sucesso!')
-        router.refresh()
-      } catch (e: unknown) {
-        const message = e instanceof Error ? e.message : 'Erro ao criar lead.'
-        showError(message)
+      const result = await createLeadAction({ 
+        title: clientName.trim(),
+        clientName: clientName.trim(),
+        phoneRaw: phone.trim(),
+        email: email.trim() || undefined,
+        pipelineId: pipelineId || undefined, 
+        stageId: stageId || undefined,
+        leadTypeId: leadTypeId || undefined,
+        leadInterestId: leadInterestId || undefined,
+        leadSourceId: leadSourceId || undefined,
+        notes: notes.trim() || undefined,
+        ownerUserId: ownerUserId || undefined,
+      })
+
+      if (!result.ok) {
+        if (result.code === 'PHONE_DUPLICATE') {
+          setPhoneError(result.message)
+        } else if (result.code === 'PHONE_INVALID') {
+          setPhoneError(result.message)
+        } else if (result.code === 'EMAIL_INVALID') {
+          setEmailError(result.message)
+        } else if (result.code === 'VALIDATION_ERROR') {
+          setClientNameError(result.message)
+        } else {
+          showError(result.message)
+        }
+        console.error('[CreateLeadForm] Error:', result.code, result.message, result.details)
+        return
       }
+
+      // Success - reset form
+      setClientName('')
+      setPhone('')
+      setEmail('')
+      setLeadTypeId('')
+      setLeadInterestId('')
+      setLeadSourceId('')
+      setNotes('')
+      setOwnerUserId(currentUserId)
+      setDuplicateLead(null)
+      setClientNameError(undefined)
+      setPhoneError(undefined)
+      setEmailError(undefined)
+      success('Lead criado com sucesso!')
+      router.refresh()
     })
   }
+
+  const selectClass = "flex h-10 w-full rounded-[var(--radius)] border border-[var(--input)] bg-[var(--background)] px-3 py-2 text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--background)] disabled:cursor-not-allowed disabled:opacity-50"
 
   return (
     <form
       ref={formRef}
       onSubmit={onSubmit}
       data-lead-form
-      className="flex flex-wrap items-end gap-3 p-4 bg-[var(--card)] rounded-[var(--radius-lg)] border border-[var(--border)] shadow-sm"
+      className="p-4 bg-[var(--card)] rounded-[var(--radius-lg)] border border-[var(--border)] shadow-sm space-y-4"
     >
-      <div className="flex-1 min-w-[200px]">
-        <Input
-          name="title"
-          label="Título do Lead"
-          placeholder="Ex: Empresa XYZ - Projeto Web"
-          hint="Identifique o lead de forma clara"
-          value={title}
-          onChange={(e) => {
-            setTitle(e.target.value)
-            if (titleError) setTitleError(undefined)
-          }}
-          error={titleError}
-          disabled={isPending}
-          autoComplete="off"
-        />
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        <div>
+          <Input
+            name="clientName"
+            label="Nome do Cliente *"
+            placeholder="Ex: João Silva"
+            value={clientName}
+            onChange={(e) => {
+              setClientName(e.target.value)
+              if (clientNameError) setClientNameError(undefined)
+            }}
+            error={clientNameError}
+            disabled={isPending}
+            autoComplete="off"
+          />
+        </div>
+
+        <div>
+          <Input
+            name="phone"
+            label="Telefone *"
+            placeholder="(11) 99999-9999"
+            value={phone}
+            onChange={(e) => {
+              setPhone(e.target.value)
+              if (phoneError) setPhoneError(undefined)
+              setDuplicateLead(null)
+            }}
+            onBlur={() => checkPhoneDuplicate(phone)}
+            error={phoneError}
+            disabled={isPending}
+            autoComplete="tel"
+          />
+          {isCheckingPhone && (
+            <p className="text-xs text-[var(--muted-foreground)] mt-1">Verificando...</p>
+          )}
+          {duplicateLead && (
+            <div className="mt-2 p-2 bg-[var(--warning)]/10 border border-[var(--warning)] rounded-[var(--radius)] text-sm">
+              <p className="text-[var(--warning)] font-medium">Já existe um lead com esse telefone:</p>
+              <p className="text-[var(--foreground)]">{duplicateLead.client_name || duplicateLead.title}</p>
+              <Link 
+                href={`/leads/${duplicateLead.id}`}
+                className="inline-flex items-center gap-1 text-[var(--primary)] hover:underline mt-1"
+              >
+                Abrir lead existente →
+              </Link>
+            </div>
+          )}
+        </div>
+
+        <div>
+          <Input
+            name="email"
+            label="Email"
+            type="email"
+            placeholder="email@exemplo.com"
+            value={email}
+            onChange={(e) => {
+              setEmail(e.target.value)
+              if (emailError) setEmailError(undefined)
+            }}
+            error={emailError}
+            disabled={isPending}
+            autoComplete="email"
+          />
+        </div>
+
+        <div>
+          <label className="block text-sm font-medium mb-1.5 text-[var(--foreground)]">
+            Tipo *
+          </label>
+          <select
+            value={leadTypeId}
+            onChange={(e) => setLeadTypeId(e.target.value)}
+            disabled={isPending || leadTypes.length === 0}
+            className={selectClass}
+          >
+            <option value="">Selecione...</option>
+            {leadTypes.map((t) => (
+              <option key={t.id} value={t.id}>{t.name}</option>
+            ))}
+          </select>
+        </div>
+
+        <div>
+          <label className="block text-sm font-medium mb-1.5 text-[var(--foreground)]">
+            Interesse *
+          </label>
+          <select
+            value={leadInterestId}
+            onChange={(e) => setLeadInterestId(e.target.value)}
+            disabled={isPending || leadInterests.length === 0}
+            className={selectClass}
+          >
+            <option value="">Selecione...</option>
+            {leadInterests.map((t) => (
+              <option key={t.id} value={t.id}>{t.name}</option>
+            ))}
+          </select>
+        </div>
+
+        <div>
+          <label className="block text-sm font-medium mb-1.5 text-[var(--foreground)]">
+            Origem *
+          </label>
+          <select
+            value={leadSourceId}
+            onChange={(e) => setLeadSourceId(e.target.value)}
+            disabled={isPending || leadSources.length === 0}
+            className={selectClass}
+          >
+            <option value="">Selecione...</option>
+            {leadSources.map((t) => (
+              <option key={t.id} value={t.id}>{t.name}</option>
+            ))}
+          </select>
+        </div>
+
+        {isAdminOrGestor && corretores.length > 0 && (
+          <div>
+            <label className="block text-sm font-medium mb-1.5 text-[var(--foreground)]">
+              Responsável
+            </label>
+            <select
+              value={ownerUserId}
+              onChange={(e) => setOwnerUserId(e.target.value)}
+              disabled={isPending}
+              className={selectClass}
+            >
+              {corretores.map((c) => (
+                <option key={c.id} value={c.id}>{c.full_name}</option>
+              ))}
+            </select>
+          </div>
+        )}
+
+        <div>
+          <label className="block text-sm font-medium mb-1.5 text-[var(--foreground)]">
+            Pipeline
+          </label>
+          <select
+            id="pipeline-select"
+            value={pipelineId}
+            onChange={(e) => onChangePipeline(e.target.value)}
+            disabled={isPending || pipelines.length === 0}
+            className={selectClass}
+          >
+            {pipelines.map((p) => (
+              <option key={p.id} value={p.id}>
+                {p.name}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        <div>
+          <label className="block text-sm font-medium mb-1.5 text-[var(--foreground)]">
+            Estágio
+          </label>
+          <select
+            id="stage-select"
+            value={stageId}
+            onChange={(e) => setStageId(e.target.value)}
+            disabled={isPending || !pipelineId || stageOptions.length === 0}
+            className={selectClass}
+          >
+            {stageOptions.map((s) => (
+              <option key={s.id} value={s.id}>
+                {s.name}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        <div className="md:col-span-2 lg:col-span-2">
+          <Input
+            name="notes"
+            label="Observações"
+            placeholder="Informações adicionais sobre o lead..."
+            value={notes}
+            onChange={(e) => setNotes(e.target.value)}
+            disabled={isPending}
+          />
+        </div>
       </div>
 
-      <div className="min-w-[180px]">
-        <label 
-          htmlFor="pipeline-select"
-          className="block text-sm font-medium mb-1.5 text-[var(--foreground)]"
-        >
-          Pipeline
-        </label>
-        <select
-          id="pipeline-select"
-          value={pipelineId}
-          onChange={(e) => onChangePipeline(e.target.value)}
-          disabled={isPending || pipelines.length === 0}
-          className="flex h-10 w-full rounded-[var(--radius)] border border-[var(--input)] bg-[var(--background)] px-3 py-2 text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--background)] disabled:cursor-not-allowed disabled:opacity-50"
-        >
-          {pipelines.map((p) => (
-            <option key={p.id} value={p.id}>
-              {p.name}
-            </option>
-          ))}
-        </select>
+      <div className="flex justify-end pt-2">
+        <Button type="submit" loading={isPending} disabled={isPending || !!duplicateLead}>
+          {isPending ? 'Criando...' : 'Criar Lead'}
+        </Button>
       </div>
-
-      <div className="min-w-[160px]">
-        <label 
-          htmlFor="stage-select"
-          className="block text-sm font-medium mb-1.5 text-[var(--foreground)]"
-        >
-          Estágio
-        </label>
-        <select
-          id="stage-select"
-          value={stageId}
-          onChange={(e) => setStageId(e.target.value)}
-          disabled={isPending || !pipelineId || stageOptions.length === 0}
-          className="flex h-10 w-full rounded-[var(--radius)] border border-[var(--input)] bg-[var(--background)] px-3 py-2 text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--background)] disabled:cursor-not-allowed disabled:opacity-50"
-        >
-          {stageOptions.map((s) => (
-            <option key={s.id} value={s.id}>
-              {s.name}
-            </option>
-          ))}
-        </select>
-      </div>
-
-      <Button type="submit" loading={isPending} disabled={isPending}>
-        {isPending ? 'Criando...' : 'Criar Lead'}
-      </Button>
     </form>
   )
 }

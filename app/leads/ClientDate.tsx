@@ -2,7 +2,12 @@
 
 import { useState, useEffect } from 'react'
 
-export function ClientDate({ value }: { value: string }) {
+interface ClientDateProps {
+  value: string
+  format?: 'full' | 'short' | 'date'
+}
+
+export function ClientDate({ value, format = 'full' }: ClientDateProps) {
   const [mounted, setMounted] = useState(false)
 
   useEffect(() => {
@@ -15,6 +20,14 @@ export function ClientDate({ value }: { value: string }) {
   if (!mounted) {
     return <span>{d.toISOString().split('T')[0]}</span>
   }
+
+  if (format === 'short') {
+    return <span>{d.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })}</span>
+  }
+
+  if (format === 'date') {
+    return <span>{d.toLocaleDateString('pt-BR')}</span>
+  }
   
-  return <span>{d.toLocaleString()}</span>
+  return <span>{d.toLocaleString('pt-BR')}</span>
 }
