@@ -150,13 +150,9 @@ export default async function LeadDetailsPage({
 
   const tasks = (tasksRaw ?? []) as TaskRow[]
 
-  const { data: currentUserProfile } = await supabase
-    .from('profiles')
-    .select('id, role, full_name')
-    .single()
-
-  const isAdmin = currentUserProfile?.role === 'admin'
-  const isAdminOrGestor = currentUserProfile?.role === 'admin' || currentUserProfile?.role === 'gestor'
+  // Use the profile we already have from ensureUserProfile()
+  const isAdmin = profile.role === 'admin'
+  const isAdminOrGestor = profile.role === 'admin' || profile.role === 'gestor'
 
   // Fetch assignable users based on role
   let assignableUsers: { id: string; full_name: string }[] = []
@@ -169,9 +165,9 @@ export default async function LeadDetailsPage({
       .order('full_name', { ascending: true })
     
     assignableUsers = (usersRaw ?? []) as { id: string; full_name: string }[]
-  } else if (currentUserProfile) {
+  } else {
     // Corretor can only see themselves
-    assignableUsers = [{ id: currentUserProfile.id, full_name: currentUserProfile.full_name || 'Você' }]
+    assignableUsers = [{ id: profile.id, full_name: profile.full_name || 'Você' }]
   }
 
   // Resolve responsible user ID: assigned_to > owner_user_id > created_by
