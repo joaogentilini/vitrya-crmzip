@@ -1,5 +1,7 @@
 # Vitrya CRM - Migrations Guide
 
+> **Documentação do schema atual:** [SCHEMA_BASELINE.md](./SCHEMA_BASELINE.md)
+
 ## Estrutura de Migrations
 
 As migrations ficam em dois diretórios:
