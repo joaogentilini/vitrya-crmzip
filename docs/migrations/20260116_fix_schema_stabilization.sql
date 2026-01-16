@@ -607,6 +607,60 @@ INSERT INTO public.pipeline_stages (id, pipeline_id, name, position)
 SELECT gen_random_uuid(), '00000000-0000-0000-0000-000000000002', 'Contrato', 3
 WHERE NOT EXISTS (SELECT 1 FROM public.pipeline_stages WHERE pipeline_id = '00000000-0000-0000-0000-000000000002' AND name = 'Contrato');
 
+-- ============================================================
+-- SAFETY PATCH (Fix 42P10): guarantee UNIQUE(name) for catalogs
+-- even if tables pre-existed without the constraint.
+-- Also remove duplicates before adding the unique constraint.
+-- ============================================================
+
+-- lead_types: remove duplicates by name (keep oldest created_at)
+DELETE FROM public.lead_types a
+USING public.lead_types b
+WHERE a.id <> b.id
+  AND a.name = b.name
+  AND a.created_at > b.created_at;
+
+-- lead_interests: remove duplicates by name (keep oldest created_at)
+DELETE FROM public.lead_interests a
+USING public.lead_interests b
+WHERE a.id <> b.id
+  AND a.name = b.name
+  AND a.created_at > b.created_at;
+
+-- lead_sources: remove duplicates by name (keep oldest created_at)
+DELETE FROM public.lead_sources a
+USING public.lead_sources b
+WHERE a.id <> b.id
+  AND a.name = b.name
+  AND a.created_at > b.created_at;
+
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint
+    WHERE conname = 'lead_types_name_unique'
+  ) THEN
+    ALTER TABLE public.lead_types
+      ADD CONSTRAINT lead_types_name_unique UNIQUE (name);
+  END IF;
+
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint
+    WHERE conname = 'lead_interests_name_unique'
+  ) THEN
+    ALTER TABLE public.lead_interests
+      ADD CONSTRAINT lead_interests_name_unique UNIQUE (name);
+  END IF;
+
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint
+    WHERE conname = 'lead_sources_name_unique'
+  ) THEN
+    ALTER TABLE public.lead_sources
+      ADD CONSTRAINT lead_sources_name_unique UNIQUE (name);
+  END IF;
+END $$;
+
 -- Seed catalogs if empty
 INSERT INTO public.lead_types (name, position, is_active) VALUES ('Compra', 0, true) ON CONFLICT (name) DO NOTHING;
 INSERT INTO public.lead_types (name, position, is_active) VALUES ('Venda', 1, true) ON CONFLICT (name) DO NOTHING;

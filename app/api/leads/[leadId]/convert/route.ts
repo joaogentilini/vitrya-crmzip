@@ -131,6 +131,9 @@ export async function POST(
     }
 
     const ownerId = lead.assigned_to || lead.owner_user_id || lead.created_by || user.id
+    
+    // Build client name from available lead fields (required NOT NULL)
+    const clientName = lead.client_name || lead.name || lead.title || 'Cliente (Lead)'
 
     const { data: existingClient } = await adminSupabase
       .from('clients')
@@ -150,6 +153,10 @@ export async function POST(
       const { data: updatedClient, error: updateError } = await adminSupabase
         .from('clients')
         .update({
+          name: clientName,
+          phone: lead.phone_raw || null,
+          phone_e164: lead.phone_e164 || null,
+          email: lead.email || null,
           owner_user_id: ownerId,
           status: 'active',
           types: mergedTypes.length > 0 ? mergedTypes : null,
@@ -170,8 +177,13 @@ export async function POST(
       const { data: newClient, error: clientError } = await adminSupabase
         .from('clients')
         .insert({
+          name: clientName,
+          phone: lead.phone_raw || null,
+          phone_e164: lead.phone_e164 || null,
+          email: lead.email || null,
           person_id: personId,
           owner_user_id: ownerId,
+          created_by: user.id,
           status: 'active',
           types: validTypes.length > 0 ? validTypes : null
         })
