@@ -1,11 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 
-const PROTECTED = ["/leads","/people","/dashboard", "/agenda", "/settings", "/kanban",];
+const PROTECTED = ["/leads", "/people", "/dashboard", "/agenda", "/settings", "/kanban"];
+const isDev = process.env.NODE_ENV === "development";
 
 export function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
 
-  // Ignora rotas internas/arquivos estáticos
   if (
     pathname.startsWith("/_next") ||
     pathname.startsWith("/api") ||
@@ -14,30 +14,48 @@ export function middleware(req: NextRequest) {
     return NextResponse.next();
   }
 
-  // Checa se a rota é protegida
   const isProtected = PROTECTED.some(
     (p) => pathname === p || pathname.startsWith(p + "/")
   );
   if (!isProtected) return NextResponse.next();
 
-  // Verifica se tem sessão (qualquer cookie sb-* com auth/access/refresh token)
   const allCookies = req.cookies.getAll();
+  
+  if (isDev) {
+    const cookieNames = allCookies.map(c => c.name);
+    console.log(`[middleware] pathname=${pathname}, cookies found:`, cookieNames);
+  }
+
   const hasSession = allCookies.some((cookie) => {
     if (!cookie.name.startsWith("sb-")) return false;
+    
     const lowerName = cookie.name.toLowerCase();
-    return (
+    
+    if (
       lowerName.includes("auth-token") ||
       lowerName.includes("access-token") ||
       lowerName.includes("refresh-token") ||
       lowerName.includes("access_token") ||
       lowerName.includes("refresh_token")
-    );
+    ) {
+      return true;
+    }
+    
+    if (/\.0$|\.1$|\.2$|\.3$|\.4$/.test(cookie.name)) {
+      return true;
+    }
+    
+    return false;
   });
 
-  // Se tem sessão, segue normal
-  if (hasSession) return NextResponse.next();
+  const hasAuthHeader = req.headers.get("authorization")?.startsWith("Bearer ");
 
-  // Se não tem sessão, redireciona para "/" (home/login) e guarda a rota desejada
+  if (isDev) {
+    console.log(`[middleware] hasSession=${hasSession}, hasAuthHeader=${hasAuthHeader}`);
+  }
+
+  if (hasSession || hasAuthHeader) return NextResponse.next();
+
   const url = req.nextUrl.clone();
   url.pathname = "/";
   url.searchParams.set("next", pathname);
