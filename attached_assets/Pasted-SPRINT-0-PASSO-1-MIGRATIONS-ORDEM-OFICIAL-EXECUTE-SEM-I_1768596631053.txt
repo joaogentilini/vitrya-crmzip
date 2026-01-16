@@ -1,0 +1,64 @@
+SPRINT 0 — PASSO 1 (MIGRATIONS / ORDEM OFICIAL) — EXECUTE SEM INVENTAR
+
+OBJETIVO:
+Criar a “fonte única de verdade” das migrations SQL no repo, com ordem oficial e documentação. NÃO recriar banco. NÃO apagar nada. NÃO mexer em UI. Só organizar versionamento.
+
+REGRAS:
+- Se já existir pasta de migrations no repo, usar ela (não criar outra).
+- Se não existir, criar /supabase/migrations.
+- Não editar migrations já aplicadas; criar novas.
+- Commit 1 ao final deste passo.
+
+1) DETECTAR PADRÃO ATUAL
+- Verifique se existe: supabase/config.toml, supabase/migrations, supabase/seed.sql, scripts db/, ou docs db.
+- Decida o caminho oficial:
+  A) Supabase migrations em /supabase/migrations (preferido)
+  B) db/migrations (somente se já existir e estiver em uso)
+- Registre a decisão em docs/db/MIGRATIONS.md.
+
+2) CRIAR ESTRUTURA
+- Garanta estas pastas/arquivos:
+  - docs/db/
+  - docs/db/MIGRATIONS.md
+  - docs/db/SCHEMA_BASELINE.md (ou .sql, conforme melhor encaixar)
+  - supabase/migrations/ (se for o padrão escolhido)
+
+3) GERAR “BASELINE” DO ESTADO ATUAL (SEM RECRIAR)
+- Criar um arquivo de referência do schema atual:
+  - Preferência: dump do schema (SQL) se houver tooling no repo.
+  - Se não houver tooling: gerar baseline via queries em information_schema/pg_catalog e salvar como “SCHEMA_BASELINE.md” (listando tabelas, colunas, triggers, views, functions, policies RLS encontradas).
+IMPORTANTE: baseline é documentação/registro do estado atual, não um script para recriar o banco.
+
+4) CRIAR A PRIMEIRA MIGRATION “BASELINE”
+- Criar 1 migration nova com nome padrão:
+  YYYYMMDDHHMMSS__baseline.sql
+- Conteúdo:
+  - Apenas comentários (não DDL destrutivo)
+  - Referência ao baseline gerado
+  - Um “header” padronizado com:
+    - propósito
+    - data
+    - observação: “não aplicar para recriar banco; estado inicial versionado”
+
+5) DOCUMENTAR COMO APLICAR (DEV + PROD EASYPANEL)
+No docs/db/MIGRATIONS.md, incluir:
+- Como rodar migrations local (se tiver supabase CLI: supabase db push/migrate; se não tiver, orientar execução manual controlada)
+- Como aplicar em produção (EasyPanel):
+  - Política: aplicar migrations em janela controlada
+  - Ordem: por timestamp
+  - Log do que foi aplicado
+- Política de mudança:
+  - proibido editar migration aplicada
+  - novas alterações = nova migration
+
+6) CHECKS
+- Verificar que nada do app quebrou (npm run build / lint se existir)
+- Não alterou nenhuma tabela/trigger/policy do banco.
+
+ENTREGAR NO FINAL:
+- Arquivos criados/alterados (lista)
+- Qual padrão ficou oficial (supabase/migrations ou outro)
+- Comandos para rodar/checkar
+- 1 commit com mensagem: "chore(db): add migrations baseline and docs"
+
+EXECUTE AGORA.
