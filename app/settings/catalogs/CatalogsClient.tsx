@@ -63,6 +63,10 @@ export function CatalogsClient({ userEmail, leadTypes, leadInterests, leadSource
   const [localInterests, setLocalInterests] = useState(leadInterests)
   const [localSources, setLocalSources] = useState(leadSources)
 
+  const [editModalOpen, setEditModalOpen] = useState(false)
+  const [editingItem, setEditingItem] = useState<CatalogItem | null>(null)
+  const [editingName, setEditingName] = useState('')
+
   const handleSignOut = useCallback(async () => {
     await supabase.auth.signOut()
     success('Você saiu da conta.')
@@ -158,6 +162,40 @@ export function CatalogsClient({ userEmail, leadTypes, leadInterests, leadSource
         setItems(items.map((item, i) => ({ ...item, position: i })))
       } catch (err) {
         showError(err instanceof Error ? err.message : 'Erro ao reordenar')
+      }
+    })
+  }
+
+  const openEditModal = (item: CatalogItem) => {
+    setEditingItem(item)
+    setEditingName(item.name)
+    setEditModalOpen(true)
+  }
+
+  const handleSaveEdit = () => {
+    if (!editingItem) return
+    if (!editingName.trim()) {
+      showError('Nome não pode ser vazio')
+      return
+    }
+
+    startTransition(async () => {
+      try {
+        await apiUpsert(activeTab, {
+          id: editingItem.id,
+          name: editingName.trim(),
+          is_active: editingItem.is_active,
+          position: editingItem.position,
+        })
+        setItems(getItems().map(i => 
+          i.id === editingItem.id ? { ...i, name: editingName.trim() } : i
+        ))
+        success('Nome atualizado!')
+        setEditModalOpen(false)
+        setEditingItem(null)
+        setEditingName('')
+      } catch (err) {
+        showError(err instanceof Error ? err.message : 'Erro ao atualizar')
       }
     })
   }
@@ -285,6 +323,17 @@ export function CatalogsClient({ userEmail, leadTypes, leadInterests, leadSource
                         {item.is_active ? 'Ativo' : 'Inativo'}
                       </Badge>
                     </div>
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={() => openEditModal(item)}
+                        disabled={isPending}
+                        className="p-1.5 rounded-[var(--radius)] text-[var(--muted-foreground)] hover:text-[var(--foreground)] hover:bg-[var(--accent)] disabled:opacity-50"
+                        title="Editar nome"
+                      >
+                        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                        </svg>
+                      </button>
                     <button
                       onClick={() => handleToggleActive(item)}
                       disabled={isPending}
@@ -305,6 +354,7 @@ export function CatalogsClient({ userEmail, leadTypes, leadInterests, leadSource
                         `}
                       />
                     </button>
+                    </div>
                   </div>
                 ))}
               </div>
@@ -312,6 +362,58 @@ export function CatalogsClient({ userEmail, leadTypes, leadInterests, leadSource
           </CardContent>
         </Card>
       </div>
+
+      {editModalOpen && editingItem && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+          <div className="bg-[var(--card)] rounded-lg shadow-lg w-full max-w-md p-6 space-y-4">
+            <div className="flex items-center justify-between">
+              <h3 className="text-lg font-semibold text-[var(--foreground)]">Editar Nome</h3>
+              <button
+                onClick={() => {
+                  setEditModalOpen(false)
+                  setEditingItem(null)
+                  setEditingName('')
+                }}
+                className="text-[var(--muted-foreground)] hover:text-[var(--foreground)]"
+              >
+                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+            <div className="space-y-2">
+              <label className="text-sm font-medium text-[var(--foreground)]">Nome</label>
+              <Input
+                value={editingName}
+                onChange={(e) => setEditingName(e.target.value)}
+                placeholder="Nome do item"
+                disabled={isPending}
+                onKeyDown={(e) => e.key === 'Enter' && handleSaveEdit()}
+              />
+            </div>
+            <div className="flex justify-end gap-2 pt-2">
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setEditModalOpen(false)
+                  setEditingItem(null)
+                  setEditingName('')
+                }}
+                disabled={isPending}
+              >
+                Cancelar
+              </Button>
+              <Button
+                onClick={handleSaveEdit}
+                loading={isPending}
+                disabled={!editingName.trim()}
+              >
+                Salvar
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
     </AppShell>
   )
 }
