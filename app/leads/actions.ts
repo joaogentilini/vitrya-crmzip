@@ -458,7 +458,7 @@ export async function updateLeadAction(data: UpdateLeadInput): Promise<ActionRes
   return { ok: true, data: { success: true } }
 }
 
-export async function updateLeadOwnerAction(leadId: string, newOwnerId: string): Promise<ActionResult<{ success: boolean }>> {
+export async function updateLeadOwnerAction(leadId: string, newAssignedTo: string): Promise<ActionResult<{ success: boolean }>> {
   const supabase = await createClient()
   
   const { data: userRes, error: authError } = await supabase.auth.getUser()
@@ -477,17 +477,20 @@ export async function updateLeadOwnerAction(leadId: string, newOwnerId: string):
     .eq('id', actorId)
     .single()
 
-  if (profile?.role !== 'admin' && profile?.role !== 'gestor') {
+  const isAdminOrGestor = profile?.role === 'admin' || profile?.role === 'gestor'
+  
+  // Corretor can only assign to themselves
+  if (!isAdminOrGestor && newAssignedTo !== actorId) {
     return {
       ok: false,
       code: 'FORBIDDEN',
-      message: 'Apenas admin/gestor pode reatribuir leads'
+      message: 'Você só pode atribuir leads a si mesmo'
     }
   }
 
   const { data: currentLead } = await supabase
     .from('leads')
-    .select('id, owner_user_id')
+    .select('id, assigned_to, owner_user_id')
     .eq('id', leadId)
     .maybeSingle()
 
@@ -499,9 +502,17 @@ export async function updateLeadOwnerAction(leadId: string, newOwnerId: string):
     }
   }
 
+  // Update assigned_to (primary), and set owner_user_id only if missing
+  const updates: { assigned_to: string; owner_user_id?: string } = { 
+    assigned_to: newAssignedTo 
+  }
+  if (!currentLead.owner_user_id) {
+    updates.owner_user_id = newAssignedTo
+  }
+
   const { error: updateError } = await supabase
     .from('leads')
-    .update({ owner_user_id: newOwnerId })
+    .update(updates)
     .eq('id', leadId)
 
   if (updateError) {
@@ -518,9 +529,9 @@ export async function updateLeadOwnerAction(leadId: string, newOwnerId: string):
   supabase.from('lead_audit_logs').insert({
     lead_id: leadId,
     actor_id: actorId,
-    action: 'owner_changed',
-    before: { owner_user_id: currentLead.owner_user_id },
-    after: { owner_user_id: newOwnerId },
+    action: 'assigned_to_changed',
+    before: { assigned_to: currentLead.assigned_to },
+    after: { assigned_to: newAssignedTo },
   }).then(({ error }) => {
     if (error) console.error('[updateLeadOwnerAction] auditError:', error)
   })

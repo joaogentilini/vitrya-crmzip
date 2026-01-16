@@ -152,21 +152,26 @@ export default async function LeadDetailsPage({
 
   const { data: currentUserProfile } = await supabase
     .from('profiles')
-    .select('id, role')
+    .select('id, role, full_name')
     .single()
 
   const isAdmin = currentUserProfile?.role === 'admin'
   const isAdminOrGestor = currentUserProfile?.role === 'admin' || currentUserProfile?.role === 'gestor'
 
-  let corretores: { id: string; full_name: string }[] = []
+  // Fetch assignable users based on role
+  let assignableUsers: { id: string; full_name: string }[] = []
   if (isAdminOrGestor) {
-    const { data: corretoresRaw } = await supabase
+    // Admin/gestor can see all active users
+    const { data: usersRaw } = await supabase
       .from('profiles')
       .select('id, full_name')
       .eq('is_active', true)
       .order('full_name', { ascending: true })
     
-    corretores = (corretoresRaw ?? []) as { id: string; full_name: string }[]
+    assignableUsers = (usersRaw ?? []) as { id: string; full_name: string }[]
+  } else if (currentUserProfile) {
+    // Corretor can only see themselves
+    assignableUsers = [{ id: currentUserProfile.id, full_name: currentUserProfile.full_name || 'Você' }]
   }
 
   // Resolve responsible user ID: assigned_to > owner_user_id > created_by
@@ -174,10 +179,10 @@ export default async function LeadDetailsPage({
   let responsibleName: string | null = null
   
   if (responsibleUserId) {
-    // First check if we already have the profile in corretores
-    const foundInCorretores = corretores.find(c => c.id === responsibleUserId)
-    if (foundInCorretores) {
-      responsibleName = foundInCorretores.full_name
+    // First check if we already have the profile in assignableUsers
+    const foundInAssignable = assignableUsers.find(c => c.id === responsibleUserId)
+    if (foundInAssignable) {
+      responsibleName = foundInAssignable.full_name
     } else {
       // Fetch from profiles
       const { data: responsibleProfile } = await supabase
@@ -306,7 +311,7 @@ export default async function LeadDetailsPage({
         leadTypes={leadTypes}
         leadInterests={leadInterests}
         leadSources={leadSources}
-        corretores={corretores}
+        assignableUsers={assignableUsers}
         currentUserId={currentUserId}
         responsibleName={responsibleName}
       />

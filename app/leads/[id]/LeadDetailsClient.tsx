@@ -28,7 +28,7 @@ type CatalogItem = {
   name: string;
 };
 
-type CorretorProfile = {
+type AssignableUser = {
   id: string;
   full_name: string;
 };
@@ -48,7 +48,7 @@ interface LeadDetailsClientProps {
   leadTypes?: CatalogItem[];
   leadInterests?: CatalogItem[];
   leadSources?: CatalogItem[];
-  corretores?: CorretorProfile[];
+  assignableUsers?: AssignableUser[];
   currentUserId: string;
   responsibleName?: string | null;
 }
@@ -68,7 +68,7 @@ export function LeadDetailsClient({
   leadTypes = [],
   leadInterests = [],
   leadSources = [],
-  corretores = [],
+  assignableUsers = [],
   currentUserId,
   responsibleName,
 }: LeadDetailsClientProps) {
@@ -83,12 +83,12 @@ export function LeadDetailsClient({
   const [editModalOpen, setEditModalOpen] = useState(false);
 
   const handleChangeOwner = useCallback(
-    (newOwnerId: string) => {
-      if (newOwnerId === lead.owner_user_id) return;
+    (newAssignedTo: string) => {
+      if (newAssignedTo === lead.assigned_to) return;
 
       startTransition(async () => {
         const { updateLeadOwnerAction } = await import("../actions");
-        const result = await updateLeadOwnerAction(lead.id, newOwnerId);
+        const result = await updateLeadOwnerAction(lead.id, newAssignedTo);
         
         if (!result.ok) {
           showError(result.message);
@@ -100,7 +100,7 @@ export function LeadDetailsClient({
         router.refresh();
       });
     },
-    [lead.id, lead.owner_user_id, router, success, showError],
+    [lead.id, lead.assigned_to, router, success, showError],
   );
 
   const availableStages = stages.filter(
@@ -372,17 +372,17 @@ export function LeadDetailsClient({
               <p className="text-xs text-[var(--muted-foreground)] mb-1">
                 Responsável
               </p>
-              {isAdminOrGestor && corretores.length > 0 ? (
+              {assignableUsers.length > 0 ? (
                 <select
-                  value={lead.owner_user_id || ""}
+                  value={lead.assigned_to || ""}
                   onChange={(e) => handleChangeOwner(e.target.value)}
                   disabled={isPending}
                   className="h-8 w-full max-w-[200px] rounded-[var(--radius)] border border-[var(--input)] bg-[var(--background)] px-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)] disabled:opacity-50"
                 >
-                  <option value="">Sem responsável</option>
-                  {corretores.map((c) => (
-                    <option key={c.id} value={c.id}>
-                      {c.full_name}
+                  {isAdminOrGestor && <option value="">Sem responsável</option>}
+                  {assignableUsers.map((u) => (
+                    <option key={u.id} value={u.id}>
+                      {u.full_name}
                     </option>
                   ))}
                 </select>
