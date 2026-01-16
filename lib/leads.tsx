@@ -23,6 +23,10 @@ export type LeadRow = {
   notes?: string | null
   owner_user_id?: string | null
   updated_at?: string | null
+  person_id?: string | null
+  client_id?: string | null
+  is_converted?: boolean
+  converted_at?: string | null
 }
 
 export type PipelineRow = {

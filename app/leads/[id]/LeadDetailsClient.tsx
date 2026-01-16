@@ -11,6 +11,7 @@ import { ClientDate } from "../ClientDate";
 import { EditLeadModal } from "./EditLeadModal";
 import { LeadTimeline } from "./LeadTimeline";
 import { LeadNotes } from "./LeadNotes";
+import { ConvertLeadModal } from "./ConvertLeadModal";
 import {
   type LeadRow,
   type PipelineRow,
@@ -81,6 +82,9 @@ export function LeadDetailsClient({
   const { success, error: showError } = useToast();
   const [isPending, startTransition] = useTransition();
   const [editModalOpen, setEditModalOpen] = useState(false);
+  const [convertModalOpen, setConvertModalOpen] = useState(false);
+  const [convertedClientId, setConvertedClientId] = useState<string | null>(lead.client_id || null);
+  const [convertedPersonId, setConvertedPersonId] = useState<string | null>(lead.person_id || null);
 
   const handleChangeOwner = useCallback(
     (newAssignedTo: string) => {
@@ -174,6 +178,14 @@ export function LeadDetailsClient({
                   {lead.title}
                 </h1>
                 {getStatusBadge(lead.status, "lg")}
+                {(lead.is_converted || convertedClientId) && (
+                  <span className="inline-flex items-center px-3 py-1 text-sm font-medium rounded-full bg-[#294487] text-white">
+                    <svg className="w-3.5 h-3.5 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                    </svg>
+                    Cliente
+                  </span>
+                )}
               </div>
 
               <div className="flex flex-wrap items-center gap-4 text-sm text-[var(--muted-foreground)]">
@@ -253,6 +265,30 @@ export function LeadDetailsClient({
                 </svg>
                 Editar
               </Button>
+
+              {!lead.is_converted && !convertedClientId && (
+                <Button
+                  variant="outline"
+                  onClick={() => setConvertModalOpen(true)}
+                  disabled={isPending}
+                  className="border-[#294487] text-[#294487] hover:bg-[#294487] hover:text-white"
+                >
+                  <svg
+                    className="w-4 h-4 mr-1.5"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    stroke="currentColor"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"
+                    />
+                  </svg>
+                  Converter em Cliente
+                </Button>
+              )}
 
               {lead.status === "open" && (
                 <>
@@ -618,6 +654,19 @@ export function LeadDetailsClient({
         leadInterests={leadInterests}
         leadSources={leadSources}
       />
+
+      {convertModalOpen && (
+        <ConvertLeadModal
+          leadId={lead.id}
+          leadTitle={lead.title}
+          onClose={() => setConvertModalOpen(false)}
+          onSuccess={(clientId, personId) => {
+            setConvertedClientId(clientId);
+            setConvertedPersonId(personId);
+            setConvertModalOpen(false);
+          }}
+        />
+      )}
     </div>
   );
 }

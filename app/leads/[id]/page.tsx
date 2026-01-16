@@ -19,11 +19,17 @@ type LeadRow = {
   client_name: string | null
   phone_raw: string | null
   phone_e164: string | null
+  email: string | null
   lead_type_id: string | null
   lead_interest_id: string | null
   lead_source_id: string | null
   budget_range: string | null
   notes: string | null
+  owner_user_id: string | null
+  person_id: string | null
+  client_id: string | null
+  is_converted: boolean
+  converted_at: string | null
 }
 
 type CatalogItem = {
@@ -95,7 +101,7 @@ export default async function LeadDetailsPage({
 
   const { data: lead, error } = await supabase
     .from('leads')
-    .select('id, title, status, pipeline_id, stage_id, created_at, created_by, assigned_to, client_name, phone_raw, phone_e164, email, lead_type_id, lead_interest_id, lead_source_id, budget_range, notes, owner_user_id')
+    .select('id, title, status, pipeline_id, stage_id, created_at, created_by, assigned_to, client_name, phone_raw, phone_e164, email, lead_type_id, lead_interest_id, lead_source_id, budget_range, notes, owner_user_id, person_id, client_id, is_converted, converted_at')
     .eq('id', id)
     .single()
 
