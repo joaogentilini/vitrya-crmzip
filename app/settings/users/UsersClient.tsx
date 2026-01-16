@@ -485,12 +485,18 @@ function EditUserModal({ user, onClose, onSuccess, currentUserRole }: EditUserMo
         const data = await resp.json().catch(() => ({ error: 'Erro de comunicação com servidor' }))
         
         if (!resp.ok) {
+          console.error('[EditUserModal] Error updating user:', {
+            status: resp.status,
+            statusText: resp.statusText,
+            body: data
+          })
           throw new Error(data.error || 'Erro ao atualizar usuário')
         }
         
         success('Usuário atualizado com sucesso')
         onSuccess()
       } catch (err) {
+        console.error('[EditUserModal] Exception:', err)
         showError(err instanceof Error ? err.message : 'Erro ao atualizar usuário')
       }
     })
