@@ -20,7 +20,7 @@ CREATE INDEX IF NOT EXISTS idx_people_email ON public.people(email);
 CREATE TABLE IF NOT EXISTS public.clients (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   person_id uuid NOT NULL REFERENCES public.people(id) ON DELETE RESTRICT,
-  owner_id uuid NOT NULL REFERENCES public.profiles(id) ON DELETE SET NULL,
+  owner_id uuid NOT NULL REFERENCES public.profiles(id) ON DELETE RESTRICT,
   status text NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'inactive')),
   types text[] NULL,
   notes text,
