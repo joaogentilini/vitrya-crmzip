@@ -81,23 +81,48 @@ export async function POST(
     let personId = lead.person_id
 
     if (!personId) {
-      const { data: newPerson, error: personError } = await adminSupabase
-        .from('people')
-        .insert({
-          full_name: lead.client_name || lead.title,
-          phone_e164: lead.phone_e164 || null,
-          email: lead.email || null,
-          notes: lead.notes || null
-        })
-        .select('id')
-        .single()
+      // Try to find existing person by phone_e164 first, then by email
+      let existingPerson = null
 
-      if (personError) {
-        console.error('[POST /api/leads/[id]/convert] Person creation error:', personError)
-        return NextResponse.json({ error: 'Erro ao criar pessoa' }, { status: 500 })
+      if (lead.phone_e164) {
+        const { data: personByPhone } = await adminSupabase
+          .from('people')
+          .select('id')
+          .eq('phone_e164', lead.phone_e164)
+          .single()
+        existingPerson = personByPhone
       }
 
-      personId = newPerson.id
+      if (!existingPerson && lead.email) {
+        const { data: personByEmail } = await adminSupabase
+          .from('people')
+          .select('id')
+          .eq('email', lead.email)
+          .single()
+        existingPerson = personByEmail
+      }
+
+      if (existingPerson) {
+        personId = existingPerson.id
+      } else {
+        const { data: newPerson, error: personError } = await adminSupabase
+          .from('people')
+          .insert({
+            full_name: lead.client_name || lead.title,
+            phone_e164: lead.phone_e164 || null,
+            email: lead.email || null,
+            notes: lead.notes || null
+          })
+          .select('id')
+          .single()
+
+        if (personError) {
+          console.error('[POST /api/leads/[id]/convert] Person creation error:', personError)
+          return NextResponse.json({ error: 'Erro ao criar pessoa' }, { status: 500 })
+        }
+
+        personId = newPerson.id
+      }
 
       await adminSupabase
         .from('leads')
@@ -125,7 +150,7 @@ export async function POST(
       const { data: updatedClient, error: updateError } = await adminSupabase
         .from('clients')
         .update({
-          owner_id: ownerId,
+          owner_user_id: ownerId,
           status: 'active',
           types: mergedTypes.length > 0 ? mergedTypes : null,
           updated_at: new Date().toISOString()
@@ -146,7 +171,7 @@ export async function POST(
         .from('clients')
         .insert({
           person_id: personId,
-          owner_id: ownerId,
+          owner_user_id: ownerId,
           status: 'active',
           types: validTypes.length > 0 ? validTypes : null
         })
