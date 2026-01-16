@@ -3,6 +3,29 @@ import { NextRequest, NextResponse } from "next/server";
 const PROTECTED = ["/leads", "/people", "/dashboard", "/agenda", "/settings", "/kanban"];
 const isDev = process.env.NODE_ENV === "development";
 
+function isSupabaseAuthCookie(cookieName: string): boolean {
+  if (!cookieName.startsWith("sb-")) return false;
+  
+  const lowerName = cookieName.toLowerCase();
+  
+  if (
+    lowerName.includes("auth-token") ||
+    lowerName.includes("access-token") ||
+    lowerName.includes("refresh-token") ||
+    lowerName.includes("access_token") ||
+    lowerName.includes("refresh_token")
+  ) {
+    return true;
+  }
+  
+  const authTokenChunkPattern = /^sb-[a-z0-9]+-auth-token\.\d+$/i;
+  if (authTokenChunkPattern.test(cookieName)) {
+    return true;
+  }
+  
+  return false;
+}
+
 export function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
 
@@ -26,29 +49,10 @@ export function middleware(req: NextRequest) {
     console.log(`[middleware] pathname=${pathname}, cookies found:`, cookieNames);
   }
 
-  const hasSession = allCookies.some((cookie) => {
-    if (!cookie.name.startsWith("sb-")) return false;
-    
-    const lowerName = cookie.name.toLowerCase();
-    
-    if (
-      lowerName.includes("auth-token") ||
-      lowerName.includes("access-token") ||
-      lowerName.includes("refresh-token") ||
-      lowerName.includes("access_token") ||
-      lowerName.includes("refresh_token")
-    ) {
-      return true;
-    }
-    
-    if (/\.0$|\.1$|\.2$|\.3$|\.4$/.test(cookie.name)) {
-      return true;
-    }
-    
-    return false;
-  });
+  const hasSession = allCookies.some((cookie) => isSupabaseAuthCookie(cookie.name));
 
-  const hasAuthHeader = req.headers.get("authorization")?.startsWith("Bearer ");
+  const authHeader = req.headers.get("authorization");
+  const hasAuthHeader = authHeader?.startsWith("Bearer ") && authHeader.length > 7;
 
   if (isDev) {
     console.log(`[middleware] hasSession=${hasSession}, hasAuthHeader=${hasAuthHeader}`);
