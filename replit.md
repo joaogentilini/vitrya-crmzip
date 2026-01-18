@@ -58,6 +58,13 @@ Preferred communication style: Simple, everyday language.
 - **Signed URLs**: All media accessed via signed URLs (600s expiry); on-demand for gallery, auto-loaded for cover preview.
 - **Videos**: Cannot be set as cover via UI; warning shown if current cover is video.
 
+### Property Documents System
+- **Storage**: Supabase Storage bucket `property-documents` (private).
+- **Path Format**: `properties/${propertyId}/${uuid}-${filename}` stored in `path` column.
+- **DB Table**: `property_documents` with columns: id, property_id, doc_type (authorization/other), title, path, mime_type, size_bytes, created_at.
+- **Authorization Check**: Properties can only be published (status=active) if they have at least one document with doc_type='authorization'.
+- **Signed URLs**: Documents accessed via signed URLs (600s expiry) on preview.
+
 ### Key Features
 - **Lead Management**: Create, view, edit leads with full client profile (name, phone, email, type, interest, source, notes); Kanban board with drag-and-drop; phone duplicate prevention.
 - **Catalog Management**: Admin interface for managing lead types, interests, and sources at /settings/catalogs.
