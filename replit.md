@@ -50,9 +50,18 @@ Preferred communication style: Simple, everyday language.
 - **Management**: Admin page at /settings/catalogs with tabs for Types, Interesses, and Origens. Toggle active/inactive, reorder, add/edit items.
 - **RLS**: Everyone can read catalogs, only admins can modify.
 
+### Property Media System
+- **Storage**: Supabase Storage bucket `property-media` (private).
+- **Path Format**: `properties/${propertyId}/${uuid}-${filename}` stored in `url` column.
+- **DB Table**: `property_media` with columns: id, property_id, url (path), kind (image/video), position, created_at.
+- **Cover System**: Position 1 is the cover; setAsCover reindexes all positions sequentially.
+- **Signed URLs**: All media accessed via signed URLs (600s expiry); on-demand for gallery, auto-loaded for cover preview.
+- **Videos**: Cannot be set as cover via UI; warning shown if current cover is video.
+
 ### Key Features
 - **Lead Management**: Create, view, edit leads with full client profile (name, phone, email, type, interest, source, notes); Kanban board with drag-and-drop; phone duplicate prevention.
 - **Catalog Management**: Admin interface for managing lead types, interests, and sources at /settings/catalogs.
+- **Property Media**: Cover + Gallery layout with upload, preview, delete, reorder, and set-as-cover functionality.
 - **Task System**: Create, complete, reschedule, and cancel tasks associated with leads. Overdue and no-action indicators.
 - **Timeline**: Detailed audit trail of lead activities, stage changes, and notes added.
 - **Automations**: Rules for auto-creating tasks based on lead events (e.g., creation, inactivity, stage movement), with anti-duplication and audit logging.
@@ -85,6 +94,9 @@ Preferred communication style: Simple, everyday language.
 - `app/api/leads/[leadId]/convert/route.ts` - API for converting leads to clients (uses owner_user_id, not owner_id)
 - `app/leads/[id]/ConvertLeadModal.tsx` - Modal for lead to client conversion
 - `app/perfil/page.tsx` - User profile editing page
+- `app/properties/[id]/media/page.tsx` - Property media page (Server Component)
+- `app/properties/[id]/media/PropertyMediaManager.tsx` - Property media manager with cover + gallery layout
+- `app/properties/media-test/page.tsx` - Test page for property media
 
 ## External Dependencies
 - **Supabase**:
