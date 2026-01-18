@@ -1,0 +1,124 @@
+Contexto do projeto (NÃO CRIAR MIGRATIONS):
+
+Já existe a tabela public.properties.
+
+Já existe a tabela public.property_media com colunas: id, property_id (FK), url, kind ('image'|'video'), position, created_at.
+
+Já existe o Supabase Storage bucket privado property-media.
+
+O padrão de path obrigatório é: properties/<propertyId>/<uuid>-<filename>.
+
+No banco, property_media.url deve armazenar somente o path (não URL pública).
+
+Preview deve usar createSignedUrl (bucket é privado).
+
+Objetivo:
+Implementar as telas/componentes no Next.js para:
+
+upload (multi arquivo)
+
+listagem por imóvel
+
+preview (signed URL)
+
+delete (storage + DB)
+
+reorder (swap de position)
+
+Criar rota do módulo de mídia do imóvel:
+
+Criar arquivo: app/properties/[id]/media/page.tsx
+
+Renderiza o componente client PropertyMediaManager com propertyId=params.id.
+
+Criar componente client:
+
+Criar arquivo: app/properties/[id]/media/PropertyMediaManager.tsx
+Requisitos:
+
+input type="file" com multiple e accept="image/*,video/*".
+
+Ao selecionar arquivos:
+
+gerar uuid com crypto.randomUUID()
+
+sanitizar filename
+
+montar path: properties/${propertyId}/${uuid}-${filename}
+
+fazer upload em supabase.storage.from('property-media').upload(path, file, { upsert:false })
+
+inserir em supabase.from('property_media').insert({ property_id: propertyId, url: path, kind, position })
+
+kind = 'video' se file.type começar com video/, senão 'image'
+
+position = (max position atual + 1) incremental
+
+Listar:
+
+select * from property_media where property_id = propertyId order by position asc, created_at asc
+
+Preview:
+
+createSignedUrl(url, 600) (10 minutos) e abrir em nova aba
+
+Delete:
+
+storage.remove([url]) depois delete from property_media where id = ...
+
+Reorder:
+
+botões ↑ ↓ para trocar position entre item atual e o vizinho (swap via 2 updates)
+
+UI:
+
+Usar componentes existentes: Card, Button, Input
+
+Mostrar erro amigável
+
+Link de acesso (mesmo sem existir “módulo imóveis completo”):
+
+Se já existir um detalhe em app/properties/[id]/page.tsx, adicionar botão “Mídias” linkando para /properties/${id}/media.
+
+Se NÃO existir detalhe do imóvel ainda, criar um acesso temporário:
+
+Criar um arquivo app/properties/media-test/page.tsx que renderiza PropertyMediaManager com um propertyId fixo de teste (ver item 4).
+
+Isso é apenas para testar Sprint 4.8 sem depender do módulo de imóveis completo.
+
+Teste obrigatório:
+
+Usar o imóvel teste existente no banco com id:
+28d941fe-3562-4aa5-a167-60c999b8f804
+
+Testar:
+
+upload 2 imagens
+
+confirmar linhas na public.property_media
+
+preview abre com signed URL
+
+reorder altera position
+
+delete remove storage + DB
+
+Importante:
+
+Não criar tabela properties
+
+Não criar tabela property_media
+
+Não criar bucket
+
+Não vincular com leads
+
+Não criar módulo de proprietário/pessoas agora (isso é outra sprint)
+
+Ao final, responder com:
+
+arquivos criados/alterados
+
+URLs para testar (/properties/<id>/media ou /properties/media-test)
+
+checklist do que foi validado

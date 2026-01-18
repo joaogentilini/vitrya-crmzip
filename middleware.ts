@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 
-const PROTECTED = ["/leads", "/people", "/dashboard", "/agenda", "/settings", "/kanban"];
+const PROTECTED = ["/settings", "/admin"];
+
 const isDev = process.env.NODE_ENV === "development";
 
 function isSupabaseAuthCookie(cookieName: string): boolean {
