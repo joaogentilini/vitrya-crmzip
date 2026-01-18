@@ -32,6 +32,8 @@ export function PropertyMediaManager({ propertyId }: PropertyMediaManagerProps) 
   const [loading, setLoading] = useState(true)
   const [uploading, setUploading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [coverUrl, setCoverUrl] = useState<string | null>(null)
+  const [loadingCover, setLoadingCover] = useState(false)
 
   const loadMedia = useCallback(async () => {
     setLoading(true)
@@ -52,9 +54,34 @@ export function PropertyMediaManager({ propertyId }: PropertyMediaManagerProps) 
     setLoading(false)
   }, [propertyId])
 
+  const loadCoverUrl = useCallback(async (coverItem: PropertyMedia) => {
+    setLoadingCover(true)
+    const { data, error: signError } = await supabase.storage
+      .from('property-media')
+      .createSignedUrl(coverItem.url, 600)
+    
+    if (!signError && data?.signedUrl) {
+      setCoverUrl(data.signedUrl)
+    } else {
+      setCoverUrl(null)
+    }
+    setLoadingCover(false)
+  }, [])
+
   useEffect(() => {
     loadMedia()
   }, [loadMedia])
+
+  useEffect(() => {
+    const cover = media.find(m => m.position === 1) || media[0]
+    if (cover) {
+      loadCoverUrl(cover)
+    } else {
+      setCoverUrl(null)
+    }
+  }, [media, loadCoverUrl])
+
+  const cover = media.find(m => m.position === 1) || media[0] || null
 
   async function handleFileSelect(e: React.ChangeEvent<HTMLInputElement>) {
     const files = e.target.files
@@ -150,172 +177,259 @@ export function PropertyMediaManager({ propertyId }: PropertyMediaManagerProps) 
     await loadMedia()
   }
 
-  async function handleReorder(index: number, direction: 'up' | 'down') {
-    const targetIndex = direction === 'up' ? index - 1 : index + 1
-    if (targetIndex < 0 || targetIndex >= media.length) return
-
-    const current = media[index]
-    const target = media[targetIndex]
-
-    setError(null)
-
-    const { error: error1 } = await supabase
-      .from('property_media')
-      .update({ position: target.position })
-      .eq('id', current.id)
-
-    if (error1) {
-      setError(`Erro ao reordenar: ${error1.message}`)
+  async function handleSetAsCover(item: PropertyMedia) {
+    if (item.kind === 'video') {
+      setError('Vídeos não podem ser definidos como capa. Escolha uma imagem.')
       return
     }
 
-    const { error: error2 } = await supabase
-      .from('property_media')
-      .update({ position: current.position })
-      .eq('id', target.id)
+    if (item.position === 1) return
 
-    if (error2) {
-      setError(`Erro ao reordenar: ${error2.message}`)
-      return
+    setError(null)
+
+    const newOrder = [
+      item,
+      ...media.filter(m => m.id !== item.id).sort((a, b) => a.position - b.position)
+    ]
+
+    const updates = newOrder
+      .map((m, i) => ({ id: m.id, newPosition: i + 1, oldPosition: m.position }))
+      .filter(u => u.newPosition !== u.oldPosition)
+
+    for (const u of updates) {
+      const { error: updateError } = await supabase
+        .from('property_media')
+        .update({ position: u.newPosition })
+        .eq('id', u.id)
+      
+      if (updateError) {
+        setError(`Erro ao reordenar: ${updateError.message}`)
+        await loadMedia()
+        return
+      }
     }
 
     await loadMedia()
   }
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2">
-          <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
-          </svg>
-          Mídias do Imóvel
-        </CardTitle>
-      </CardHeader>
-      <CardContent className="space-y-4">
-        {error && (
-          <div className="p-3 rounded-md bg-red-50 border border-red-200 text-red-700 text-sm">
-            {error}
-          </div>
-        )}
-
-        <div className="flex items-center gap-4">
-          <label className="flex-1">
-            <input
-              type="file"
-              multiple
-              accept="image/*,video/*"
-              onChange={handleFileSelect}
-              disabled={uploading}
-              className="block w-full text-sm text-gray-500
-                file:mr-4 file:py-2 file:px-4
-                file:rounded-md file:border-0
-                file:text-sm file:font-semibold
-                file:bg-[#294487] file:text-white
-                hover:file:bg-[#1e3366]
-                disabled:opacity-50 disabled:cursor-not-allowed"
-            />
-          </label>
+    <div className="space-y-6">
+      {error && (
+        <div className="p-3 rounded-md bg-red-50 border border-red-200 text-red-700 text-sm">
+          {error}
         </div>
+      )}
 
-        {uploading && (
-          <div className="flex items-center gap-2 text-sm text-gray-600">
-            <svg className="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24">
-              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z" />
             </svg>
-            Enviando arquivos...
-          </div>
-        )}
-
-        {loading ? (
-          <div className="text-center py-8 text-gray-500">Carregando mídias...</div>
-        ) : media.length === 0 ? (
-          <div className="text-center py-8 text-gray-500">
-            Nenhuma mídia cadastrada. Use o campo acima para adicionar imagens ou vídeos.
-          </div>
-        ) : (
-          <div className="space-y-2">
-            {media.map((item, index) => (
-              <div
-                key={item.id}
-                className="flex items-center gap-3 p-3 rounded-md border border-gray-200 bg-gray-50"
-              >
-                <div className="flex-shrink-0 w-8 h-8 rounded bg-gray-200 flex items-center justify-center">
-                  {item.kind === 'video' ? (
-                    <svg className="w-4 h-4 text-gray-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
-                    </svg>
+            Capa do Imóvel
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          {loading ? (
+            <div className="text-center py-8 text-gray-500">Carregando...</div>
+          ) : !cover ? (
+            <div className="text-center py-8 text-gray-500">
+              Nenhuma mídia cadastrada. Adicione imagens na seção abaixo.
+            </div>
+          ) : (
+            <div className="space-y-4">
+              <div className="relative aspect-video bg-gray-100 rounded-lg overflow-hidden flex items-center justify-center">
+                {loadingCover ? (
+                  <div className="text-gray-400">Carregando preview...</div>
+                ) : coverUrl ? (
+                  cover.kind === 'video' ? (
+                    <video 
+                      src={coverUrl} 
+                      className="max-h-full max-w-full object-contain"
+                      controls={false}
+                    />
                   ) : (
-                    <svg className="w-4 h-4 text-gray-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                    <img 
+                      src={coverUrl} 
+                      alt="Capa do imóvel" 
+                      className="max-h-full max-w-full object-contain"
+                    />
+                  )
+                ) : (
+                  <div className="text-gray-400 flex flex-col items-center gap-2">
+                    <svg className="w-12 h-12" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
                     </svg>
-                  )}
-                </div>
+                    <span>Preview indisponível</span>
+                  </div>
+                )}
+              </div>
 
-                <div className="flex-1 min-w-0">
+              {cover.kind === 'video' && (
+                <div className="p-2 rounded bg-amber-50 border border-amber-200 text-amber-700 text-xs">
+                  A capa atual é um vídeo. Recomendamos definir uma imagem como capa para melhor exibição na vitrine.
+                </div>
+              )}
+
+              <div className="flex items-center justify-between">
+                <div>
                   <p className="text-sm font-medium text-gray-900 truncate">
-                    {item.url.split('/').pop()}
+                    {cover.url.split('/').pop()}
                   </p>
                   <p className="text-xs text-gray-500">
-                    {item.kind === 'video' ? 'Vídeo' : 'Imagem'} • Posição {item.position}
+                    {cover.kind === 'video' ? 'Vídeo' : 'Imagem'} • Posição {cover.position}
+                    {cover.position !== 1 && ' (fallback)'}
                   </p>
                 </div>
-
-                <div className="flex items-center gap-1">
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => handleReorder(index, 'up')}
-                    disabled={index === 0}
-                    title="Mover para cima"
-                  >
-                    ↑
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => handleReorder(index, 'down')}
-                    disabled={index === media.length - 1}
-                    title="Mover para baixo"
-                  >
-                    ↓
-                  </Button>
-
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => handlePreview(item)}
-                    title="Preview"
-                  >
-                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
-                    </svg>
-                  </Button>
-
-                  <Button
-                    variant="destructive"
-                    size="sm"
-                    onClick={() => handleDelete(item)}
-                    title="Excluir"
-                  >
-                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                    </svg>
-                  </Button>
-                </div>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => handlePreview(cover)}
+                >
+                  Abrir em nova aba
+                </Button>
               </div>
-            ))}
-          </div>
-        )}
+            </div>
+          )}
+        </CardContent>
+      </Card>
 
-        <div className="pt-4 border-t border-gray-200">
-          <p className="text-xs text-gray-500">
-            Property ID: <code className="bg-gray-100 px-1 rounded">{propertyId}</code>
-          </p>
-        </div>
-      </CardContent>
-    </Card>
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+            </svg>
+            Galeria
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="flex items-center gap-4">
+            <label className="flex-1">
+              <input
+                type="file"
+                multiple
+                accept="image/*,video/*"
+                onChange={handleFileSelect}
+                disabled={uploading}
+                className="block w-full text-sm text-gray-500
+                  file:mr-4 file:py-2 file:px-4
+                  file:rounded-md file:border-0
+                  file:text-sm file:font-semibold
+                  file:bg-[#294487] file:text-white
+                  hover:file:bg-[#1e3366]
+                  disabled:opacity-50 disabled:cursor-not-allowed"
+              />
+            </label>
+          </div>
+
+          {uploading && (
+            <div className="flex items-center gap-2 text-sm text-gray-600">
+              <svg className="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24">
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+              </svg>
+              Enviando arquivos...
+            </div>
+          )}
+
+          {loading ? (
+            <div className="text-center py-8 text-gray-500">Carregando mídias...</div>
+          ) : media.length === 0 ? (
+            <div className="text-center py-8 text-gray-500">
+              Nenhuma mídia cadastrada. Use o campo acima para adicionar imagens ou vídeos.
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+              {media.map((item) => (
+                <div
+                  key={item.id}
+                  className={`relative p-3 rounded-lg border ${
+                    item.position === 1 
+                      ? 'border-[#294487] bg-blue-50 ring-2 ring-[#294487]/20' 
+                      : 'border-gray-200 bg-gray-50'
+                  }`}
+                >
+                  {item.position === 1 && (
+                    <div className="absolute -top-2 -right-2 bg-[#294487] text-white text-xs px-2 py-0.5 rounded-full">
+                      Capa
+                    </div>
+                  )}
+
+                  <div className="flex items-start gap-3">
+                    <div className="flex-shrink-0 w-12 h-12 rounded bg-gray-200 flex items-center justify-center">
+                      {item.kind === 'video' ? (
+                        <svg className="w-6 h-6 text-gray-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                        </svg>
+                      ) : (
+                        <svg className="w-6 h-6 text-gray-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                        </svg>
+                      )}
+                    </div>
+
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium text-gray-900 truncate">
+                        {item.url.split('/').pop()}
+                      </p>
+                      <p className="text-xs text-gray-500">
+                        {item.kind === 'video' ? 'Vídeo' : 'Imagem'} • Pos. {item.position}
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-1 mt-3 pt-3 border-t border-gray-200">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => handlePreview(item)}
+                      className="flex-1"
+                    >
+                      Abrir
+                    </Button>
+
+                    {item.position !== 1 && (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => handleSetAsCover(item)}
+                        title={item.kind === 'video' ? 'Vídeos não podem ser capa' : 'Definir como capa'}
+                        disabled={item.kind === 'video'}
+                        className="flex-1"
+                      >
+                        {item.kind === 'video' ? (
+                          <span className="text-gray-400">Capa</span>
+                        ) : (
+                          '★ Capa'
+                        )}
+                      </Button>
+                    )}
+
+                    <Button
+                      variant="destructive"
+                      size="sm"
+                      onClick={() => handleDelete(item)}
+                      title="Excluir"
+                    >
+                      <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                      </svg>
+                    </Button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          <div className="pt-4 border-t border-gray-200">
+            <p className="text-xs text-gray-500">
+              Property ID: <code className="bg-gray-100 px-1 rounded">{propertyId}</code>
+              {' • '}{media.length} mídia(s) cadastrada(s)
+            </p>
+          </div>
+        </CardContent>
+      </Card>
+    </div>
   )
 }

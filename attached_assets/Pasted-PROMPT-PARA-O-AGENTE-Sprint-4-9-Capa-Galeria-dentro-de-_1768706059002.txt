@@ -1,0 +1,116 @@
+PROMPT PARA O AGENTE — Sprint 4.9 (Capa + Galeria dentro de /media)
+
+Contexto:
+
+Já existe app/properties/[id]/media/page.tsx e PropertyMediaManager.tsx.
+
+Já existe public.property_media e bucket privado property-media.
+
+Preview usa signed URL.
+
+Capa será position = 1 (não criar migration).
+
+Objetivo:
+Atualizar a aba Mídias para ficar premium:
+
+Mostrar uma seção “Capa do imóvel” em destaque (position=1)
+
+Mostrar abaixo uma seção “Galeria” com todas as mídias do imóvel (fotos e vídeos)
+
+Permitir Definir como capa em qualquer mídia (imagem/vídeo) — mas preferir imagem (se quiser, pode bloquear vídeo como capa; se bloquear, mostrar mensagem)
+
+A capa deve ser usada futuramente na vitrine, mas aqui é só preparar a UX.
+
+Regras:
+
+A lista continua ordenada por position asc.
+
+“Definir como capa” deve reordenar position sem duplicar.
+
+Todas as mídias devem aparecer na galeria (não esconder nenhuma).
+
+Implementação:
+A) Alterar app/properties/[id]/media/PropertyMediaManager.tsx:
+
+Ao carregar items, identificar:
+
+cover = item com position = 1 (se não existir, usar o primeiro da lista como fallback visual, sem mudar DB)
+
+Renderizar layout:
+
+Card 1: “Capa do imóvel”
+
+mostrar preview grande (signed URL)
+
+botões: “Abrir” + (se não for capa) “Definir como capa”
+
+Card 2: “Galeria”
+
+grid com todas as mídias (miniaturas/ícones)
+
+cada item com:
+
+Abrir (preview)
+
+Definir como capa
+
+Delete
+
+(opcional) ↑ ↓ continua existindo ou pode ser substituído por “Definir como capa” + “Mover” se quiser manter
+
+Signed URLs:
+
+Para UX, pode gerar signed URLs sob demanda (quando clicar em Abrir) e para a capa sempre gerar para renderizar.
+
+Para miniaturas, pode:
+
+gerar signed URL para as primeiras N (ex: 12), ou
+
+renderizar sem thumb e usar botão Abrir (mais simples).
+
+Não usar URL pública.
+
+B) Implementar função setAsCover(itemId):
+Algoritmo (sem duplicar):
+
+Buscar item selecionado e sua posição antiga oldPos
+
+Se oldPos === 1, return
+
+Atualizações:
+
+update selected set position = 1
+
+Para os itens com position >= 1 AND position < oldPos AND id != selected, fazer position = position + 1
+
+Recarregar a lista ao final.
+
+C) Atualizar as páginas de teste já existentes:
+
+/properties/media-test deve refletir esse novo layout (capa + galeria).
+
+D) Testes obrigatórios:
+
+Definir uma mídia do meio como capa
+
+Recarregar e confirmar:
+
+ela virou position 1
+
+não há positions duplicadas
+
+todas as mídias continuam aparecendo
+
+Não criar:
+
+migrations
+
+novas rotas
+
+novo módulo
+
+Ao final:
+
+listar arquivos alterados
+
+explicar como testar
