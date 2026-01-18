@@ -1,0 +1,181 @@
+Contexto do projeto (padrão Vitrya):
+
+Existe tabela public.properties com status (ex.: draft → active).
+
+Bucket de mídia existe (property-media), mas para documentos usaremos bucket separado: property-documents (privado).
+
+Precisamos de uma aba “Documentos” do imóvel no CRM.
+
+Documento obrigatório para publicar: Termo/Contrato de autorização do proprietário (tipo authorization).
+
+Objetivos:
+
+Criar migration para tabela public.property_documents
+
+Implementar UI em /properties/[id]/documents + página de teste /properties/documents-test
+
+Criar/usar bucket privado property-documents com policies por path properties/<property_id>/...
+
+Implementar validação de publicação: imóvel só pode virar active se existir pelo menos 1 documento authorization
+
+1) Banco: Migration property_documents
+
+Criar migration em supabase/migrations/<timestamp>_create_property_documents.sql com:
+
+Tabela: public.property_documents
+
+id uuid primary key default gen_random_uuid()
+
+property_id uuid not null references public.properties(id) on delete cascade
+
+doc_type text not null -- valores: 'authorization', 'other'
+
+title text null -- nome amigável
+
+path text not null -- path no storage (não URL pública)
+
+mime_type text null
+
+size_bytes bigint null
+
+created_at timestamptz not null default now()
+
+Índices:
+
+index por (property_id)
+
+index por (property_id, doc_type)
+
+RLS:
+
+enable rls
+
+Policy SELECT: admin ativo OU owner do imóvel
+
+Policy INSERT: admin ativo OU owner do imóvel (e property_id deve ser de imóvel que o user possui)
+
+Policy UPDATE/DELETE: admin ativo OU owner do imóvel
+
+(Use o mesmo padrão de ownership já usado no projeto: owner_user_id no properties.)
+
+2) Storage: bucket + policies
+
+Criar bucket no Supabase Dashboard: property-documents (Private)
+
+Criar policies em storage.objects para o bucket property-documents seguindo o padrão:
+
+Path deve ser: properties/<property_id>/<uuid>-<filename>
+
+SELECT/INSERT/UPDATE/DELETE permitido para:
+
+admin ativo OU owner do imóvel (properties.owner_user_id = auth.uid())
+
+Restringir por bucket_id = 'property-documents'
+
+Remover/evitar policies duplicadas.
+
+3) Next.js: UI de Documentos do Imóvel
+
+Criar página dinâmica:
+
+app/properties/[id]/documents/page.tsx
+Criar componente client:
+
+app/properties/[id]/documents/PropertyDocumentsManager.tsx
+
+Criar página de teste:
+
+app/properties/documents-test/page.tsx
+Usar propertyId fixo: 28d941fe-3562-4aa5-a167-60c999b8f804
+
+Funcionalidades do manager:
+
+Upload de arquivo (pdf/jpg/png) com accept="application/pdf,image/*"
+
+Campo select doc_type com opções:
+
+authorization (Termo de autorização)
+
+other
+
+Campo title opcional
+
+Upload:
+
+gerar uuid
+
+path: properties/${propertyId}/${uuid}-${filename}
+
+upload no bucket property-documents (private)
+
+insert em public.property_documents:
+
+property_id, doc_type, title, path, mime_type, size_bytes
+
+Listagem:
+
+select por property_id order by created_at desc
+
+Preview:
+
+createSignedUrl(path, 600) e abrir em nova aba
+
+Delete:
+
+remover do storage + delete no DB
+
+UI premium com Card, Button, Input, Select
+
+4) Regras de publicação (authorization obrigatório)
+
+Implementar uma função utilitária (server-side) chamada por onde vocês “publicam” o imóvel (muda status para active):
+
+Antes de atualizar status para active, verificar:
+
+existe pelo menos 1 registro em public.property_documents
+
+com property_id = <id> e doc_type = 'authorization'
+
+Se não existir, retornar erro claro:
+
+“Para publicar, anexe o Termo de Autorização do Proprietário (Documentos).”
+
+Se ainda não existir uma action de “publicar imóvel”, criar uma action mínima:
+
+app/properties/[id]/actions.ts (server action) ou endpoint API,
+
+que tenta setar status active e aplica a regra acima.
+
+5) Testes obrigatórios
+
+Abrir /properties/documents-test
+
+Enviar 1 PDF como authorization
+
+Confirmar:
+
+arquivo aparece no bucket property-documents no path properties/<propertyId>/...
+
+linha aparece em public.property_documents
+
+preview abre com signed URL
+
+delete remove storage + db
+
+Testar publicar:
+
+sem authorization → deve bloquear
+
+com authorization → deve permitir
+
+Ao final:
+
+listar arquivos criados/alterados
+
+indicar URLs de teste
+
+confirmar migration pronta para aplicar no Supabase
+
+Observação importante
+
+Não criar campos de proprietário aqui. Proprietário é via módulo Pessoas (outra sprint). Aqui é somente documentos do imóvel.
