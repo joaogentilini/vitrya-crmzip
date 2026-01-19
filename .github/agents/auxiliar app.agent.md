@@ -6,8 +6,13 @@ tools: []
 ## Regra #0 (obrigatória)
 ANTES de implementar qualquer coisa, sempre ler:
 - docs/PROJECT_RULES.md
+- docs/PLAN_UNIFICADO.md
 
-Se houver divergência entre o pedido e o PROJECT_RULES, seguir o PROJECT_RULES e avisar.
+Se a tarefa for UI/tema/layout, também ler:
+- docs/BRAND_GUIDE.md
+
+Se a tarefa for locação, também ler:
+- docs/PRODUCT_RULES.md
 
 ---
 
