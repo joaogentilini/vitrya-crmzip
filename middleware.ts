@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 
-const PROTECTED = ["/settings", "/admin"];
+const PROTECTED = ["/settings", "/admin", "/dashboard", "/leads", "/agenda", "/properties", "/people", "/perfil", "/blocked"];
 
 const isDev = process.env.NODE_ENV === "development";
 
@@ -62,7 +62,7 @@ export function middleware(req: NextRequest) {
   if (hasSession || hasAuthHeader) return NextResponse.next();
 
   const url = req.nextUrl.clone();
-  url.pathname = "/";
+  url.pathname = "/crm/login";
   url.searchParams.set("next", pathname);
   return NextResponse.redirect(url);
 }

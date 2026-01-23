@@ -5,17 +5,19 @@ import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabaseClient'
 import { useToast } from '@/components/ui/Toast'
 
-interface SettingsAppShellProps {
+interface LeadsAppShellProps {
   children: ReactNode
   userEmail?: string | null
   pageTitle?: string
+  showNewLeadButton?: boolean
 }
 
-export function SettingsAppShell({ 
+export function LeadsAppShell({ 
   children, 
   userEmail, 
-  pageTitle = 'Configurações'
-}: SettingsAppShellProps) {
+  pageTitle,
+  showNewLeadButton = true 
+}: LeadsAppShellProps) {
   const router = useRouter()
   const { success } = useToast()
 
@@ -24,6 +26,18 @@ export function SettingsAppShell({
     success('Você saiu da conta.')
     router.push('/')
   }, [router, success])
+
+  const handleNewLead = useCallback(() => {
+    router.push('/leads#new')
+    setTimeout(() => {
+      const form = document.querySelector('[data-lead-form]')
+      if (form) {
+        form.scrollIntoView({ behavior: 'smooth' })
+        const input = form.querySelector('input')
+        if (input) input.focus()
+      }
+    }, 100)
+  }, [router])
 
   return (
     <div>

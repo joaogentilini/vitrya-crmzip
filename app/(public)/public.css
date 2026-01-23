@@ -1,0 +1,377 @@
+:root{
+  --mirage:#171A21;
+  --cobalt:#294487;
+  --offwhite:#FAFAFA;
+  --pumpkin:#FF681F;
+  --teal:#17BEBB;
+
+  --card:#ffffff;
+  --border:rgba(23,26,33,.10);
+  --shadow:0 10px 30px rgba(23,26,33,.08);
+
+  /* NOVOS */
+  --pv-bg-overlay: rgba(10,12,16,.55);      /* escurece o fundo */
+  --pv-glass-bg: rgba(255,255,255,.60);     /* ~40% transparente */
+  --pv-glass-border: rgba(255,255,255,.45);
+  --pv-glass-shadow: 0 18px 50px rgba(0,0,0,.22);
+}
+
+*{box-sizing:border-box}
+html,body{height:100%}
+body{
+  margin:0;
+  font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, "Apple Color Emoji","Segoe UI Emoji";
+  background: var(--offwhite);
+  color: var(--mirage);
+}
+
+a{color:inherit}
+
+/* =========================================================
+   FUNDO DA VITRINE (NOVO)
+   - usa /public/brand/vitrine site.jpg
+   - overlay para contraste
+========================================================= */
+.pv-shell{
+  min-height:100vh;
+  display:flex;
+  flex-direction:column;
+
+  /* Imagem de fundo */
+  background-image: url("/brand/vitrine%20site.jpg");
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+
+  /* opcional: efeito premium na rolagem */
+  background-attachment: fixed;
+
+  position: relative;
+}
+
+/* Overlay escuro sobre o fundo */
+.pv-shell::before{
+  content:"";
+  position:absolute;
+  inset:0;
+  background: var(--pv-bg-overlay);
+  pointer-events:none;
+  z-index:0;
+}
+
+/* Conteúdo acima do overlay */
+.pv-header,
+.pv-main,
+.pv-container,
+.pv-footer{
+  position: relative;
+  z-index: 1;
+}
+
+/* =========================================================
+   TOPBAR (CORRIGIDO - NÃO SOME)
+========================================================= */
+.pv-header{
+  /* antes: background var(--mirage) */
+  position: sticky;
+  top: 0;
+  z-index: 9999;
+
+  /* estilo "glass" por cima do fundo */
+  background: rgba(23,26,33,.55);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+
+  color: var(--offwhite);
+  border-bottom: 1px solid rgba(250,250,250,.10);
+}
+
+.pv-header-inner{
+  max-width: 1120px;
+  margin: 0 auto;
+  padding: 16px 20px;
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:16px;
+}
+
+/* =========================================================
+   BRAND / LOGO (AJUSTADO P/ PNG OFICIAL)
+========================================================= */
+.pv-brand{
+  display:flex;
+  align-items:center;
+  gap:12px;
+  text-decoration: none;
+}
+
+.pv-mark{
+  height: 40px;   /* maior para logo_oficial.png */
+  width: 40px;
+  object-fit: contain;
+}
+
+.pv-brand-name{font-weight: 800; letter-spacing: .2px}
+.pv-brand-sub{font-size: 12px; opacity:.75; margin-top:2px}
+
+.pv-nav{display:flex; gap:12px}
+.pv-navlink{
+  padding: 8px 10px;
+  border-radius: 10px;
+  text-decoration:none;
+  opacity:.85;
+}
+.pv-navlink-active{
+  opacity:1;
+  background: rgba(250,250,250,.08);
+  border: 1px solid rgba(250,250,250,.10);
+}
+
+/* =========================================================
+   CONTEÚDO / CONTAINER
+   - Mantém suas classes
+   - Adiciona "glass card" (NOVO) para aplicar na vitrine
+========================================================= */
+.pv-main{flex:1}
+
+/* Mantém seu container, mas agora ele fica acima do fundo */
+.pv-container{
+  max-width: 1120px;
+  margin: 0 auto;
+  padding: 22px 20px 40px;
+}
+
+/* NOVO: use esta classe para transformar a área de pesquisa em card com 40% transparência.
+   Você vai aplicar isso em volta do seu conteúdo principal (te digo abaixo). */
+.pv-glass{
+  background: var(--pv-glass-bg);            /* ~40% transparente */
+  border: 1px solid var(--pv-glass-border);
+  border-radius: 18px;
+  padding: 22px;
+  box-shadow: var(--pv-glass-shadow);
+
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+
+/* =========================================================
+   HERO (MANTIDO)
+   - Se você preferir, depois podemos deixar o hero também "glass"
+========================================================= */
+.pv-hero{
+  background: var(--mirage);
+  color: var(--offwhite);
+  border-radius: 18px;
+  padding: 22px;
+  box-shadow: var(--shadow);
+  position:relative;
+  overflow:hidden;
+}
+.pv-hero:before{
+  content:"";
+  position:absolute; inset:-40px;
+  background: radial-gradient(circle at 20% 0%, rgba(23,190,187,.28), transparent 40%),
+              radial-gradient(circle at 90% 10%, rgba(255,104,31,.25), transparent 45%),
+              radial-gradient(circle at 40% 100%, rgba(41,68,135,.28), transparent 45%);
+  filter: blur(2px);
+}
+.pv-hero > *{position:relative}
+
+.pv-title{margin:0; font-size: 30px; font-weight: 900; letter-spacing: .2px}
+.pv-subtitle{margin:8px 0 0; opacity:.82}
+
+/* =========================================================
+   SEARCHBAR (MANTIDO)
+========================================================= */
+.pv-searchbar{
+  margin-top: 16px;
+  background: rgba(250,250,250,.06);
+  border: 1px solid rgba(250,250,250,.10);
+  border-radius: 16px;
+  padding: 14px;
+  display:grid;
+  grid-template-columns: 1.2fr 1.2fr 1fr 1fr 160px;
+  gap: 10px;
+}
+@media (max-width: 980px){
+  .pv-searchbar{grid-template-columns: 1fr 1fr; }
+}
+@media (max-width: 560px){
+  .pv-searchbar{grid-template-columns: 1fr; }
+}
+
+.pv-field{
+  display:flex; flex-direction:column; gap:6px;
+}
+.pv-label{font-size:12px; opacity:.78}
+.pv-input, .pv-select{
+  background: rgba(250,250,250,.92);
+  border: 1px solid rgba(23,26,33,.12);
+  border-radius: 12px;
+  padding: 10px 12px;
+  outline: none;
+  font-size: 14px;
+  color: var(--mirage);
+}
+.pv-input:focus, .pv-select:focus{
+  border-color: rgba(23,190,187,.65);
+  box-shadow: 0 0 0 4px rgba(23,190,187,.12);
+}
+
+/* =========================================================
+   BOTÕES (MANTIDO, com pequeno ajuste para ficar legível no header)
+========================================================= */
+.pv-btn{
+  border:0;
+  border-radius: 12px;
+  padding: 10px 14px;
+  font-weight: 800;
+  cursor:pointer;
+  text-decoration: none;
+  display: inline-flex;
+  align-items:center;
+  justify-content:center;
+}
+
+.pv-btn-primary{
+  background: var(--pumpkin);
+  color: var(--offwhite);
+}
+.pv-btn-primary:hover{filter: brightness(0.98)}
+
+.pv-btn-secondary{
+  /* antes estava teal claro + texto mirage (no header isso some).
+     Mantive seu estilo para páginas claras, mas quando usado no header ficará ok porque agora o header é glass escuro.
+     Se quiser, depois criamos um .pv-btn-header específico. */
+  background: rgba(250,250,250,.10);
+  color: var(--offwhite);
+  border: 1px solid rgba(250,250,250,.22);
+}
+.pv-btn-secondary:hover{
+  background: rgba(250,250,250,.16);
+  border-color: rgba(250,250,250,.30);
+}
+
+/* =========================================================
+   FILTERS / GRID / CARDS (MANTIDOS)
+========================================================= */
+.pv-filters{
+  margin-top: 18px;
+  display:flex;
+  flex-wrap:wrap;
+  gap:10px;
+  align-items:center;
+}
+.pv-chip{
+  border: 1px solid var(--border);
+  background: #fff;
+  border-radius: 999px;
+  padding: 8px 10px;
+  font-size: 13px;
+  cursor:pointer;
+}
+.pv-chip-active{
+  border-color: rgba(255,104,31,.45);
+  box-shadow: 0 0 0 4px rgba(255,104,31,.10);
+}
+
+.pv-grid{
+  margin-top: 18px;
+  display:grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 14px;
+}
+@media (max-width: 980px){ .pv-grid{grid-template-columns: repeat(2, 1fr);} }
+@media (max-width: 640px){ .pv-grid{grid-template-columns: 1fr;} }
+
+.pv-card{
+  text-decoration:none;
+  color: inherit;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  overflow:hidden;
+  box-shadow: 0 10px 20px rgba(23,26,33,.05);
+}
+.pv-card:hover{
+  transform: translateY(-1px);
+  transition: .15s ease;
+  box-shadow: 0 14px 26px rgba(23,26,33,.08);
+}
+
+.pv-thumb{
+  height: 170px;
+  background: linear-gradient(135deg, rgba(41,68,135,.16), rgba(23,190,187,.12), rgba(255,104,31,.10));
+  display:flex; align-items:center; justify-content:center;
+  color: rgba(23,26,33,.55);
+  font-weight: 700;
+}
+.pv-cardbody{padding: 14px}
+.pv-cardtitle{margin:0; font-size: 16px; font-weight: 900}
+.pv-cardmeta{margin-top:6px; opacity:.75; font-size: 13px}
+.pv-pricerow{margin-top:10px; display:flex; gap:10px; align-items:baseline; flex-wrap:wrap}
+.pv-price{font-weight: 900; font-size: 18px}
+.pv-muted{opacity:.75; font-size: 13px}
+
+/* =========================================================
+   FOOTER (MANTIDO, com leve glass para combinar)
+========================================================= */
+.pv-footer{
+  border-top: 1px solid rgba(250,250,250,.14);
+  background: rgba(23,26,33,.35);
+  color: rgba(250,250,250,.85);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+}
+.pv-footer-inner{
+  max-width: 1120px;
+  margin: 0 auto;
+  padding: 18px 20px;
+  display:flex;
+  gap:10px;
+  opacity:.90;
+  font-size: 13px;
+}
+.pv-footer-sep{opacity:.45}
+/* ====== TOPBAR: só logo, maior, proporcional ====== */
+.pv-header-inner{
+  padding: 12px 20px;      /* deixa o header mais “premium” */
+  min-height: 72px;        /* altura consistente */
+}
+
+.pv-brand{
+  gap: 0;
+}
+
+.pv-mark{
+  width: 216px;  /* +50% */
+  height: 93px;  /* +50% */
+  object-fit: contain;
+}
+
+@media (max-width: 640px){
+  .pv-mark{ width: 186px; height: 83px; } /* +50% */
+}
+
+/* Glass mais leve para cards internos (detalhe do imóvel) */
+.pv-glass-soft{
+  background: rgba(255,255,255,.72) !important;
+  border: 1px solid rgba(255,255,255,.55) !important;
+  box-shadow: 0 14px 36px rgba(0,0,0,.16) !important;
+}
+.pv-thumb{ position: relative; overflow: hidden; }
+.pv-thumb-img{
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+.pv-thumb-fallback{
+  position: absolute;
+  inset: 0;
+  display:flex; align-items:center; justify-content:center;
+  color: rgba(23,26,33,.55);
+  font-weight: 700;
+  background: linear-gradient(135deg, rgba(41,68,135,.16), rgba(23,190,187,.12), rgba(255,104,31,.10));
+}

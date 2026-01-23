@@ -14,6 +14,8 @@ Se a tarefa for UI/tema/layout, também ler:
 Se a tarefa for locação, também ler:
 - docs/PRODUCT_RULES.md
 
+Se a tarefa envolver banco/RLS/migrations/storage, também ler: docs/DB_RULES.md
+
 ---
 
 ## Quando usar
