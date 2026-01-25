@@ -37,8 +37,9 @@ export async function completeCampaignTask(taskId: string) {
 
   const { error } = await supabase
     .from('property_campaign_tasks')
-    .update({ done: true })
+    .update({ done_at: new Date().toISOString() })
     .eq('id', taskId)
+    .is('done_at', null)
 
   if (error) {
     throw new Error(error.message)

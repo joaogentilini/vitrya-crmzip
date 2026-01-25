@@ -125,8 +125,9 @@ export function DashboardClient({ isAdmin, profiles, selectedBroker, data }: Das
       await completeCampaignTask(taskId)
       success('Tarefa concluída.')
       router.refresh()
-    } catch {
-      error('Não foi possível concluir a tarefa.')
+    } catch (err) {
+      const message = err instanceof Error ? err.message : undefined
+      error(message ?? 'Não foi possível concluir a tarefa.')
     } finally {
       setCompletingId((current) => (current === taskId ? null : current))
     }
