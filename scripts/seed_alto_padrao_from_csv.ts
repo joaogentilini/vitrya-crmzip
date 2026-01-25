@@ -147,12 +147,20 @@ const supabase = createClient(supabaseUrl, serviceRoleKey, {
 })
 
 const chunkSize = 100
-for (let i = 0; i < payload.length; i += chunkSize) {
-  const chunk = payload.slice(i, i + chunkSize)
-  const { error } = await supabase.from('property_campaign_tasks').insert(chunk)
-  if (error) {
-    throw new Error(error.message)
+
+async function runSeed() {
+  for (let i = 0; i < payload.length; i += chunkSize) {
+    const chunk = payload.slice(i, i + chunkSize)
+    const { error } = await supabase.from('property_campaign_tasks').insert(chunk)
+    if (error) {
+      throw new Error(error.message)
+    }
   }
+
+  console.log(`Inserted ${payload.length} tasks for property ${propertyId}.`)
 }
 
-console.log(`Inserted ${payload.length} tasks for property ${propertyId}.`)
+runSeed().catch((err) => {
+  console.error(err instanceof Error ? err.message : err)
+  process.exit(1)
+})
