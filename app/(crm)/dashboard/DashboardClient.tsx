@@ -1,12 +1,13 @@
 'use client'
 
 import { useRouter } from 'next/navigation'
-import { useCallback } from 'react'
+import { useCallback, useState } from 'react'
 import { supabase } from '@/lib/supabaseClient'
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/Card'
 import { Badge } from '@/components/ui/Badge'
 import { useToast } from '@/components/ui/Toast'
 import Link from 'next/link'
+import { completeCampaignTask } from './actions'
 
 interface Profile {
   id: string
@@ -100,7 +101,8 @@ function formatTime(dateStr: string) {
 
 export function DashboardClient({ isAdmin, profiles, selectedBroker, data }: DashboardClientProps) {
   const router = useRouter()
-  const { success } = useToast()
+  const { success, error } = useToast()
+  const [completingId, setCompletingId] = useState<string | null>(null)
 
   const handleSignOut = useCallback(async () => {
     await supabase.auth.signOut()
@@ -115,6 +117,20 @@ export function DashboardClient({ isAdmin, profiles, selectedBroker, data }: Das
       router.push(`/dashboard?broker=${brokerId}`)
     }
   }
+
+  const handleComplete = useCallback(async (taskId: string) => {
+    if (completingId === taskId) return
+    setCompletingId(taskId)
+    try {
+      await completeCampaignTask(taskId)
+      success('Tarefa concluída.')
+      router.refresh()
+    } catch {
+      error('Não foi possível concluir a tarefa.')
+    } finally {
+      setCompletingId((current) => (current === taskId ? null : current))
+    }
+  }, [completingId, error, router, success])
 
   return (
     <div className="space-y-6">
@@ -358,12 +374,22 @@ export function DashboardClient({ isAdmin, profiles, selectedBroker, data }: Das
                     <div className="text-xs text-black/60">{ymdToBR(task.due_date)}</div>
                     <div className="text-xs text-black/60 truncate">{propertyName} • {location}</div>
                   </div>
-                  <a
-                    href={`/campaigns/${task.property_id}`}
-                    className="ml-3 px-3 py-1 text-xs bg-black text-white rounded-lg hover:bg-black/80 transition-colors"
-                  >
-                    Abrir
-                  </a>
+                  <div className="ml-3 flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => handleComplete(task.id)}
+                      disabled={completingId === task.id}
+                      className="px-3 py-1 text-xs rounded-lg border border-black/10 bg-white text-black/80 hover:bg-black/5 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
+                    >
+                      {completingId === task.id ? 'Concluindo...' : 'Concluir'}
+                    </button>
+                    <a
+                      href={`/campaigns/${task.property_id}`}
+                      className="px-3 py-1 text-xs bg-black text-white rounded-lg hover:bg-black/80 transition-colors"
+                    >
+                      Abrir
+                    </a>
+                  </div>
                 </div>
               )
             })

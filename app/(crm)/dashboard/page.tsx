@@ -52,7 +52,7 @@ async function getDashboardData(userId: string, isAdmin: boolean, filterUserId?:
   // =========================
   const { data: campaignTasks, error: campaignError } = await supabase
     .from('property_campaign_tasks')
-    .select('property_id, due_date, done_at')
+    .select('property_id, due_date, done, done_at')
 
   let campaignMetrics: CampaignMetrics = {
     tasksTotal: 0,
@@ -75,7 +75,7 @@ async function getDashboardData(userId: string, isAdmin: boolean, filterUserId?:
     for (const task of campaignTasks as any[]) {
       campaignMetrics.tasksTotal += 1
 
-      if (task.done_at) {
+      if (task.done || task.done_at) {
         campaignMetrics.doneTotal += 1
         continue
       }
@@ -101,8 +101,8 @@ async function getDashboardData(userId: string, isAdmin: boolean, filterUserId?:
   // =========================
   const { data: upcomingCampaignTasks } = await supabase
     .from('property_campaign_tasks')
-    .select('id, property_id, title, due_date, done_at')
-    .is('done_at', null)
+    .select('id, property_id, title, due_date, done, done_at')
+    .eq('done', false)
     .order('due_date', { ascending: true })
     .limit(10)
 
