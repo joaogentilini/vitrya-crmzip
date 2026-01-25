@@ -112,6 +112,30 @@ baseDate.setHours(0, 0, 0, 0)
 
 const nowIso = new Date().toISOString()
 
+const allowedChannels = new Set(['whatsapp', 'reels', 'story', 'feed', 'ads'])
+const channelMap: Record<string, string> = {
+  whatsapp: 'whatsapp',
+  reels: 'reels',
+  stories: 'story',
+  story: 'story',
+  instagram: 'feed',
+  feed: 'feed',
+  carrossel: 'feed',
+  ads: 'ads',
+}
+
+function normalizeChannel(rawValue: string) {
+  const normalized = rawValue.trim().toLowerCase()
+  const mapped = channelMap[normalized] ?? 'feed'
+  if (!allowedChannels.has(mapped)) {
+    throw new Error(`Unsupported channel value: ${rawValue}`)
+  }
+  if (mapped !== normalized && normalized.length > 0) {
+    console.warn(`Channel "${rawValue}" mapped to "${mapped}".`)
+  }
+  return mapped
+}
+
 const payload = rows
   .filter((row) => row.some((value) => value.trim().length > 0))
   .map((row) => {
@@ -126,7 +150,7 @@ const payload = rows
       property_id: propertyId,
       day_offset: Number.isNaN(dayOffset) ? 0 : dayOffset,
       title: (row[headerIndex.title] ?? '').trim(),
-      channel: (row[headerIndex.channel] ?? '').trim(),
+      channel: normalizeChannel(row[headerIndex.channel] ?? ''),
       is_required: isRequiredRaw === 'true',
       due_date: dueDate.toISOString(),
       done_at: null,
