@@ -1,5 +1,6 @@
 'use client'
 
+import { useMemo, useState } from 'react'
 import type { CampaignProperty, CampaignTask } from '../types'
 import type { PropertyRow, TaskAggRow } from '../page'
 
@@ -27,6 +28,38 @@ export default function CampaignDetailPage({
   tasks: CampaignTask[]
 }) {
   const cover = (property.cover_url || '').trim()
+  const [range, setRange] = useState<'today' | 'week' | '30' | 'all'>('today')
+  const [modal, setModal] = useState<{ title: string; content: string } | null>(null)
+
+  const pendingTasks = useMemo(() => tasks.filter((task) => !task.done_at), [tasks])
+
+  const filteredPending = useMemo(() => {
+    if (range === 'all') return pendingTasks
+
+    const start = new Date()
+    start.setHours(0, 0, 0, 0)
+    const end = new Date(start)
+
+    if (range === 'today') {
+      end.setHours(23, 59, 59, 999)
+    } else if (range === 'week') {
+      end.setDate(end.getDate() + 7)
+      end.setHours(23, 59, 59, 999)
+    } else {
+      end.setDate(end.getDate() + 30)
+      end.setHours(23, 59, 59, 999)
+    }
+
+    return pendingTasks.filter((task) => {
+      const due = new Date(task.due_date)
+      return due >= start && due <= end
+    })
+  }, [pendingTasks, range])
+
+  const openModal = (title: string, content: string | null) => {
+    if (!content?.trim()) return
+    setModal({ title, content })
+  }
 
   return (
     <div className="space-y-6">
@@ -65,16 +98,40 @@ export default function CampaignDetailPage({
 
       {/* Abas */}
       <div className="flex gap-1 rounded-2xl border border-black/10 bg-white p-1 shadow-sm">
-        <button className="flex-1 rounded-xl bg-black px-4 py-2 text-sm font-medium text-white">
+        <button
+          type="button"
+          onClick={() => setRange('today')}
+          className={`flex-1 rounded-xl px-4 py-2 text-sm font-medium ${
+            range === 'today' ? 'bg-black text-white' : 'text-black/60 hover:bg-black/5'
+          }`}
+        >
           Hoje
         </button>
-        <button className="flex-1 rounded-xl px-4 py-2 text-sm font-medium text-black/60 hover:bg-black/5">
+        <button
+          type="button"
+          onClick={() => setRange('week')}
+          className={`flex-1 rounded-xl px-4 py-2 text-sm font-medium ${
+            range === 'week' ? 'bg-black text-white' : 'text-black/60 hover:bg-black/5'
+          }`}
+        >
           Semana
         </button>
-        <button className="flex-1 rounded-xl px-4 py-2 text-sm font-medium text-black/60 hover:bg-black/5">
+        <button
+          type="button"
+          onClick={() => setRange('30')}
+          className={`flex-1 rounded-xl px-4 py-2 text-sm font-medium ${
+            range === '30' ? 'bg-black text-white' : 'text-black/60 hover:bg-black/5'
+          }`}
+        >
           30 dias
         </button>
-        <button className="flex-1 rounded-xl px-4 py-2 text-sm font-medium text-black/60 hover:bg-black/5">
+        <button
+          type="button"
+          onClick={() => setRange('all')}
+          className={`flex-1 rounded-xl px-4 py-2 text-sm font-medium ${
+            range === 'all' ? 'bg-black text-white' : 'text-black/60 hover:bg-black/5'
+          }`}
+        >
           Total
         </button>
       </div>
@@ -82,7 +139,7 @@ export default function CampaignDetailPage({
       {/* Tasks */}
       <div className="space-y-4">
         <h2 className="text-lg font-semibold text-black/90">Pendentes</h2>
-        {tasks.filter(t => !t.done_at).map(task => (
+        {filteredPending.map(task => (
           <div key={task.id} className="rounded-2xl border border-black/10 bg-white p-4 shadow-sm">
             <div className="flex items-start justify-between">
               <div className="min-w-0 flex-1">
@@ -106,17 +163,29 @@ export default function CampaignDetailPage({
               </div>
               <div className="ml-4 flex gap-2">
                 {task.whatsapp_text && (
-                  <button className="rounded-xl border border-black/10 bg-white px-3 py-2 text-sm text-black/80 hover:bg-black/5">
+                  <button
+                    type="button"
+                    onClick={() => openModal('Roteiro WhatsApp', task.whatsapp_text)}
+                    className="rounded-xl border border-black/10 bg-white px-3 py-2 text-sm text-black/80 hover:bg-black/5"
+                  >
                     Ver roteiro
                   </button>
                 )}
                 {task.reel_script && (
-                  <button className="rounded-xl border border-black/10 bg-white px-3 py-2 text-sm text-black/80 hover:bg-black/5">
+                  <button
+                    type="button"
+                    onClick={() => openModal('Roteiro Reels', task.reel_script)}
+                    className="rounded-xl border border-black/10 bg-white px-3 py-2 text-sm text-black/80 hover:bg-black/5"
+                  >
                     Ver roteiro
                   </button>
                 )}
                 {task.ads_checklist && (
-                  <button className="rounded-xl border border-black/10 bg-white px-3 py-2 text-sm text-black/80 hover:bg-black/5">
+                  <button
+                    type="button"
+                    onClick={() => openModal('Checklist', task.ads_checklist)}
+                    className="rounded-xl border border-black/10 bg-white px-3 py-2 text-sm text-black/80 hover:bg-black/5"
+                  >
                     Ver checklist
                   </button>
                 )}
@@ -133,6 +202,26 @@ export default function CampaignDetailPage({
           </div>
         ))}
       </div>
+
+      {modal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+          <div className="w-full max-w-lg rounded-2xl border border-black/10 bg-white p-5 shadow-xl">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <div className="text-sm font-semibold text-black/90">{modal.title}</div>
+                <div className="mt-2 whitespace-pre-wrap text-sm text-black/70">{modal.content}</div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setModal(null)}
+                className="rounded-lg border border-black/10 px-3 py-2 text-xs text-black/70 hover:bg-black/5"
+              >
+                Fechar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
