@@ -6,8 +6,9 @@ import PropertyMediaManager from "./media/PropertyMediaManager";
 import PropertyDocumentsManager from "./documents/PropertyDocumentsManager";
 import PublishPanel from "./PublishPanel";
 import PropertyEditor from "./PropertyEditor";
+import CampaignTab from "./CampaignTab";
 
-type TabKey = "overview" | "media" | "documents" | "publish";
+type TabKey = "overview" | "media" | "documents" | "publish" | "campaign";
 
 interface PropertyCategory {
   id: string;
@@ -68,6 +69,7 @@ export default function PropertyTabs({
       { key: "media", label: "Mídias" },
       { key: "documents", label: "Documentos" },
       { key: "publish", label: "Publicação" },
+      { key: "campaign", label: "Campanha" },
     ],
     []
   );
@@ -439,6 +441,8 @@ export default function PropertyTabs({
             onStatusChange={setStatus}
           />
         )}
+
+        {tab === "campaign" && <CampaignTab propertyId={property.id} />}
       </div>
     </div>
   );

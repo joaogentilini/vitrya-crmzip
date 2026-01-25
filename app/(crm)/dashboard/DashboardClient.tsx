@@ -32,6 +32,21 @@ interface Task {
   assigned_to: string
 }
 
+interface CampaignTask {
+  id: string
+  property_id: string
+  title: string
+  due_date: string
+  done_at: string | null
+}
+
+interface Property {
+  title: string | null
+  city: string | null
+  neighborhood: string | null
+}
+
+
 interface DashboardData {
   totalLeads: number
   leadsWithoutAction: Lead[]
@@ -43,6 +58,17 @@ interface DashboardData {
   wonCount: number
   lostCount: number
   leads: Lead[]
+  campaignMetrics: {
+    tasksTotal: number
+    doneTotal: number
+    pending: number
+    overdue: number
+    dueToday: number
+    dueWeek: number
+    pct: number
+  }
+  upcomingCampaignTasks: CampaignTask[]
+  propertyMap: Record<string, Property>
 }
 
 interface DashboardClientProps {
@@ -59,6 +85,12 @@ const taskTypeLabels: Record<string, string> = {
   proposal: 'Proposta',
   email: 'E-mail',
   other: 'Outro',
+}
+
+function ymdToBR(dateStr: string) {
+  if (!dateStr) return '—'
+  const [year, month, day] = dateStr.split('-')
+  return `${day}/${month}/${year}`
 }
 
 function formatTime(dateStr: string) {
@@ -166,6 +198,177 @@ export function DashboardClient({ isAdmin, profiles, selectedBroker, data }: Das
             </div>
           </CardContent>
         </Card>
+      </div>
+
+      {/* Campanhas Section */}
+      <div className="flex items-center justify-between mb-6">
+        <h2 className="text-2xl font-bold text-[var(--foreground)]">Campanhas</h2>
+        <Link
+          href="/campaigns"
+          className="inline-flex items-center gap-2 px-4 py-2 bg-[var(--primary)] text-[var(--primary-foreground)] rounded-[var(--radius)] hover:bg-[var(--primary)]/90 transition-colors text-sm font-medium"
+        >
+          Ver Todas
+          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+          </svg>
+        </Link>
+      </div>
+
+      <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-4 mb-8">
+        <Card>
+          <CardContent className="pt-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-[var(--muted-foreground)]">Total</p>
+                <p className="text-3xl font-bold text-[var(--foreground)]">{data.campaignMetrics.tasksTotal}</p>
+              </div>
+              <div className="w-12 h-12 rounded-full bg-[var(--primary)] flex items-center justify-center">
+                <svg className="w-6 h-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+                </svg>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardContent className="pt-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-[var(--muted-foreground)]">Concluídas</p>
+                <p className="text-3xl font-bold text-[var(--success)]">{data.campaignMetrics.doneTotal}</p>
+              </div>
+              <div className="w-12 h-12 rounded-full bg-[var(--success)] flex items-center justify-center">
+                <svg className="w-6 h-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardContent className="pt-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-[var(--muted-foreground)]">Pendentes</p>
+                <p className="text-3xl font-bold text-[var(--warning)]">{data.campaignMetrics.pending}</p>
+              </div>
+              <div className="w-12 h-12 rounded-full bg-[var(--warning)] flex items-center justify-center">
+                <svg className="w-6 h-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardContent className="pt-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-[var(--muted-foreground)]">Atrasadas</p>
+                <p className="text-3xl font-bold text-[var(--destructive)]">{data.campaignMetrics.overdue}</p>
+              </div>
+              <div className="w-12 h-12 rounded-full bg-[var(--destructive)] flex items-center justify-center">
+                <svg className="w-6 h-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardContent className="pt-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-[var(--muted-foreground)]">Hoje</p>
+                <p className="text-3xl font-bold text-[var(--info)]">{data.campaignMetrics.dueToday}</p>
+              </div>
+              <div className="w-12 h-12 rounded-full bg-[var(--info)] flex items-center justify-center">
+                <svg className="w-6 h-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                </svg>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardContent className="pt-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-[var(--muted-foreground)]">Esta Semana</p>
+                <p className="text-3xl font-bold text-[var(--primary)]">{data.campaignMetrics.dueWeek}</p>
+              </div>
+              <div className="w-12 h-12 rounded-full bg-[var(--primary)] flex items-center justify-center">
+                <svg className="w-6 h-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+                </svg>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardContent className="pt-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-[var(--muted-foreground)]">Execução</p>
+                <p className="text-3xl font-bold text-[var(--foreground)]">{data.campaignMetrics.pct}%</p>
+              </div>
+              <div className="w-12 h-12 rounded-full bg-[var(--accent)] flex items-center justify-center">
+                <svg className="w-6 h-6 text-[var(--foreground)]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
+                </svg>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Próximas tarefas de campanha */}
+      <div className="mt-4 rounded-3xl border border-black/10 bg-white p-4 shadow-sm">
+        <div className="flex items-center justify-between">
+          <div>
+            <div className="text-sm font-extrabold text-black/90">Próximas tarefas</div>
+            <div className="mt-1 text-sm text-black/60">Pendências mais próximas por vencimento.</div>
+          </div>
+          <a
+            href="/campaigns"
+            className="rounded-xl border border-black/10 bg-white px-3 py-2 text-sm text-black/80 hover:bg-black/5"
+          >
+            Ver tudo
+          </a>
+        </div>
+
+        <div className="mt-3 space-y-2">
+          {data.upcomingCampaignTasks.length === 0 ? (
+            <p className="text-sm text-black/60">Sem tarefas pendentes.</p>
+          ) : (
+            data.upcomingCampaignTasks.map((task) => {
+              const property = data.propertyMap[task.property_id]
+              const propertyName = property ? property.title : `Imóvel ${task.property_id.slice(0, 6)}`
+              const location = property ? `${property.neighborhood} • ${property.city}` : ''
+              return (
+                <div key={task.id} className="flex items-center justify-between p-3 rounded-xl border border-black/10 bg-white hover:bg-black/5 transition-colors">
+                  <div className="flex-1 min-w-0">
+                    <div className="text-sm font-medium text-black truncate">{task.title}</div>
+                    <div className="text-xs text-black/60">{ymdToBR(task.due_date)}</div>
+                    <div className="text-xs text-black/60 truncate">{propertyName} • {location}</div>
+                  </div>
+                  <a
+                    href={`/campaigns/${task.property_id}`}
+                    className="ml-3 px-3 py-1 text-xs bg-black text-white rounded-lg hover:bg-black/80 transition-colors"
+                  >
+                    Abrir
+                  </a>
+                </div>
+              )
+            })
+          )}
+        </div>
       </div>
 
       {(data.wonCount > 0 || data.lostCount > 0) && (

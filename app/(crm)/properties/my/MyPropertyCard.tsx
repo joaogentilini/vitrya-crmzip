@@ -18,6 +18,12 @@ type Props = {
     property_category_name?: string | null;
     imageUrls?: string[];
   };
+  agg?: {
+    pending_total: number;
+    overdue: number;
+    due_today: number;
+    due_week: number;
+  };
 };
 
 function money(v: number | null | undefined) {
@@ -25,7 +31,7 @@ function money(v: number | null | undefined) {
   return `R$ ${Number(v).toLocaleString("pt-BR")}`;
 }
 
-export default function MyPropertyCard({ property }: Props) {
+export default function MyPropertyCard({ property, agg }: Props) {
   const router = useRouter();
 
   const location =
@@ -153,6 +159,36 @@ export default function MyPropertyCard({ property }: Props) {
           >
             {property.status ?? "—"}
           </span>
+          {agg && agg.pending_total > 0 && (
+            <span
+              style={{
+                fontSize: 12,
+                padding: "6px 10px",
+                borderRadius: 999,
+                border: "1px solid rgba(0,0,0,.10)",
+                backgroundColor: "rgba(0,0,0,.05)",
+                fontWeight: 800,
+              }}
+              onClick={(e) => e.stopPropagation()}
+            >
+              Pend.: {agg.pending_total}
+            </span>
+          )}
+          {agg && agg.overdue > 0 && (
+            <span
+              style={{
+                fontSize: 12,
+                padding: "6px 10px",
+                borderRadius: 999,
+                border: "1px solid rgba(255,0,0,.20)",
+                backgroundColor: "rgba(255,0,0,.05)",
+                fontWeight: 800,
+              }}
+              onClick={(e) => e.stopPropagation()}
+            >
+              Atras.: {agg.overdue}
+            </span>
+          )}
         </div>
       </div>
     </div>

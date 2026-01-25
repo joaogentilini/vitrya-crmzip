@@ -48,15 +48,71 @@ export default async function MyPropertiesPage() {
   }
 
   const properties = await getMyPropertiesWithCover(user.id);
-  const ids = properties.map((p) => p.id);
+  const propertyIds = properties.map((p) => p.id);
+  const safeIds = propertyIds.length ? propertyIds : ['00000000-0000-0000-0000-000000000000'];
+
+  // Buscar tarefas de campanha
+  const { data: taskRows } = await supabase
+    .from('property_campaign_tasks')
+    .select('property_id, due_date, done_at')
+    .in('property_id', safeIds);
+
+  // Agregar métricas
+  let tasks_total = 0;
+  let pending_total = 0;
+  let done_total = 0;
+  let overdue = 0;
+  let due_today = 0;
+  let due_week = 0;
+
+  const today = new Date();
+  const todayYMD = today.toISOString().slice(0, 10);
+  const weekEnd = new Date(today);
+  weekEnd.setDate(today.getDate() + 7);
+  const weekEndYMD = weekEnd.toISOString().slice(0, 10);
+
+  for (const row of taskRows ?? []) {
+    tasks_total++;
+    if (row.done_at) {
+      done_total++;
+    } else {
+      pending_total++;
+      const dueYMD = row.due_date.slice(0, 10);
+      if (dueYMD < todayYMD) overdue++;
+      else if (dueYMD === todayYMD) due_today++;
+      else if (dueYMD <= weekEndYMD) due_week++;
+    }
+  }
+
+  // Criar aggMap para badges por imóvel (opcional)
+  const aggMap = new Map();
+  for (const id of propertyIds) {
+    const propertyTasks = (taskRows ?? []).filter(t => t.property_id === id);
+    let p_tasks_total = 0;
+    let p_pending_total = 0;
+    let p_overdue = 0;
+    let p_due_today = 0;
+    let p_due_week = 0;
+    for (const t of propertyTasks) {
+      p_tasks_total++;
+      if (!t.done_at) {
+        p_pending_total++;
+        const dueYMD = t.due_date.slice(0, 10);
+        if (dueYMD < todayYMD) p_overdue++;
+        else if (dueYMD === todayYMD) p_due_today++;
+        else if (dueYMD <= weekEndYMD) p_due_week++;
+      }
+    }
+    aggMap.set(id, { pending_total: p_pending_total, overdue: p_overdue, due_today: p_due_today, due_week: p_due_week });
+  }
 
   // Buscar mídias para carrossel
   let mediaByProperty: Record<string, string[]> = {};
-  if (ids.length) {
+  if (propertyIds.length) {
     const { data: mediaRows } = await supabase
       .from("property_media")
       .select("property_id,url,kind,position")
-      .in("property_id", ids)
+      .in("property_id", propertyIds)
       .eq("kind", "image")
       .order("position", { ascending: true });
 
@@ -124,6 +180,36 @@ export default async function MyPropertiesPage() {
         </Link>
       </div>
 
+      {/* Resumo de Campanhas */}
+      <div className="rounded-3xl border border-black/10 bg-white p-4 shadow-sm mb-6">
+        <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+          <div>
+            <div className="text-sm font-extrabold text-black/90">Resumo de Campanhas</div>
+            <div className="mt-2 flex flex-wrap gap-2">
+              <span className="rounded-full border border-black/10 bg-black/5 px-3 py-1 text-xs text-black/70">
+                Pendentes: {pending_total}
+              </span>
+              <span className="rounded-full border border-black/10 bg-black/5 px-3 py-1 text-xs text-black/70">
+                Atrasadas: {overdue}
+              </span>
+              <span className="rounded-full border border-black/10 bg-black/5 px-3 py-1 text-xs text-black/70">
+                Hoje: {due_today}
+              </span>
+              <span className="rounded-full border border-black/10 bg-black/5 px-3 py-1 text-xs text-black/70">
+                Semana: {due_week}
+              </span>
+            </div>
+          </div>
+
+          <a
+            href="/campaigns"
+            className="rounded-xl border border-black/10 bg-white px-3 py-2 text-sm text-black/80 hover:bg-black/5"
+          >
+            Abrir Kanban
+          </a>
+        </div>
+      </div>
+
       {propertiesWithImages.length > 0 ? (
         <div
           style={{
@@ -134,7 +220,7 @@ export default async function MyPropertiesPage() {
           }}
         >
           {propertiesWithImages.map((property) => (
-            <MyPropertyCard key={property.id} property={property as any} />
+            <MyPropertyCard key={property.id} property={property as any} agg={aggMap.get(property.id)} />
           ))}
         </div>
       ) : (
