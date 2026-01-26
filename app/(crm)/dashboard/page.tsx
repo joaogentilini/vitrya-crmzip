@@ -193,13 +193,15 @@ async function getProfiles() {
   return data || []
 }
 
-// ✅ Next App Router: searchParams NÃO é Promise
+type SP = { broker?: string }
+
 export default async function DashboardPage({
   searchParams,
 }: {
-  searchParams?: { broker?: string }
+  searchParams?: SP | Promise<SP>
 }) {
-  const broker = searchParams?.broker
+  const sp = (await Promise.resolve(searchParams)) ?? {}
+  const broker = sp.broker
 
   const profile = await ensureUserProfile()
   if (!profile) redirect('/')
