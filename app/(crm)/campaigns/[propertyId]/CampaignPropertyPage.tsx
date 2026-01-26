@@ -45,8 +45,14 @@ export default function CampaignDetailPage({
     }
     
     return pendingTasks.filter(task => {
+      // Validate due_date exists
+      if (!task.due_date) return false
+      
       const dueDate = new Date(task.due_date)
       dueDate.setHours(0, 0, 0, 0)
+      
+      // Check if date is valid
+      if (isNaN(dueDate.getTime())) return false
       
       if (filterRange === 'today') {
         return dueDate.getTime() === today.getTime()
@@ -55,13 +61,13 @@ export default function CampaignDetailPage({
       if (filterRange === 'week') {
         const weekEnd = new Date(today)
         weekEnd.setDate(weekEnd.getDate() + 7)
-        return dueDate >= today && dueDate <= weekEnd
+        return dueDate >= today && dueDate < weekEnd
       }
       
       if (filterRange === '30') {
         const thirtyEnd = new Date(today)
         thirtyEnd.setDate(thirtyEnd.getDate() + 30)
-        return dueDate >= today && dueDate <= thirtyEnd
+        return dueDate >= today && dueDate < thirtyEnd
       }
       
       return true
