@@ -1,6 +1,7 @@
 import { cookies } from 'next/headers'
 import { createServerClient } from '@supabase/ssr'
 import CampaignDetailPage from './CampaignPropertyPage'
+import ActivateCampaignCard from './ActivateCampaignCard'
 import type { CampaignProperty, CampaignTask } from '../types'
 
 export const dynamic = 'force-dynamic'
@@ -113,6 +114,18 @@ export default async function CampaignByPropertyPage({
     cover_url,
   }
 
+  const hasTasks = (tasks ?? []).length > 0
+  const templates =
+    !hasTasks
+      ? ((
+          await supabase
+            .from('campaign_templates')
+            .select('id, name')
+            .eq('is_active', true)
+            .order('created_at', { ascending: true })
+        ).data ?? [])
+      : []
+
   return (
     <div className="p-6">
       <div className="mx-auto max-w-[1200px] space-y-4">
@@ -147,7 +160,11 @@ export default async function CampaignByPropertyPage({
         </div>
 
         {/* Conteúdo real (seu componente premium já existente) */}
-        <CampaignDetailPage property={property} tasks={tasks ?? []} />
+        {hasTasks ? (
+          <CampaignDetailPage property={property} tasks={tasks ?? []} />
+        ) : (
+          <ActivateCampaignCard propertyId={property.id} templates={templates} />
+        )}
       </div>
     </div>
   )
