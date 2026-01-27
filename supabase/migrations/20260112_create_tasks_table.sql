@@ -115,7 +115,9 @@ CREATE TRIGGER tasks_updated_at
   EXECUTE FUNCTION public.set_updated_at();
 
 -- View for lead next task (for indicators)
-CREATE OR REPLACE VIEW public.lead_next_task AS
+DROP VIEW IF EXISTS public.lead_next_task;
+
+CREATE VIEW public.lead_next_task AS
 SELECT 
   l.id as lead_id,
   t.id as next_task_id,
