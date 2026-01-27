@@ -73,6 +73,8 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
+DROP TRIGGER IF EXISTS automation_settings_updated_at ON public.automation_settings;
+
 CREATE TRIGGER automation_settings_updated_at
   BEFORE UPDATE ON public.automation_settings
   FOR EACH ROW
