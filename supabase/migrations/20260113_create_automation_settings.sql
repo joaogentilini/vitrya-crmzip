@@ -19,11 +19,15 @@ ON CONFLICT (key) DO NOTHING;
 ALTER TABLE public.automation_settings ENABLE ROW LEVEL SECURITY;
 
 -- Everyone can read automation settings
+DROP POLICY IF EXISTS "Anyone can view automation_settings" ON public.automation_settings;
+
 CREATE POLICY "Anyone can view automation_settings"
   ON public.automation_settings FOR SELECT
   USING (true);
 
 -- Only admins can update
+DROP POLICY IF EXISTS "Only admins can update automation_settings" ON public.automation_settings;
+
 CREATE POLICY "Only admins can update automation_settings"
   ON public.automation_settings FOR UPDATE
   USING (
@@ -35,6 +39,8 @@ CREATE POLICY "Only admins can update automation_settings"
   );
 
 -- Only admins can insert
+DROP POLICY IF EXISTS "Only admins can insert automation_settings" ON public.automation_settings;
+
 CREATE POLICY "Only admins can insert automation_settings"
   ON public.automation_settings FOR INSERT
   WITH CHECK (
@@ -46,6 +52,8 @@ CREATE POLICY "Only admins can insert automation_settings"
   );
 
 -- Only admins can delete
+DROP POLICY IF EXISTS "Only admins can delete automation_settings" ON public.automation_settings;
+
 CREATE POLICY "Only admins can delete automation_settings"
   ON public.automation_settings FOR DELETE
   USING (
