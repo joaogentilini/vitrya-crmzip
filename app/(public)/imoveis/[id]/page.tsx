@@ -1,7 +1,9 @@
 import Link from "next/link";
+import { headers } from "next/headers";
 import { createClient } from "@/lib/supabase/server";
 import { getSignedImageUrl } from "@/lib/media/getPublicImageUrl";
 import { PropertyGallery } from "./PropertyGallery";
+import { buildWhatsAppLink, resolvePhone, sanitizePhone } from "@/lib/whatsapp";
 
 export const dynamic = "force-dynamic";
 
@@ -26,6 +28,24 @@ type PublicProperty = {
   // ✅ vindo da view ext
   property_category_id?: string | null;
   property_category_name?: string | null;
+
+  // ✅ corretor responsável
+  broker_id?: string | null;
+  broker_full_name?: string | null;
+  broker_public_name?: string | null;
+  broker_creci?: string | null;
+  broker_phone?: string | null;
+  broker_phone_e164?: string | null;
+  broker_email?: string | null;
+  broker_avatar_url?: string | null;
+  broker_tagline?: string | null;
+  broker_bio?: string | null;
+  broker_instagram_url?: string | null;
+  broker_facebook_url?: string | null;
+  broker_tiktok_url?: string | null;
+  broker_youtube_url?: string | null;
+  broker_linkedin_url?: string | null;
+  broker_website_url?: string | null;
 };
 
 type MediaRow = {
@@ -44,6 +64,28 @@ function purposeLabel(purpose: string) {
   if (purpose === "sale") return "Venda";
   if (purpose === "rent") return "Locação";
   return purpose;
+}
+
+function getInitials(name: string) {
+  const parts = name.trim().split(/\s+/);
+  const first = parts[0]?.[0] ?? "";
+  const last = parts.length > 1 ? parts[parts.length - 1][0] : "";
+  return `${first}${last}`.toUpperCase();
+}
+
+function formatBrazilPhone(raw: string | null) {
+  if (!raw) return null;
+  const digits = sanitizePhone(raw);
+  if (!digits) return raw;
+  let sliced = digits;
+  if (sliced.startsWith("55") && sliced.length >= 12) sliced = sliced.slice(2);
+  if (sliced.length === 11) {
+    return `(${sliced.slice(0, 2)}) ${sliced.slice(2, 7)}-${sliced.slice(7)}`;
+  }
+  if (sliced.length === 10) {
+    return `(${sliced.slice(0, 2)}) ${sliced.slice(2, 6)}-${sliced.slice(6)}`;
+  }
+  return raw;
 }
 
 export default async function PublicPropertyDetailsPage({
@@ -165,10 +207,40 @@ export default async function PublicPropertyDetailsPage({
       .filter(Boolean)
       .join(", ");
 
-  const whatsappText = `Olá! Tenho interesse no imóvel: ${p.title ?? "Imóvel"} (ID ${p.id}). Pode me passar mais informações?`;
-  const whatsappLink = `https://wa.me/55SEUNUMEROAQUI?text=${encodeURIComponent(
-    whatsappText
-  )}`;
+  const headerList = await headers();
+  const host = headerList.get("x-forwarded-host") ?? headerList.get("host");
+  const proto = headerList.get("x-forwarded-proto") ?? "https";
+  const pageUrl = host ? `${proto}://${host}/imoveis/${p.id}` : null;
+
+  const whatsappTextParts = [
+    `Olá! Tenho interesse no imóvel: ${p.title ?? "Imóvel"} (ID ${p.id}).`,
+    pageUrl ? `Link: ${pageUrl}` : null,
+  ].filter(Boolean);
+  const whatsappText = whatsappTextParts.join(" ");
+
+  const resolvedPhone = resolvePhone(
+    p.broker_phone_e164,
+    p.broker_phone,
+    process.env.NEXT_PUBLIC_WHATSAPP_NUMBER
+  );
+  const whatsappLink = buildWhatsAppLink(resolvedPhone, whatsappText);
+
+  const brokerName =
+    p.broker_public_name || p.broker_full_name || "Corretor Vitrya";
+  const brokerInitials = getInitials(brokerName);
+  const brokerPhoneLabel = formatBrazilPhone(
+    p.broker_phone_e164 || p.broker_phone || null
+  );
+  const brokerCardHref = p.broker_id ? `/corretores/${p.broker_id}` : null;
+
+  const socials = [
+    { key: "instagram", label: "Instagram", icon: "📸", url: p.broker_instagram_url },
+    { key: "facebook", label: "Facebook", icon: "📘", url: p.broker_facebook_url },
+    { key: "tiktok", label: "TikTok", icon: "🎵", url: p.broker_tiktok_url },
+    { key: "youtube", label: "YouTube", icon: "▶️", url: p.broker_youtube_url },
+    { key: "linkedin", label: "LinkedIn", icon: "💼", url: p.broker_linkedin_url },
+    { key: "website", label: "Site", icon: "🌐", url: p.broker_website_url },
+  ].filter((item) => Boolean(item.url));
 
   return (
     <main className="pv-main">
@@ -283,22 +355,24 @@ export default async function PublicPropertyDetailsPage({
                   Agendar visita
                 </button>
 
-                <a
-                  href={whatsappLink}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="pv-btn pv-btn-secondary"
-                  style={{
-                    padding: "12px 16px",
-                    textDecoration: "none",
-                    display: "inline-flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    fontWeight: 900,
-                  }}
-                >
-                  Converse conosco agora
-                </a>
+                {whatsappLink ? (
+                  <a
+                    href={whatsappLink}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="pv-btn pv-btn-secondary"
+                    style={{
+                      padding: "12px 16px",
+                      textDecoration: "none",
+                      display: "inline-flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      fontWeight: 900,
+                    }}
+                  >
+                    Converse conosco agora
+                  </a>
+                ) : null}
               </div>
             </div>
 
@@ -362,20 +436,22 @@ export default async function PublicPropertyDetailsPage({
                     Agendar visita
                   </button>
 
-                  <a
-                    href={whatsappLink}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="pv-btn pv-btn-secondary"
-                    style={{
-                      padding: "12px 14px",
-                      textDecoration: "none",
-                      textAlign: "center",
-                      fontWeight: 900,
-                    }}
-                  >
-                    Converse conosco agora
-                  </a>
+                  {whatsappLink ? (
+                    <a
+                      href={whatsappLink}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="pv-btn pv-btn-secondary"
+                      style={{
+                        padding: "12px 14px",
+                        textDecoration: "none",
+                        textAlign: "center",
+                        fontWeight: 900,
+                      }}
+                    >
+                      Converse conosco agora
+                    </a>
+                  ) : null}
                 </div>
 
                 <div style={{ marginTop: 14, display: "flex", gap: 10 }}>
@@ -393,6 +469,143 @@ export default async function PublicPropertyDetailsPage({
                   </button>
                 </div>
               </aside>
+
+              {brokerCardHref ? (
+                <div
+                  className="pv-glass pv-glass-soft"
+                  style={{
+                    marginTop: 16,
+                    padding: 16,
+                    position: "relative",
+                    overflow: "hidden",
+                  }}
+                >
+                  <Link
+                    href={brokerCardHref}
+                    aria-label="Ver perfil do corretor"
+                    style={{ position: "absolute", inset: 0, zIndex: 1 }}
+                  >
+                    <span style={{ position: "absolute", inset: 0 }} />
+                  </Link>
+
+                  <div style={{ position: "relative", zIndex: 2, display: "grid", gap: 12 }}>
+                    <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
+                      {p.broker_avatar_url ? (
+                        <img
+                          src={p.broker_avatar_url}
+                          alt={brokerName}
+                          style={{
+                            width: 64,
+                            height: 64,
+                            borderRadius: "50%",
+                            objectFit: "cover",
+                            border: "2px solid rgba(255,255,255,.7)",
+                          }}
+                        />
+                      ) : (
+                        <div
+                          style={{
+                            width: 64,
+                            height: 64,
+                            borderRadius: "50%",
+                            display: "flex",
+                            alignItems: "center",
+                            justifyContent: "center",
+                            fontWeight: 900,
+                            background:
+                              "linear-gradient(135deg, rgba(41,68,135,.35), rgba(23,190,187,.25), rgba(255,104,31,.18))",
+                            color: "rgba(23,26,33,.9)",
+                          }}
+                        >
+                          {brokerInitials}
+                        </div>
+                      )}
+
+                      <div>
+                        <div style={{ fontWeight: 900, fontSize: 16 }}>{brokerName}</div>
+                        {p.broker_creci ? (
+                          <div style={{ fontSize: 12, opacity: 0.75 }}>
+                            CRECI {p.broker_creci}
+                          </div>
+                        ) : null}
+                      </div>
+                    </div>
+
+                    {p.broker_tagline ? (
+                      <div style={{ fontWeight: 700, opacity: 0.85 }}>
+                        {p.broker_tagline}
+                      </div>
+                    ) : null}
+
+                    {p.broker_bio ? (
+                      <div
+                        style={{
+                          fontSize: 13,
+                          opacity: 0.75,
+                          display: "-webkit-box",
+                          WebkitLineClamp: 2,
+                          WebkitBoxOrient: "vertical",
+                          overflow: "hidden",
+                        }}
+                      >
+                        {p.broker_bio}
+                      </div>
+                    ) : null}
+
+                    <div style={{ display: "grid", gap: 6, fontSize: 13 }}>
+                      {brokerPhoneLabel ? (
+                        <div>
+                          <strong>Telefone:</strong> {brokerPhoneLabel}
+                        </div>
+                      ) : null}
+                      {p.broker_email ? (
+                        <div>
+                          <strong>Email:</strong> {p.broker_email}
+                        </div>
+                      ) : null}
+                    </div>
+
+                    {socials.length ? (
+                      <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                        {socials.map((item) => (
+                          <a
+                            key={item.key}
+                            href={item.url ?? undefined}
+                            target="_blank"
+                            rel="noreferrer"
+                            style={{
+                              textDecoration: "none",
+                              fontSize: 12,
+                              padding: "6px 8px",
+                              borderRadius: 999,
+                              border: "1px solid rgba(23,26,33,.12)",
+                              background: "rgba(255,255,255,.75)",
+                              display: "inline-flex",
+                              alignItems: "center",
+                              gap: 6,
+                            }}
+                          >
+                            <span aria-hidden="true">{item.icon}</span>
+                            {item.label}
+                          </a>
+                        ))}
+                      </div>
+                    ) : null}
+
+                    {whatsappLink ? (
+                      <a
+                        href={whatsappLink}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="pv-btn pv-btn-primary"
+                        style={{ padding: "10px 14px", fontWeight: 900, justifyContent: "center" }}
+                      >
+                        WhatsApp
+                      </a>
+                    ) : null}
+                  </div>
+                </div>
+              ) : null}
             </div>
           </section>
 
