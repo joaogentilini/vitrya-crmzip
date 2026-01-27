@@ -8,6 +8,7 @@ export async function completeCampaignTask(taskId: string) {
     throw new Error('Task id is required')
   }
 
+  // Next 15/16: cookies() é async
   const cookieStore = await cookies()
   const supabase = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -19,29 +20,45 @@ export async function completeCampaignTask(taskId: string) {
         },
         setAll(cookiesToSet) {
           try {
-            cookiesToSet.forEach(({ name, value, options }) => {
-              cookieStore.set(name, value, options)
+            cookiesToSet.forEach(({ name, value, options }: any) => {
+              ;(cookieStore as any).set(name, value, options)
             })
           } catch {
-            // Server Components podem bloquear set; em Server Actions geralmente funciona.
+            // Server Actions/Components: ok ignorar
           }
         },
       },
     }
   )
 
-  const { data: authData, error: authError } = await supabase.auth.getUser()
-  if (authError || !authData?.user) {
-    throw new Error('Not authenticated')
+  const isMissingColumnError = (error: { code?: string; message?: string }) => {
+    if (error?.code === '42703') return true
+    if (!error?.message) return false
+    return error.message.toLowerCase().includes('column') && error.message.toLowerCase().includes('does not exist')
   }
 
-  const { error } = await supabase
-    .from('property_campaign_tasks')
-    .update({ done_at: new Date().toISOString() })
-    .eq('id', taskId)
-    .is('done_at', null)
+  const now = new Date().toISOString()
 
-  if (error) {
+  const tryUpdate = async (payload: Record<string, any>, requireNullDoneAt = false) => {
+    let query = supabase.from('property_campaign_tasks').update(payload).eq('id', taskId)
+    if (requireNullDoneAt) {
+      query = query.is('done_at', null)
+    }
+    const { error } = await query
+    if (!error) return true
+    if (isMissingColumnError(error)) return false
     throw new Error(error.message)
   }
+
+  if (await tryUpdate({ done_at: now }, true)) {
+    return { ok: true }
+  }
+  if (await tryUpdate({ done: true })) {
+    return { ok: true }
+  }
+  if (await tryUpdate({ status: 'done' })) {
+    return { ok: true }
+  }
+
+  throw new Error('No compatible column found to complete task')
 }
