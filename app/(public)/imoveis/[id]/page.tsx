@@ -1,8 +1,10 @@
 import Link from "next/link";
 import { headers } from "next/headers";
+import type { ReactNode } from "react";
 import { createClient } from "@/lib/supabase/server";
 import { getSignedImageUrl } from "@/lib/media/getPublicImageUrl";
-import { PropertyGallery } from "./PropertyGallery";
+import { PropertyMediaPanel } from "./PropertyMediaPanel";
+import { BrokerCard } from "./BrokerCard";
 import { buildWhatsAppLink, resolvePhone, sanitizePhone } from "@/lib/whatsapp";
 
 export const dynamic = "force-dynamic";
@@ -88,6 +90,36 @@ function formatBrazilPhone(raw: string | null) {
   return raw;
 }
 
+function normalizeAvailableItems(source: Record<string, unknown>) {
+  const raw =
+    source.available_items ??
+    source.items_available ??
+    source.amenities ??
+    source.features ??
+    null;
+
+  if (!raw) return [] as string[];
+
+  if (Array.isArray(raw)) {
+    return raw.map((item) => String(item).trim()).filter(Boolean);
+  }
+
+  if (typeof raw === "string") {
+    return raw
+      .split(/[\n,;•]+/g)
+      .map((item) => item.trim())
+      .filter(Boolean);
+  }
+
+  if (typeof raw === "object") {
+    return Object.entries(raw as Record<string, unknown>)
+      .filter(([, value]) => value === true || value === 1 || value === "true")
+      .map(([key]) => key.replace(/_/g, " "));
+  }
+
+  return [];
+}
+
 export default async function PublicPropertyDetailsPage({
   params,
 }: {
@@ -152,7 +184,6 @@ export default async function PublicPropertyDetailsPage({
     .from("property_media")
     .select("property_id, url, kind, position")
     .eq("property_id", p.id)
-    .eq("kind", "image")
     .order("position", { ascending: true });
 
   if (mediaErr) {
@@ -160,14 +191,20 @@ export default async function PublicPropertyDetailsPage({
     // (se quiser, logar em server)
   }
 
-  const mediaPaths = ((mediaRows ?? []) as MediaRow[])
+  const mediaList = (mediaRows ?? []) as MediaRow[];
+  const imagePaths = mediaList
+    .filter((m) => m.kind === "image")
+    .map((m) => m.url)
+    .filter(Boolean);
+  const videoPaths = mediaList
+    .filter((m) => m.kind === "video")
     .map((m) => m.url)
     .filter(Boolean);
 
   // capa primeiro (se existir e não repetir)
   const uniquePaths: string[] = [];
   if (p.cover_media_url) uniquePaths.push(p.cover_media_url);
-  for (const path of mediaPaths) {
+  for (const path of imagePaths) {
     if (!uniquePaths.includes(path)) uniquePaths.push(path);
   }
 
@@ -186,6 +223,19 @@ export default async function PublicPropertyDetailsPage({
 
   const galleryImages = imageUrls.filter(Boolean) as string[];
 
+  const uniqueVideoPaths = Array.from(new Set(videoPaths)).slice(0, 2);
+  const videoUrls = (
+    await Promise.all(
+      uniqueVideoPaths.map(async (path) => {
+        try {
+          return await getSignedImageUrl(path);
+        } catch {
+          return null;
+        }
+      })
+    )
+  ).filter(Boolean) as string[];
+
   const locationLine =
     [p.address, p.neighborhood, p.city].filter(Boolean).join(" — ") ||
     "Localização não informada";
@@ -193,6 +243,9 @@ export default async function PublicPropertyDetailsPage({
   const mapsQuery = [p.address, p.neighborhood, p.city].filter(Boolean).join(", ");
   const mapsUrl = mapsQuery
     ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(mapsQuery)}`
+    : null;
+  const mapsEmbedUrl = mapsQuery
+    ? `https://maps.google.com/maps?q=${encodeURIComponent(mapsQuery)}&t=&z=15&ie=UTF8&iwloc=&output=embed`
     : null;
 
   const mainPrice =
@@ -242,6 +295,108 @@ export default async function PublicPropertyDetailsPage({
     { key: "website", label: "Site", icon: "🌐", url: p.broker_website_url },
   ].filter((item) => Boolean(item.url));
 
+  const availableItems = normalizeAvailableItems(p as Record<string, unknown>);
+
+  const primaryStats = [
+    p.area_m2 != null
+      ? {
+          key: "area",
+          label: "Área",
+          value: `${p.area_m2} m²`,
+          icon: (
+            <svg viewBox="0 0 24 24" width={16} height={16} aria-hidden="true">
+              <path
+                d="M4 9V4h5M20 15v5h-5M4 15v5h5M20 9V4h-5"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.6"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+            </svg>
+          ),
+        }
+      : null,
+    p.bedrooms != null
+      ? {
+          key: "bedrooms",
+          label: "Quartos",
+          value: `${p.bedrooms}`,
+          icon: (
+            <svg viewBox="0 0 24 24" width={16} height={16} aria-hidden="true">
+              <path
+                d="M4 10h16M5 10V7a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v3M15 10V7a2 2 0 0 1 2-2h2a1 1 0 0 1 1 1v4M4 10v6M20 10v6M3 16h18"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.6"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+            </svg>
+          ),
+        }
+      : null,
+    p.bathrooms != null
+      ? {
+          key: "bathrooms",
+          label: "Banheiros",
+          value: `${p.bathrooms}`,
+          icon: (
+            <svg viewBox="0 0 24 24" width={16} height={16} aria-hidden="true">
+              <path
+                d="M4 10h16v5a3 3 0 0 1-3 3H7a3 3 0 0 1-3-3v-5Z"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.6"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+              <path
+                d="M6 10V7a2 2 0 0 1 2-2h2"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.6"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+            </svg>
+          ),
+        }
+      : null,
+    p.parking != null
+      ? {
+          key: "parking",
+          label: "Vagas",
+          value: `${p.parking}`,
+          icon: (
+            <svg viewBox="0 0 24 24" width={16} height={16} aria-hidden="true">
+              <path
+                d="M7 4h6a4 4 0 0 1 0 8H7z"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.6"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+              <path
+                d="M7 4v16"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.6"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+            </svg>
+          ),
+        }
+      : null,
+  ].filter(Boolean) as Array<{
+    key: string;
+    label: string;
+    value: string;
+    icon: ReactNode;
+  }>;
+
   return (
     <main className="pv-main">
       <div className="pv-container">
@@ -265,163 +420,179 @@ export default async function PublicPropertyDetailsPage({
           </div>
 
           {/* HERO */}
-          <section
-            style={{
-              display: "grid",
-              gridTemplateColumns: "1.05fr 1fr",
-              gap: 18,
-              alignItems: "start",
-            }}
-          >
+          <section className="pv-detail-grid">
             {/* LEFT */}
-            <div>
-              <h1
-                style={{
-                  margin: 0,
-                  fontSize: 40,
-                  lineHeight: 1.05,
-                  fontWeight: 950,
-                  letterSpacing: -0.6,
-                }}
-              >
-                {p.title ?? "Imóvel"}
-              </h1>
-
-              {/* ✅ categoria (se existir) */}
-              {p.property_category_name ? (
-                <div style={{ marginTop: 10, fontSize: 14, opacity: 0.85, fontWeight: 800 }}>
-                  {p.property_category_name}
-                </div>
-              ) : null}
-
-              <div style={{ marginTop: 10, fontSize: 15, opacity: 0.85 }}>
-                {locationLine}
-              </div>
-
-              {subtitle ? (
-                <div style={{ marginTop: 10, fontSize: 14, opacity: 0.9 }}>
-                  {subtitle}
-                </div>
-              ) : null}
-
-              <div
-                style={{
-                  marginTop: 14,
-                  display: "flex",
-                  gap: 10,
-                  flexWrap: "wrap",
-                }}
-              >
-                <span
+            <div style={{ display: "grid", gap: 18 }}>
+              <div>
+                <h1
                   style={{
-                    fontSize: 12,
-                    padding: "6px 10px",
-                    borderRadius: 999,
-                    border: "1px solid rgba(23,26,33,.12)",
-                    background: "rgba(255,255,255,.85)",
-                    fontWeight: 800,
+                    margin: 0,
+                    fontSize: 40,
+                    lineHeight: 1.05,
+                    fontWeight: 950,
+                    letterSpacing: -0.6,
                   }}
                 >
-                  {purposeLabel(p.purpose)}
-                </span>
+                  {p.title ?? "Imóvel"}
+                </h1>
 
-                <span
-                  style={{
-                    fontSize: 12,
-                    padding: "6px 10px",
-                    borderRadius: 999,
-                    border: "1px solid rgba(23,190,187,.35)",
-                    background: "rgba(23,190,187,.10)",
-                    fontWeight: 800,
-                  }}
-                >
-                  Vitrine Vitrya
-                </span>
-              </div>
-
-              {/* CTAs */}
-              <div
-                style={{
-                  marginTop: 18,
-                  display: "flex",
-                  gap: 10,
-                  flexWrap: "wrap",
-                }}
-              >
-                <button
-                  className="pv-btn pv-btn-primary"
-                  style={{ padding: "12px 16px" }}
-                >
-                  Agendar visita
-                </button>
-
-                {whatsappLink ? (
-                  <a
-                    href={whatsappLink}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="pv-btn pv-btn-secondary"
+                {p.property_category_name ? (
+                  <div
                     style={{
-                      padding: "12px 16px",
-                      textDecoration: "none",
-                      display: "inline-flex",
-                      alignItems: "center",
-                      justifyContent: "center",
-                      fontWeight: 900,
+                      marginTop: 10,
+                      fontSize: 14,
+                      opacity: 0.85,
+                      fontWeight: 800,
                     }}
                   >
-                    Converse conosco agora
-                  </a>
+                    {p.property_category_name}
+                  </div>
+                ) : null}
+
+                <div style={{ marginTop: 10, fontSize: 15, opacity: 0.85 }}>
+                  {locationLine}
+                </div>
+
+                {subtitle ? (
+                  <div style={{ marginTop: 10, fontSize: 14, opacity: 0.9 }}>
+                    {subtitle}
+                  </div>
+                ) : null}
+
+                <div
+                  style={{
+                    marginTop: 14,
+                    display: "flex",
+                    gap: 10,
+                    flexWrap: "wrap",
+                  }}
+                >
+                  <span
+                    style={{
+                      fontSize: 12,
+                      padding: "6px 10px",
+                      borderRadius: 999,
+                      border: "1px solid rgba(23,26,33,.12)",
+                      background: "rgba(255,255,255,.85)",
+                      fontWeight: 800,
+                    }}
+                  >
+                    {purposeLabel(p.purpose)}
+                  </span>
+
+                  <span
+                    style={{
+                      fontSize: 12,
+                      padding: "6px 10px",
+                      borderRadius: 999,
+                      border: "1px solid rgba(23,190,187,.35)",
+                      background: "rgba(23,190,187,.10)",
+                      fontWeight: 800,
+                    }}
+                  >
+                    Vitrine Vitrya
+                  </span>
+                </div>
+              </div>
+
+              <div className="pv-glass pv-glass-soft" style={{ padding: 18 }}>
+                <h2 style={{ margin: 0, fontSize: 18, fontWeight: 950 }}>
+                  Características
+                </h2>
+
+                {primaryStats.length ? (
+                  <div
+                    style={{
+                      marginTop: 12,
+                      display: "grid",
+                      gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))",
+                      gap: 10,
+                    }}
+                  >
+                    {primaryStats.map((item) => (
+                      <div
+                        key={item.key}
+                        style={{
+                          borderRadius: 14,
+                          border: "1px solid rgba(23,26,33,.12)",
+                          background: "rgba(255,255,255,.85)",
+                          padding: "10px 12px",
+                          display: "flex",
+                          gap: 10,
+                          alignItems: "center",
+                        }}
+                      >
+                        <div style={{ display: "grid", placeItems: "center", opacity: 0.75 }}>
+                          {item.icon}
+                        </div>
+                        <div>
+                          <div style={{ fontSize: 11, opacity: 0.7, fontWeight: 800 }}>
+                            {item.label}
+                          </div>
+                          <div style={{ fontWeight: 900 }}>{item.value}</div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p style={{ marginTop: 10, opacity: 0.7 }}>
+                    Informações principais não disponíveis.
+                  </p>
+                )}
+
+                {availableItems.length ? (
+                  <div style={{ marginTop: 16 }}>
+                    <div style={{ fontSize: 13, fontWeight: 900 }}>
+                      Itens disponíveis
+                    </div>
+                    <ul
+                      style={{
+                        margin: "10px 0 0",
+                        padding: 0,
+                        listStyle: "none",
+                        display: "grid",
+                        gap: 8,
+                        fontSize: 13,
+                        opacity: 0.9,
+                      }}
+                    >
+                      {availableItems.map((item) => (
+                        <li key={item} style={{ display: "flex", gap: 8 }}>
+                          <span aria-hidden="true" style={{ color: "var(--teal)" }}>
+                            ✓
+                          </span>
+                          <span>{item}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
                 ) : null}
               </div>
             </div>
 
             {/* RIGHT */}
-            <div style={{ position: "relative" }}>
-              {/* ✅ GALERIA / CARROSSEL + FULLSCREEN (com tamanho controlado) */}
-<div
-  style={{
-    width: "100%",
-    maxWidth: 760,     // ajuste fino: 680 / 720 / 760
-    margin: "0 auto",  // centraliza dentro da coluna da direita
-  }}
->
-  <div
-    style={{
-      width: "100%",
-      height: 420,        // ajuste fino: 380 / 420 / 460
-      borderRadius: 18,
-      overflow: "hidden",
-    }}
-  >
-    <PropertyGallery images={galleryImages} title={p.title ?? "Imóvel"} />
-  </div>
-</div>
+            <div style={{ display: "grid", gap: 16 }}>
+              <PropertyMediaPanel
+                images={galleryImages}
+                videoUrls={videoUrls}
+                mapEmbedUrl={mapsEmbedUrl}
+                mapLinkUrl={mapsUrl}
+                title={p.title ?? "Imóvel"}
+              />
 
-              {/* Botões da galeria (mantidos) */}
-              <div
-                style={{
-                  display: "flex",
-                  gap: 10,
-                  marginTop: 12,
-                  flexWrap: "wrap",
-                }}
-              >
-                <span className="pv-chip">Fotos</span>
-                <span className="pv-chip">Vídeo</span>
-                <span className="pv-chip">Mapa</span>
+              <div className="pv-glass pv-glass-soft" style={{ padding: 16 }}>
+                <div style={{ fontSize: 13, fontWeight: 900 }}>Entre em contato</div>
+                <div style={{ marginTop: 10, display: "grid", gap: 6, fontSize: 13 }}>
+                  <div style={{ fontWeight: 800 }}>{brokerName}</div>
+                  {brokerPhoneLabel ? <div>{brokerPhoneLabel}</div> : null}
+                  {p.broker_email ? <div>{p.broker_email}</div> : null}
+                  {!brokerPhoneLabel && !p.broker_email ? (
+                    <div style={{ opacity: 0.7 }}>Contato não informado.</div>
+                  ) : null}
+                </div>
               </div>
 
-              {/* Card sticky em glass */}
-              <aside
-                className="pv-glass pv-glass-soft"
-                style={{
-                  marginTop: 16,
-                  position: "sticky",
-                  top: 16,
-                  padding: 16,
-                }}
-              >
+              <aside className="pv-glass pv-glass-soft" style={{ padding: 16 }}>
                 <div style={{ fontSize: 12, opacity: 0.7 }}>Valor do imóvel</div>
 
                 <div style={{ fontSize: 30, fontWeight: 950, marginTop: 6 }}>
@@ -471,228 +642,46 @@ export default async function PublicPropertyDetailsPage({
               </aside>
 
               {brokerCardHref ? (
-                <div
-                  className="pv-glass pv-glass-soft"
-                  style={{
-                    marginTop: 16,
-                    padding: 16,
-                    position: "relative",
-                    overflow: "hidden",
-                  }}
-                >
-                  <Link
-                    href={brokerCardHref}
-                    aria-label="Ver perfil do corretor"
-                    style={{ position: "absolute", inset: 0, zIndex: 1 }}
-                  >
-                    <span style={{ position: "absolute", inset: 0 }} />
-                  </Link>
-
-                  <div style={{ position: "relative", zIndex: 2, display: "grid", gap: 12 }}>
-                    <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
-                      {p.broker_avatar_url ? (
-                        <img
-                          src={p.broker_avatar_url}
-                          alt={brokerName}
-                          style={{
-                            width: 64,
-                            height: 64,
-                            borderRadius: "50%",
-                            objectFit: "cover",
-                            border: "2px solid rgba(255,255,255,.7)",
-                          }}
-                        />
-                      ) : (
-                        <div
-                          style={{
-                            width: 64,
-                            height: 64,
-                            borderRadius: "50%",
-                            display: "flex",
-                            alignItems: "center",
-                            justifyContent: "center",
-                            fontWeight: 900,
-                            background:
-                              "linear-gradient(135deg, rgba(41,68,135,.35), rgba(23,190,187,.25), rgba(255,104,31,.18))",
-                            color: "rgba(23,26,33,.9)",
-                          }}
-                        >
-                          {brokerInitials}
-                        </div>
-                      )}
-
-                      <div>
-                        <div style={{ fontWeight: 900, fontSize: 16 }}>{brokerName}</div>
-                        {p.broker_creci ? (
-                          <div style={{ fontSize: 12, opacity: 0.75 }}>
-                            CRECI {p.broker_creci}
-                          </div>
-                        ) : null}
-                      </div>
-                    </div>
-
-                    {p.broker_tagline ? (
-                      <div style={{ fontWeight: 700, opacity: 0.85 }}>
-                        {p.broker_tagline}
-                      </div>
-                    ) : null}
-
-                    {p.broker_bio ? (
-                      <div
-                        style={{
-                          fontSize: 13,
-                          opacity: 0.75,
-                          display: "-webkit-box",
-                          WebkitLineClamp: 2,
-                          WebkitBoxOrient: "vertical",
-                          overflow: "hidden",
-                        }}
-                      >
-                        {p.broker_bio}
-                      </div>
-                    ) : null}
-
-                    <div style={{ display: "grid", gap: 6, fontSize: 13 }}>
-                      {brokerPhoneLabel ? (
-                        <div>
-                          <strong>Telefone:</strong> {brokerPhoneLabel}
-                        </div>
-                      ) : null}
-                      {p.broker_email ? (
-                        <div>
-                          <strong>Email:</strong> {p.broker_email}
-                        </div>
-                      ) : null}
-                    </div>
-
-                    {socials.length ? (
-                      <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                        {socials.map((item) => (
-                          <a
-                            key={item.key}
-                            href={item.url ?? undefined}
-                            target="_blank"
-                            rel="noreferrer"
-                            style={{
-                              textDecoration: "none",
-                              fontSize: 12,
-                              padding: "6px 8px",
-                              borderRadius: 999,
-                              border: "1px solid rgba(23,26,33,.12)",
-                              background: "rgba(255,255,255,.75)",
-                              display: "inline-flex",
-                              alignItems: "center",
-                              gap: 6,
-                            }}
-                          >
-                            <span aria-hidden="true">{item.icon}</span>
-                            {item.label}
-                          </a>
-                        ))}
-                      </div>
-                    ) : null}
-
-                    {whatsappLink ? (
-                      <a
-                        href={whatsappLink}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="pv-btn pv-btn-primary"
-                        style={{ padding: "10px 14px", fontWeight: 900, justifyContent: "center" }}
-                      >
-                        WhatsApp
-                      </a>
-                    ) : null}
-                  </div>
-                </div>
+                <BrokerCard
+                  href={brokerCardHref}
+                  name={brokerName}
+                  initials={brokerInitials}
+                  avatarUrl={p.broker_avatar_url}
+                  creci={p.broker_creci}
+                  tagline={p.broker_tagline}
+                  bio={p.broker_bio}
+                  phoneLabel={brokerPhoneLabel}
+                  email={p.broker_email}
+                  socials={socials.map((item) => ({
+                    ...item,
+                    url: item.url as string,
+                  }))}
+                  whatsappLink={whatsappLink}
+                />
               ) : null}
-            </div>
-          </section>
 
-          {/* SEÇÕES */}
-          <section style={{ marginTop: 26, display: "grid", gap: 18 }}>
-            {/* Sobre */}
-            <div className="pv-glass pv-glass-soft" style={{ padding: 18 }}>
-              <h2 style={{ margin: 0, fontSize: 18, fontWeight: 950 }}>
-                Sobre este imóvel
-              </h2>
+              <div className="pv-glass pv-glass-soft" style={{ padding: 18 }}>
+                <h2 style={{ margin: 0, fontSize: 18, fontWeight: 950 }}>
+                  Descrição do imóvel
+                </h2>
 
-              {p.description ? (
-                <p style={{ marginTop: 10, lineHeight: 1.6, opacity: 0.92 }}>
-                  {p.description}
-                </p>
-              ) : (
-                <p style={{ marginTop: 10, opacity: 0.7 }}>
-                  Descrição ainda não informada.
-                </p>
-              )}
-            </div>
-
-            {/* Características */}
-            <div className="pv-glass pv-glass-soft" style={{ padding: 18 }}>
-              <h2 style={{ margin: 0, fontSize: 18, fontWeight: 950 }}>
-                Características
-              </h2>
-
-              <div
-                style={{
-                  marginTop: 12,
-                  display: "flex",
-                  gap: 10,
-                  flexWrap: "wrap",
-                }}
-              >
-                {p.area_m2 != null ? (
-                  <span className="pv-chip">{p.area_m2} m²</span>
-                ) : null}
-                {p.bedrooms != null ? (
-                  <span className="pv-chip">{p.bedrooms} quartos</span>
-                ) : null}
-                {p.bathrooms != null ? (
-                  <span className="pv-chip">{p.bathrooms} banheiros</span>
-                ) : null}
-                {p.parking != null ? (
-                  <span className="pv-chip">{p.parking} vagas</span>
-                ) : null}
+                {p.description ? (
+                  <p style={{ marginTop: 10, lineHeight: 1.6, opacity: 0.92 }}>
+                    {p.description}
+                  </p>
+                ) : (
+                  <p style={{ marginTop: 10, opacity: 0.7 }}>
+                    Descrição ainda não informada.
+                  </p>
+                )}
               </div>
             </div>
-
-            {/* Localização */}
-            <div className="pv-glass pv-glass-soft" style={{ padding: 18 }}>
-              <h2 style={{ margin: 0, fontSize: 18, fontWeight: 950 }}>
-                Localização
-              </h2>
-
-              <p style={{ marginTop: 10, opacity: 0.85 }}>{locationLine}</p>
-
-              {mapsUrl ? (
-                <a
-                  href={mapsUrl}
-                  target="_blank"
-                  rel="noreferrer"
-                  style={{
-                    display: "inline-block",
-                    marginTop: 8,
-                    fontWeight: 900,
-                    color: "var(--cobalt)",
-                    textDecoration: "none",
-                  }}
-                >
-                  Ver no Google Maps →
-                </a>
-              ) : (
-                <p style={{ marginTop: 8, opacity: 0.7 }}>
-                  Endereço insuficiente para abrir no mapa.
-                </p>
-              )}
-            </div>
-
-            {/* Rodapé */}
-            <div style={{ opacity: 0.75, fontSize: 12 }}>
-              Publicado na vitrine: {new Date(p.created_at).toLocaleString("pt-BR")} •
-              ID: {p.id}
-            </div>
           </section>
+
+          <div style={{ marginTop: 22, opacity: 0.75, fontSize: 12 }}>
+            Publicado na vitrine: {new Date(p.created_at).toLocaleString("pt-BR")} •
+            ID: {p.id}
+          </div>
         </div>
       </div>
     </main>
