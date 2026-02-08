@@ -1,161 +1,164 @@
-// app/(crm)/properties/[id]/page.tsx
-import PropertyTabs from "./PropertyTabs";
-import { cookies } from "next/headers";
-import { createServerClient } from "@supabase/ssr";
+import Link from 'next/link'
+import PropertyTabs from './PropertyTabs'
+import { createClient } from '@/lib/supabaseServer'
+import { getPropertyFeaturesData } from './actions'
+import { normalizePropertyFeatures } from '@/lib/normalizePropertyFeatures'
 
-type PropertyCategory = {
-  id: string;
-  name: string;
-  is_active: boolean;
-  position: number;
-};
-
-type CategoryRel = { id: string; name: string } | { id: string; name: string }[] | null;
+type CategoryRel = { id: string; name: string } | { id: string; name: string }[] | null
 
 function getCategoryName(rel: CategoryRel): string | null {
-  if (!rel) return null;
-  if (Array.isArray(rel)) return rel[0]?.name ?? null;
-  return rel.name ?? null;
+  if (!rel) return null
+  if (Array.isArray(rel)) return rel[0]?.name ?? null
+  return rel.name ?? null
 }
 
 export default async function PropertyDetailPage({
   params,
 }: {
-  params: Promise<{ id: string }>;
+  params: Promise<{ id: string }>
 }) {
-  const { id: propertyId } = await params;
+  const { id: propertyId } = await params
+  const siteBase = (process.env.NEXT_PUBLIC_SITE_URL || '').replace(/\/$/, '')
 
-  // ✅ Next 15/16: cookies() pode ser Promise -> use await
-  const cookieStore = await cookies();
+  const supabase = await createClient()
 
-  const supabase = createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-    {
-      cookies: {
-        getAll() {
-          return cookieStore.getAll();
-        },
-        setAll(cookiesToSet) {
-          try {
-            cookiesToSet.forEach(({ name, value, options }) => {
-              // ✅ TS: ReadonlyRequestCookies não expõe .set
-              (cookieStore as any).set(name, value, options);
-            });
-          } catch {
-            // Server Component - ignore
-          }
-        },
-      },
-    }
-  );
+  const [propertyRes] = await Promise.all([
+    supabase
+      .from('properties')
+      .select('*, property_categories ( id, name )')
+      .eq('id', propertyId)
+      .maybeSingle()
+  ])
 
-  // ✅ 1) Carrega imóvel já com categoria
-  const { data: property, error } = await supabase
-    .from("properties")
-    .select(
-      `
-      id,
-      status,
-      purpose,
-      title,
-      city,
-      neighborhood,
-      address,
-      price,
-      rent_price,
-      area_m2,
-      bedrooms,
-      bathrooms,
-      parking,
-      description,
-      owner_user_id,
-      created_at,
-      property_category_id,
-      property_categories ( id, name )
-    `
+  if (propertyRes.error) {
+    return (
+      <main className="p-6">
+        <h1 className="text-xl font-semibold text-[var(--foreground)]">Imóvel</h1>
+        <p className="text-sm text-[var(--destructive)]">
+          Erro ao carregar imóvel: {propertyRes.error.message}
+        </p>
+      </main>
     )
-    .eq("id", propertyId)
-    .maybeSingle();
-
-  if (error) {
-    return (
-      <div style={{ padding: 24 }}>
-        <h1>Imóvel</h1>
-        <p>Erro ao carregar imóvel: {error.message}</p>
-      </div>
-    );
   }
 
-  if (!property) {
+  if (!propertyRes.data) {
     return (
-      <div style={{ padding: 24 }}>
-        <h1>Imóvel não encontrado</h1>
-        <p>ID: {propertyId}</p>
-      </div>
-    );
+      <main className="p-6">
+        <h1 className="text-xl font-semibold text-[var(--foreground)]">Imóvel não encontrado</h1>
+        <p className="text-sm text-[var(--muted-foreground)]">ID: {propertyId}</p>
+      </main>
+    )
   }
 
-  // ✅ 2) Carrega categorias para o select/edição (no tabs/editor)
-  const { data: categoriesData, error: catErr } = await supabase
-    .from("property_categories")
-    .select("id, name, is_active, position")
-    .eq("is_active", true)
-    .order("position", { ascending: true });
+  const property = propertyRes.data as Record<string, unknown>
+  const propertyKeys = new Set(Object.keys(property))
+  const ownerUserId = property.owner_user_id as string | null
+  const ownerClientId = property.owner_client_id as string | null
+  const createdById = property.created_by as string | null
 
-  const propertyCategories: PropertyCategory[] = catErr
-    ? []
-    : ((categoriesData ?? []) as PropertyCategory[]);
+  const [ownerProfileRes, createdByProfileRes, ownerPersonRes, categoriesRes, features] =
+    await Promise.all([
+    ownerUserId
+      ? supabase
+          .from('profiles')
+          .select('id, full_name, email')
+          .eq('id', ownerUserId)
+          .maybeSingle()
+      : Promise.resolve({ data: null, error: null }),
+    createdById
+      ? supabase
+          .from('profiles')
+          .select('id, full_name, email')
+          .eq('id', createdById)
+          .maybeSingle()
+      : Promise.resolve({ data: null, error: null }),
+    ownerClientId
+      ? supabase
+          .from('people')
+          .select('id, full_name, email, phone_e164, document_id')
+          .eq('id', ownerClientId)
+          .maybeSingle()
+      : Promise.resolve({ data: null, error: null }),
+    supabase
+      .from('property_categories')
+      .select('id, name')
+      .eq('is_active', true)
+      .order('position', { ascending: true }),
+    getPropertyFeaturesData(propertyId),
+  ])
 
-  // ✅ relation pode vir como array
   const property_category_name = getCategoryName(
     (property as any)?.property_categories as CategoryRel
-  );
+  )
+
+  const owner = ownerProfileRes.data
+  const ownerLabel = owner?.full_name || owner?.email || (owner?.id ? owner.id.slice(0, 8) : '—')
+
+  const createdBy = createdByProfileRes.data
+  const createdByLabel =
+    createdBy?.full_name || createdBy?.email || (createdBy?.id ? createdBy.id.slice(0, 8) : '—')
 
   const propertyForTabs = {
     ...property,
     property_category_name,
-  };
+    owner_profile: ownerProfileRes.data ?? null,
+    created_by_profile: createdByProfileRes.data ?? null,
+    owner_person: ownerPersonRes.data ?? null,
+  }
+
+  const normalizedFeatures = normalizePropertyFeatures(
+    features?.catalog ?? [],
+    features?.values ?? []
+  )
+
+  const featuresCatalog = (normalizedFeatures.catalog ?? []).filter((feature) => {
+    const key = feature?.key
+    return key ? !propertyKeys.has(key) : true
+  })
+
+  const propertyCategories = categoriesRes?.data ?? []
 
   return (
-    <div style={{ padding: 24 }}>
-      <div
-        style={{
-          display: "flex",
-          gap: 12,
-          alignItems: "baseline",
-          justifyContent: "space-between",
-        }}
-      >
-        <div style={{ display: "flex", gap: 12, alignItems: "baseline" }}>
-          <h1 style={{ margin: 0 }}>Imóvel</h1>
-          <span style={{ opacity: 0.7, fontSize: 12 }}>ID: {property.id}</span>
+    <main className="p-6 space-y-6">
+      <div className="flex flex-wrap items-center justify-between gap-4">
+        <div>
+          <Link href="/properties" className="text-sm text-[var(--muted-foreground)] hover:underline">
+            Imóveis
+          </Link>
+          <h1 className="text-2xl font-bold text-[var(--foreground)]">
+            {property.title ? String(property.title) : 'Imóvel'}
+          </h1>
+          <p className="text-xs text-[var(--muted-foreground)]">ID: {propertyId}</p>
+          <div className="mt-2 flex flex-wrap gap-x-6 gap-y-1 text-xs text-[var(--muted-foreground)]">
+            <span>
+              Responsável:{' '}
+              <span className="font-medium text-[var(--foreground)]">{ownerLabel}</span>
+            </span>
+            <span>
+              Criado por:{' '}
+              <span className="font-medium text-[var(--foreground)]">{createdByLabel}</span>
+            </span>
+          </div>
         </div>
-
-        <a
-          href={`/imoveis/${property.id}`}
+        <Link
+          href={`${siteBase}/imoveis/${propertyId}`}
           target="_blank"
           rel="noreferrer"
-          style={{
-            padding: "8px 16px",
-            backgroundColor: "#17BEBB",
-            color: "white",
-            textDecoration: "none",
-            borderRadius: 8,
-            fontSize: 14,
-            fontWeight: 500,
-          }}
+          className="rounded-[var(--radius)] bg-[#17BEBB] px-4 py-2 text-sm font-medium text-white"
         >
           Ver no site
-        </a>
+        </Link>
       </div>
 
-      <div style={{ marginTop: 16 }}>
+      <div>
         <PropertyTabs
           property={propertyForTabs as any}
           propertyCategories={propertyCategories}
+          featuresCatalog={featuresCatalog}
+          featureValues={normalizedFeatures.values ?? []}
+          featureAliasesToClear={normalizedFeatures.aliasesToClear}
         />
       </div>
-    </div>
-  );
+    </main>
+  )
 }

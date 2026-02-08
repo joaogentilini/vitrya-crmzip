@@ -41,7 +41,7 @@ export default async function MyPropertiesPage() {
   if (authErr || !user) {
     return (
       <div style={{ padding: 24 }}>
-        <h1>Meus Imóveis</h1>
+        <h1 className="text-2xl font-bold text-[var(--foreground)]">Meus Imóveis</h1>
         <p>Você precisa estar logado para ver seus imóveis.</p>
       </div>
     );
@@ -201,12 +201,12 @@ export default async function MyPropertiesPage() {
             </div>
           </div>
 
-          <a
+          <Link
             href="/campaigns"
             className="rounded-xl border border-black/10 bg-white px-3 py-2 text-sm text-black/80 hover:bg-black/5"
           >
             Abrir Kanban
-          </a>
+          </Link>
         </div>
       </div>
 

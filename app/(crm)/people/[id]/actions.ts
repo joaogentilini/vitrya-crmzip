@@ -2,6 +2,7 @@
 
 import { createClient } from '@/lib/supabaseServer'
 import { revalidatePath } from 'next/cache'
+import { normalizePersonKindTags } from '@/lib/people2'
 
 export interface UpdatePersonData {
   full_name: string
@@ -10,6 +11,7 @@ export interface UpdatePersonData {
   document_id?: string
   notes?: string
   kind_tags?: string[]
+  assigned_to?: string
 }
 
 export async function updatePerson(personId: string, data: UpdatePersonData) {
@@ -46,17 +48,33 @@ export async function updatePerson(personId: string, data: UpdatePersonData) {
     throw new Error('Acesso negado')
   }
 
+  const nextOwnerProfileId = data.assigned_to ?? undefined
+  if (
+    nextOwnerProfileId !== undefined &&
+    nextOwnerProfileId !== person.owner_profile_id &&
+    !isAdmin &&
+    !isGestor
+  ) {
+    throw new Error('Você não tem permissão para alterar o responsável.')
+  }
+
   // Atualizar pessoa
+  const updatePayload: Record<string, unknown> = {
+    full_name: data.full_name,
+    phone_e164: data.phone_e164 || null,
+    email: data.email || null,
+    document_id: data.document_id || null,
+    notes: data.notes || null,
+    kind_tags: normalizePersonKindTags(data.kind_tags)
+  }
+
+  if (nextOwnerProfileId !== undefined) {
+    updatePayload.owner_profile_id = nextOwnerProfileId || null
+  }
+
   const { error: updateError } = await supabase
     .from('people')
-    .update({
-      full_name: data.full_name,
-      phone_e164: data.phone_e164 || null,
-      email: data.email || null,
-      document_id: data.document_id || null,
-      notes: data.notes || null,
-      kind_tags: data.kind_tags || []
-    })
+    .update(updatePayload)
     .eq('id', personId)
 
   if (updateError) {

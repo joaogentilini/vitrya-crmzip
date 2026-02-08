@@ -17,6 +17,7 @@ type Props = {
     rent_price?: number | null;
     property_category_name?: string | null;
     imageUrls?: string[];
+    cover_url?: string | null;
   };
   agg?: {
     pending_total: number;
@@ -33,6 +34,7 @@ function money(v: number | null | undefined) {
 
 export default function MyPropertyCard({ property, agg }: Props) {
   const router = useRouter();
+  const siteBase = (process.env.NEXT_PUBLIC_SITE_URL || "").replace(/\/$/, "");
 
   const location =
     [property.neighborhood, property.city].filter(Boolean).join(" • ") ||
@@ -61,8 +63,17 @@ export default function MyPropertyCard({ property, agg }: Props) {
     >
       {/* Thumb / carrossel */}
       <div style={{ position: "relative", height: 170 }}>
-        {property.imageUrls?.length ? (
-          <ThumbCarousel images={property.imageUrls} alt={property.title ?? "Imóvel"} />
+        {property.imageUrls?.length || property.cover_url ? (
+          <ThumbCarousel
+            images={
+              property.imageUrls?.length
+                ? property.imageUrls
+                : property.cover_url
+                  ? [property.cover_url]
+                  : []
+            }
+            alt={property.title ?? "Imóvel"}
+          />
         ) : (
           <div
             style={{
@@ -110,7 +121,7 @@ export default function MyPropertyCard({ property, agg }: Props) {
           </div>
 
           <a
-            href={`/imoveis/${property.id}`}
+            href={`${siteBase}/imoveis/${property.id}`}
             target="_blank"
             rel="noreferrer"
             onClick={(e) => e.stopPropagation()}

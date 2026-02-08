@@ -1,3 +1,4 @@
+/* eslint-disable @next/next/no-img-element */
 'use client'
 
 import Link from 'next/link'
@@ -113,7 +114,7 @@ export function AppShell({
       },
 
       {
-        href: '/people',
+        href: '/pessoas',
         label: 'Pessoas',
         icon: (
           <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -122,6 +123,20 @@ export function AppShell({
               strokeLinejoin="round"
               strokeWidth={2}
               d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z"
+            />
+          </svg>
+        ),
+      },
+      {
+        href: '/groups',
+        label: 'Grupos',
+        icon: (
+          <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth={2}
+              d="M17 20H7v-1a5 5 0 0110 0v1zm0-10a4 4 0 10-8 0 4 4 0 008 0zM3 20v-1a4 4 0 016-3.874M21 20v-1a4 4 0 00-6-3.874"
             />
           </svg>
         ),
@@ -324,7 +339,7 @@ export function AppShell({
 
         <nav className="flex-1 p-3 space-y-1 overflow-y-auto">
           {navItems.map((item) => {
-            const isActive = pathname === item.href
+            const isActive = pathname === item.href || pathname?.startsWith(item.href + '/')
             const hasChildren = !!item.children?.length
 
             const isParentActive =

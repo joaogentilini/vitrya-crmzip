@@ -44,7 +44,46 @@ export async function POST(
     }
 
     const body = await request.json().catch(() => ({}))
-    const { types = [] } = body as { types?: string[] }
+    const {
+      types = [],
+      personType: rawPersonType,
+      cpf,
+      rg,
+      rgIssuingOrg,
+      maritalStatus,
+      birthDate,
+      cnpj,
+      legalName,
+      tradeName,
+      stateRegistration,
+      municipalRegistration
+    } = body as {
+      types?: string[]
+      personType?: 'PF' | 'PJ'
+      cpf?: string | null
+      rg?: string | null
+      rgIssuingOrg?: string | null
+      maritalStatus?: string | null
+      birthDate?: string | null
+      cnpj?: string | null
+      legalName?: string | null
+      tradeName?: string | null
+      stateRegistration?: string | null
+      municipalRegistration?: string | null
+    }
+
+    const personType = rawPersonType === 'PJ' ? 'PJ' : 'PF'
+    const hasProfileData =
+      !!cpf ||
+      !!rg ||
+      !!rgIssuingOrg ||
+      !!maritalStatus ||
+      !!birthDate ||
+      !!cnpj ||
+      !!legalName ||
+      !!tradeName ||
+      !!stateRegistration ||
+      !!municipalRegistration
 
     const validTypes = types.filter((t): t is ClientType => 
       CLIENT_TYPES.includes(t as ClientType)
@@ -97,7 +136,7 @@ export async function POST(
         const { data: personByEmail } = await adminSupabase
           .from('people')
           .select('id')
-          .eq('email', lead.email)
+          .ilike('email', lead.email)
           .single()
         existingPerson = personByEmail
       }
@@ -105,13 +144,15 @@ export async function POST(
       if (existingPerson) {
         personId = existingPerson.id
       } else {
+        const documentId = personType === 'PJ' ? cnpj : cpf
         const { data: newPerson, error: personError } = await adminSupabase
           .from('people')
           .insert({
             full_name: lead.client_name || lead.title,
             phone_e164: lead.phone_e164 || null,
             email: lead.email || null,
-            notes: lead.notes || null
+            notes: lead.notes || null,
+            document_id: documentId || null
           })
           .select('id')
           .single()
@@ -128,6 +169,46 @@ export async function POST(
         .from('leads')
         .update({ person_id: personId })
         .eq('id', leadId)
+    }
+
+    if (personId && hasProfileData) {
+      if (personType === 'PF') {
+        const { error: financingError } = await adminSupabase
+          .from('person_financing_profiles')
+          .upsert(
+            {
+              person_id: personId,
+              cpf: cpf || null,
+              rg: rg || null,
+              rg_issuing_org: rgIssuingOrg || null,
+              marital_status: maritalStatus || null,
+              birth_date: birthDate || null
+            },
+            { onConflict: 'person_id' }
+          )
+        if (financingError) {
+          console.error('[POST /api/leads/[id]/convert] Financing profile error:', financingError)
+          return NextResponse.json({ error: 'Erro ao salvar dados de PF' }, { status: 500 })
+        }
+      } else {
+        const { error: companyError } = await adminSupabase
+          .from('person_company_profiles')
+          .upsert(
+            {
+              person_id: personId,
+              cnpj: cnpj || null,
+              legal_name: legalName || null,
+              trade_name: tradeName || null,
+              state_registration: stateRegistration || null,
+              municipal_registration: municipalRegistration || null
+            },
+            { onConflict: 'person_id' }
+          )
+        if (companyError) {
+          console.error('[POST /api/leads/[id]/convert] Company profile error:', companyError)
+          return NextResponse.json({ error: 'Erro ao salvar dados de PJ' }, { status: 500 })
+        }
+      }
     }
 
     const ownerId = lead.assigned_to || lead.owner_user_id || lead.created_by || user.id

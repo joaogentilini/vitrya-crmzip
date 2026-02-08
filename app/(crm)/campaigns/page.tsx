@@ -1,3 +1,4 @@
+import Link from 'next/link'
 import { cookies } from 'next/headers'
 import { createServerClient } from '@supabase/ssr'
 import CampaignsBoard from './CampaignsBoard'
@@ -179,18 +180,18 @@ export default async function CampaignsPage() {
     </div>
 
     <div className="flex gap-2">
-      <a
+      <Link
         href="/properties/my"
         className="rounded-xl border border-black/10 bg-white px-3 py-2 text-sm text-black/80 hover:bg-black/5"
       >
         Meus imóveis
-      </a>
-      <a
+      </Link>
+      <Link
         href="/settings/campaigns"
         className="rounded-xl border border-black/10 bg-white px-3 py-2 text-sm text-black/80 hover:bg-black/5"
       >
         Editor de campanhas
-      </a>
+      </Link>
     </div>
   </div>
 </div>

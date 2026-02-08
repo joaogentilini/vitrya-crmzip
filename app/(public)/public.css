@@ -6,50 +6,48 @@
   --teal:#17BEBB;
 
   --card:#ffffff;
-  --border:rgba(23,26,33,.10);
-  --shadow:0 10px 30px rgba(23,26,33,.08);
+  --border:rgba(255, 255, 255, 0.1);
+  --shadow:0 10px 30px rgba(255, 255, 255, 0.08);
 
-  /* NOVOS */
-  --pv-bg-overlay: rgba(10,12,16,.55);      /* escurece o fundo */
-  --pv-glass-bg: rgba(255,255,255,.60);     /* ~40% transparente */
-  --pv-glass-border: rgba(255,255,255,.45);
-  --pv-glass-shadow: 0 18px 50px rgba(0,0,0,.22);
+  /* Glass system */
+  --pv-bg-overlay: rgba(0, 0, 0, 0.244);
+  --pv-glass-bg: rgba(255,255,255,.72);
+  --pv-glass-border: rgba(255,255,255,.55);
+  --pv-glass-shadow: 0 18px 50px rgba(255, 255, 255, 0.16);
 }
 
 *{box-sizing:border-box}
-html,body{height:100%}
+html,body{height:100%; overflow-x:hidden;}
 body{
   margin:0;
   font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, "Apple Color Emoji","Segoe UI Emoji";
   background: var(--offwhite);
   color: var(--mirage);
+  overflow-x:hidden;
 }
 
 a{color:inherit}
+img, video, iframe{max-width:100%; height:auto;}
 
 /* =========================================================
-   FUNDO DA VITRINE (NOVO)
-   - usa /public/brand/vitrine site.jpg
-   - overlay para contraste
+   FUNDO DA VITRINE
 ========================================================= */
 .pv-shell{
   min-height:100vh;
   display:flex;
   flex-direction:column;
 
-  /* Imagem de fundo */
   background-image: url("/brand/vitrine%20site.jpg");
   background-size: cover;
   background-position: center;
   background-repeat: no-repeat;
 
-  /* opcional: efeito premium na rolagem */
+  /* premium scroll */
   background-attachment: fixed;
 
   position: relative;
 }
 
-/* Overlay escuro sobre o fundo */
 .pv-shell::before{
   content:"";
   position:absolute;
@@ -59,7 +57,6 @@ a{color:inherit}
   z-index:0;
 }
 
-/* Conteúdo acima do overlay */
 .pv-header,
 .pv-main,
 .pv-container,
@@ -69,83 +66,139 @@ a{color:inherit}
 }
 
 /* =========================================================
-   TOPBAR (CORRIGIDO - NÃO SOME)
+   TOPBAR (GLASS + ESTREITA)
 ========================================================= */
 .pv-header{
-  /* antes: background var(--mirage) */
   position: sticky;
   top: 0;
   z-index: 9999;
 
-  /* estilo "glass" por cima do fundo */
   background: rgba(23,26,33,.55);
   backdrop-filter: blur(10px);
   -webkit-backdrop-filter: blur(10px);
 
   color: var(--offwhite);
   border-bottom: 1px solid rgba(250,250,250,.10);
+
+  overflow: visible;
 }
 
 .pv-header-inner{
   max-width: 1120px;
   margin: 0 auto;
-  padding: 16px 20px;
+  width: 100%;
+
+  min-height: 58px;
+  padding: 8px 14px;
+
   display:flex;
   align-items:center;
   justify-content:space-between;
-  gap:16px;
+  gap:12px;
 }
 
-/* =========================================================
-   BRAND / LOGO (AJUSTADO P/ PNG OFICIAL)
-========================================================= */
 .pv-brand{
   display:flex;
   align-items:center;
-  gap:12px;
-  text-decoration: none;
+  text-decoration:none;
+  height: 40px;
 }
 
 .pv-mark{
-  height: 40px;   /* maior para logo_oficial.png */
-  width: 40px;
+  width: 260px;
+  height: 96px;
   object-fit: contain;
+  max-width: 70vw;
 }
 
-.pv-brand-name{font-weight: 800; letter-spacing: .2px}
-.pv-brand-sub{font-size: 12px; opacity:.75; margin-top:2px}
-
-.pv-nav{display:flex; gap:12px}
-.pv-navlink{
-  padding: 8px 10px;
-  border-radius: 10px;
-  text-decoration:none;
-  opacity:.85;
+@media (max-width: 640px){
+  .pv-header-inner{
+    min-height: 54px;
+    padding: 8px 12px;
+  }
+  .pv-brand{ height: 36px; }
+  .pv-mark{
+    width: 200px;
+    height: 74px;
+    max-width: 64vw;
+  }
 }
-.pv-navlink-active{
-  opacity:1;
-  background: rgba(250,250,250,.08);
-  border: 1px solid rgba(250,250,250,.10);
+@media (max-width: 420px){
+  .pv-mark{
+    width: 180px;
+    height: 78px;
+    max-width: 60vw;
+  }
+}
+
+/* =========================================================
+   AÇÕES / BOTÕES NA TOPBAR
+========================================================= */
+.pv-actions{
+  display:flex;
+  gap: 8px;
+  align-items:center;
+}
+
+.pv-btn{
+  border:0;
+  border-radius: 12px;
+  padding: 10px 14px;
+  font-weight: 800;
+  cursor:pointer;
+  text-decoration: none;
+  display: inline-flex;
+  align-items:center;
+  justify-content:center;
+  max-width: 100%;
+}
+
+.pv-btn-primary{
+  background: var(--pumpkin);
+  color: var(--offwhite);
+}
+.pv-btn-primary:hover{filter: brightness(0.98)}
+
+.pv-btn-secondary{
+  background: rgba(250,250,250,.10);
+  color: var(--offwhite);
+  border: 1px solid rgba(250,250,250,.22);
+}
+.pv-btn-secondary:hover{
+  background: rgba(250,250,250,.16);
+  border-color: rgba(250,250,250,.30);
+}
+
+.pv-btn-topbar{
+  padding: 8px 10px !important;
+  font-weight: 800 !important;
+  font-size: 12px !important;
+  border-radius: 999px !important;
+  background: rgba(0,0,0,.22) !important;
+  color: rgba(255,255,255,.92) !important;
+  border: 1px solid rgba(255,255,255,.16) !important;
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+}
+.pv-btn-topbar:hover{
+  background: rgba(0,0,0,.30) !important;
+  border-color: rgba(255,255,255,.24) !important;
 }
 
 /* =========================================================
    CONTEÚDO / CONTAINER
-   - Mantém suas classes
-   - Adiciona "glass card" (NOVO) para aplicar na vitrine
 ========================================================= */
 .pv-main{flex:1}
 
-/* Mantém seu container, mas agora ele fica acima do fundo */
 .pv-container{
   max-width: 1120px;
   margin: 0 auto;
   padding: 22px 20px 40px;
+  width: 100%;
 }
 
-/* NOVO: use esta classe para transformar a área de pesquisa em card com 40% transparência.
-   Você vai aplicar isso em volta do seu conteúdo principal (te digo abaixo). */
 .pv-glass{
-  background: var(--pv-glass-bg);            /* ~40% transparente */
+  background: var(--pv-glass-bg);
   border: 1px solid var(--pv-glass-border);
   border-radius: 18px;
   padding: 22px;
@@ -153,36 +206,149 @@ a{color:inherit}
 
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
+  max-width: 100%;
+}
+
+.pv-glass-soft{
+  background: rgba(255,255,255,.72) !important;
+  border: 1px solid rgba(255,255,255,.55) !important;
+  box-shadow: 0 14px 36px rgba(0,0,0,.16) !important;
+  max-width: 100%;
 }
 
 /* =========================================================
-   HERO (MANTIDO)
-   - Se você preferir, depois podemos deixar o hero também "glass"
+   HERO (DETALHE DO IMÓVEL)
+========================================================= */
+/* =========================================================
+   HERO (FULL WIDTH, sem vazar, com blur + overlay)
 ========================================================= */
 .pv-hero{
-  background: var(--mirage);
+  position: relative;
+  overflow: hidden;                 /* ✅ trava tudo dentro do hero */
+  width: 100vw;                     /* ✅ full width real */
+  margin-left: calc(50% - 50vw);    /* ✅ “full-bleed” mesmo dentro de containers */
+  margin-right: calc(50% - 50vw);
+  border-radius: 0;                /* full-bleed total (se quiser arredondar: 18px) */
   color: var(--offwhite);
-  border-radius: 18px;
-  padding: 22px;
+  background: var(--mirage);
   box-shadow: var(--shadow);
-  position:relative;
-  overflow:hidden;
+  padding: 22px;
 }
-.pv-hero:before{
-  content:"";
-  position:absolute; inset:-40px;
-  background: radial-gradient(circle at 20% 0%, rgba(23,190,187,.28), transparent 40%),
-              radial-gradient(circle at 90% 10%, rgba(255,104,31,.25), transparent 45%),
-              radial-gradient(circle at 40% 100%, rgba(41,68,135,.28), transparent 45%);
-  filter: blur(2px);
+
+/* deixa o conteúdo centralizado e com “respiro” */
+.pv-hero-inner{
+  max-width: 1120px;
+  margin: 0 auto;
+  width: 100%;
+  display: grid;
+  grid-template-columns: 1.05fr 1fr;
+  gap: 18px;
+  align-items: start;
+  min-width: 0;
+  position: relative;
+  z-index: 3; /* acima das camadas */
 }
-.pv-hero > *{position:relative}
+
+@media (max-width: 980px){
+  .pv-hero-inner{
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Camada blur (você já injeta via inline no page.tsx, isso aqui só garante “não aparecer borda”) */
+.pv-hero-blur{
+  position: absolute;
+  inset: -40px;                 /* ✅ sobra pra blur não mostrar bordas */
+  transform: scale(1.08);       /* ✅ cobre tudo mesmo com blur */
+  z-index: 0;
+}
+
+/* Overlay de leitura (forte na esquerda, suave no resto) */
+.pv-hero-overlay{
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  background:
+    linear-gradient(90deg,
+      rgba(23,26,33,0.78) 0%,
+      rgba(23,26,33,0.52) 30%,
+      rgba(23,26,33,0.22) 55%,
+      rgba(23,26,33,0.00) 78%
+    ),
+    linear-gradient(180deg,
+      rgba(23,26,33,0.35) 0%,
+      rgba(23,26,33,0.10) 55%,
+      rgba(23,26,33,0.00) 100%
+    );
+}
+
+/* “Card” da galeria dentro do hero (sem vazar e com zoom) */
+.pv-hero-gallery{
+  border-radius: 18px;
+  overflow: hidden;            /* ✅ trava a imagem/galeria */
+  box-shadow: 0 18px 50px rgba(0,0,0,.22);
+  border: 1px solid rgba(255,255,255,.18);
+  background: rgba(255,255,255,.06);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+}
+
+/* zoom suave dentro do card (não vaza porque o wrapper tem overflow hidden) */
+.pv-hero-gallery > *{
+  transform: scale(1.08);
+  transform-origin: center;
+}
 
 .pv-title{margin:0; font-size: 30px; font-weight: 900; letter-spacing: .2px}
 .pv-subtitle{margin:8px 0 0; opacity:.82}
 
+/* Pills */
+.pv-pill{
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border-radius: 999px;
+  font-weight: 900;
+  font-size: 13px;
+  background: rgba(255,255,255,.14);
+  border: 1px solid rgba(255,255,255,.18);
+  color: rgba(255,255,255,.92);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+}
+
+.pv-pill-muted{
+  background: rgba(255,255,255,.10);
+  color: rgba(255,255,255,.86);
+}
+
+/* Métricas */
+.pv-metrics-row{
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.pv-metric{
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  border-radius: 999px;
+  background: rgba(255,255,255,.12);
+  border: 1px solid rgba(255,255,255,.16);
+  color: rgba(255,255,255,.92);
+  font-weight: 900;
+  font-size: 13px;
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+}
+
+.pv-metric-ico{ opacity: .95; }
+
 /* =========================================================
-   SEARCHBAR (MANTIDO)
+   SEARCHBAR
 ========================================================= */
 .pv-searchbar{
   margin-top: 16px;
@@ -194,17 +360,13 @@ a{color:inherit}
   grid-template-columns: 1.2fr 1.2fr 1fr 1fr 160px;
   gap: 10px;
 }
-@media (max-width: 980px){
-  .pv-searchbar{grid-template-columns: 1fr 1fr; }
-}
-@media (max-width: 560px){
-  .pv-searchbar{grid-template-columns: 1fr; }
-}
 
-.pv-field{
-  display:flex; flex-direction:column; gap:6px;
-}
-.pv-label{font-size:12px; opacity:.78}
+@media (max-width: 980px){ .pv-searchbar{grid-template-columns: 1fr 1fr;} }
+@media (max-width: 560px){ .pv-searchbar{grid-template-columns: 1fr;} }
+
+.pv-field{ display:flex; flex-direction:column; gap:6px; }
+.pv-label{ font-size:12px; opacity:.78 }
+
 .pv-input, .pv-select{
   background: rgba(250,250,250,.92);
   border: 1px solid rgba(23,26,33,.12);
@@ -220,41 +382,7 @@ a{color:inherit}
 }
 
 /* =========================================================
-   BOTÕES (MANTIDO, com pequeno ajuste para ficar legível no header)
-========================================================= */
-.pv-btn{
-  border:0;
-  border-radius: 12px;
-  padding: 10px 14px;
-  font-weight: 800;
-  cursor:pointer;
-  text-decoration: none;
-  display: inline-flex;
-  align-items:center;
-  justify-content:center;
-}
-
-.pv-btn-primary{
-  background: var(--pumpkin);
-  color: var(--offwhite);
-}
-.pv-btn-primary:hover{filter: brightness(0.98)}
-
-.pv-btn-secondary{
-  /* antes estava teal claro + texto mirage (no header isso some).
-     Mantive seu estilo para páginas claras, mas quando usado no header ficará ok porque agora o header é glass escuro.
-     Se quiser, depois criamos um .pv-btn-header específico. */
-  background: rgba(250,250,250,.10);
-  color: var(--offwhite);
-  border: 1px solid rgba(250,250,250,.22);
-}
-.pv-btn-secondary:hover{
-  background: rgba(250,250,250,.16);
-  border-color: rgba(250,250,250,.30);
-}
-
-/* =========================================================
-   FILTERS / GRID / CARDS (MANTIDOS)
+   FILTERS / GRID / CARDS (VITRINE)
 ========================================================= */
 .pv-filters{
   margin-top: 18px;
@@ -263,6 +391,7 @@ a{color:inherit}
   gap:10px;
   align-items:center;
 }
+
 .pv-chip{
   border: 1px solid var(--border);
   background: #fff;
@@ -270,7 +399,9 @@ a{color:inherit}
   padding: 8px 10px;
   font-size: 13px;
   cursor:pointer;
+  max-width: 100%;
 }
+
 .pv-chip-active{
   border-color: rgba(255,104,31,.45);
   box-shadow: 0 0 0 4px rgba(255,104,31,.10);
@@ -293,80 +424,34 @@ a{color:inherit}
   border-radius: 16px;
   overflow:hidden;
   box-shadow: 0 10px 20px rgba(23,26,33,.05);
+  transition: transform .15s ease, box-shadow .15s ease;
 }
-.pv-card:hover{
+
+/* Hover só na vitrine/listagem (fica elegante).
+   Se quiser remover na vitrine também, comente esse bloco. */
+.pv-grid .pv-card:hover{
   transform: translateY(-1px);
-  transition: .15s ease;
   box-shadow: 0 14px 26px rgba(23,26,33,.08);
 }
 
+/* Thumb */
 .pv-thumb{
   height: 170px;
   background: linear-gradient(135deg, rgba(41,68,135,.16), rgba(23,190,187,.12), rgba(255,104,31,.10));
   display:flex; align-items:center; justify-content:center;
   color: rgba(23,26,33,.55);
   font-weight: 700;
-}
-.pv-cardbody{padding: 14px}
-.pv-cardtitle{margin:0; font-size: 16px; font-weight: 900}
-.pv-cardmeta{margin-top:6px; opacity:.75; font-size: 13px}
-.pv-pricerow{margin-top:10px; display:flex; gap:10px; align-items:baseline; flex-wrap:wrap}
-.pv-price{font-weight: 900; font-size: 18px}
-.pv-muted{opacity:.75; font-size: 13px}
-
-/* =========================================================
-   FOOTER (MANTIDO, com leve glass para combinar)
-========================================================= */
-.pv-footer{
-  border-top: 1px solid rgba(250,250,250,.14);
-  background: rgba(23,26,33,.35);
-  color: rgba(250,250,250,.85);
-  backdrop-filter: blur(10px);
-  -webkit-backdrop-filter: blur(10px);
-}
-.pv-footer-inner{
-  max-width: 1120px;
-  margin: 0 auto;
-  padding: 18px 20px;
-  display:flex;
-  gap:10px;
-  opacity:.90;
-  font-size: 13px;
-}
-.pv-footer-sep{opacity:.45}
-/* ====== TOPBAR: só logo, maior, proporcional ====== */
-.pv-header-inner{
-  padding: 12px 20px;      /* deixa o header mais “premium” */
-  min-height: 72px;        /* altura consistente */
+  position: relative;
+  overflow: hidden;
 }
 
-.pv-brand{
-  gap: 0;
-}
-
-.pv-mark{
-  width: 216px;  /* +50% */
-  height: 93px;  /* +50% */
-  object-fit: contain;
-}
-
-@media (max-width: 640px){
-  .pv-mark{ width: 186px; height: 83px; } /* +50% */
-}
-
-/* Glass mais leve para cards internos (detalhe do imóvel) */
-.pv-glass-soft{
-  background: rgba(255,255,255,.72) !important;
-  border: 1px solid rgba(255,255,255,.55) !important;
-  box-shadow: 0 14px 36px rgba(0,0,0,.16) !important;
-}
-.pv-thumb{ position: relative; overflow: hidden; }
 .pv-thumb-img{
   width: 100%;
   height: 100%;
   object-fit: cover;
   display: block;
 }
+
 .pv-thumb-fallback{
   position: absolute;
   inset: 0;
@@ -376,12 +461,206 @@ a{color:inherit}
   background: linear-gradient(135deg, rgba(41,68,135,.16), rgba(23,190,187,.12), rgba(255,104,31,.10));
 }
 
-.pv-detail-grid{
+.pv-cardbody{ padding: 14px; }
+.pv-cardtitle{ margin:0; font-size: 16px; font-weight: 900; }
+.pv-cardmeta{ margin-top:6px; opacity:.75; font-size: 13px; }
+.pv-pricerow{ margin-top:10px; display:flex; gap:10px; align-items:baseline; flex-wrap:wrap; }
+.pv-price{ font-weight: 900; font-size: 18px; }
+.pv-muted{ opacity:.75; font-size: 13px; }
+
+/* =========================================================
+   DETALHE DO IMÓVEL (ÁREA ABAIXO DO HERO)
+========================================================= */
+.pv-content{
+  max-width: 1120px;
+  margin: 18px auto 40px;
+  padding: 0 20px;
+  width: 100%;
+}
+
+.pv-grid-2{
+  display: grid;
+  grid-template-columns: 1.2fr .8fr;
+  gap: 16px;
+  align-items: start;
+  min-width: 0;
+}
+@media (max-width: 980px){
+  .pv-grid-2{ grid-template-columns: 1fr; }
+}
+
+/* Cards dentro do detalhe: SEM hover, SEM “apagar”, todos no mesmo glass */
+.pv-content .pv-card{
+  /* +10% transparência vs 0.74 => ~0.66, mas com highlight p/ não “apagar” */
+  background: linear-gradient(
+    180deg,
+    rgba(255,255,255,.86) 0%,
+    rgba(255,255,255,.66) 55%,
+    rgba(255,255,255,.62) 100%
+  ) !important;
+
+  border: 1px solid rgba(255,255,255,.58) !important;
+  border-radius: 18px !important;
+
+  /* brilho interno pra ficar “clareado” mesmo com fundo escuro */
+  box-shadow:
+    0 18px 50px rgba(0,0,0,.16),
+    inset 0 1px 0 rgba(255,255,255,.55),
+    inset 0 -1px 0 rgba(23,26,33,.06) !important;
+
+  backdrop-filter: blur(14px) !important;
+  -webkit-backdrop-filter: blur(14px) !important;
+
+  transition: none !important;
+  transform: none !important;
+  filter: none !important;
+}
+
+/* remove qualquer efeito de hover dentro do detalhe */
+.pv-content .pv-card:hover{
+  transform: none !important;
+  filter: none !important;
+}
+
+
+
+/* Checklist */
+.pv-checklist{
+  margin: 0;
+  padding-left: 0;
+  list-style: none;
+}
+.pv-checklist li{
+  position: relative;
+  padding-left: 26px;
+  margin: 10px 0;
+  break-inside: avoid;
+  -webkit-column-break-inside: avoid;
+  font-weight: 700;
+  color: rgba(23,26,33,.92);
+}
+.pv-checklist li::before{
+  content: "✓";
+  position: absolute;
+  left: 0;
+  top: 0;
+  font-weight: 900;
+  color: rgba(23,190,187,.95);
+}
+
+/* =========================================================
+   FOOTER
+========================================================= */
+.pv-footer{
+  border-top: 1px solid rgba(250,250,250,.14);
+  background: rgba(23,26,33,.35);
+  color: rgba(250,250,250,.85);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+}
+
+.pv-footer-inner{
+  max-width: 1120px;
+  margin: 0 auto;
+  padding: 18px 20px;
+  display:flex;
+  gap:10px;
+  opacity:.90;
+  font-size: 13px;
+  width: 100%;
+}
+.pv-footer-sep{opacity:.45}
+.pv-hero{
+  width: 100%;
+  overflow: hidden; /* CRÍTICO: nada vaza do hero */
+}
+
+/* Wrapper que dá o "zoom bonito" APENAS na página */
+.pv-hero-gallery-zoom{
+  transform: scale(1.08);
+  transform-origin: center;
+}
+
+/* Em telas menores, reduz um pouco pra não cortar demais */
+@media (max-width: 980px){
+  .pv-hero-gallery-zoom{
+    transform: scale(1.04);
+  }
+}
+/* HERO full width (print 2) */
+.pv-hero-full{
+  width: 100%;
+  margin: 16px auto 0;
+  padding: 0 20px; /* segura nas bordas em telas pequenas */
+}
+
+.pv-hero-card{
+  position: relative;
+  overflow: hidden;              /* CRÍTICO: nada vaza do card */
+  border-radius: 26px;
+  min-height: 360px;
+
+  /* “vidro escuro” base, por baixo do overlay */
+  background: rgba(12,14,18,.55);
+  border: 1px solid rgba(255,255,255,.10);
+  box-shadow: 0 18px 60px rgba(0,0,0,.22);
+}
+
+.pv-hero-card-bg{
+  position: absolute;
+  inset: -30px; /* evita borda após blur */
+  background-size: cover;
+  background-position: center;
+  transform: scale(1.08);
+  filter: blur(12px) saturate(1.12);
+  opacity: 0.30;
+  z-index: 0;
+}
+
+/* overlay de leitura + integração texto/foto */
+.pv-hero-card-overlay{
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+
+  /* esquerda forte + topo leve (igual sensação do print 2) */
+  background:
+    linear-gradient(90deg,
+      rgba(12,14,18,0.78) 0%,
+      rgba(12,14,18,0.58) 38%,
+      rgba(12,14,18,0.28) 64%,
+      rgba(12,14,18,0.00) 82%
+    ),
+    linear-gradient(180deg,
+      rgba(12,14,18,0.28) 0%,
+      rgba(12,14,18,0.10) 55%,
+      rgba(12,14,18,0.00) 100%
+    );
+}
+
+/* layout do conteúdo dentro do card */
+.pv-hero-inner{
   display: grid;
   grid-template-columns: 1.05fr 1fr;
   gap: 18px;
   align-items: start;
+  padding: 26px;
+  min-width: 0;
+}
+
+@media (max-width: 980px){
+  .pv-hero-inner{ grid-template-columns: 1fr; }
+}
+
+/* galeria “integrada” com leve zoom só no card (não afeta fullscreen do modal) */
+.pv-hero-media{
+  border-radius: 22px;
+  overflow: hidden;
+  box-shadow: 0 18px 50px rgba(0,0,0,.22);
+  border: 1px solid rgba(255,255,255,.10);
+  transform: scale(1.04); /* “enche” como print 2 */
+  transform-origin: center;
 }
 @media (max-width: 980px){
-  .pv-detail-grid{ grid-template-columns: 1fr; }
+  .pv-hero-media{ transform: none; }
 }

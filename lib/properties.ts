@@ -11,6 +11,9 @@ export interface PropertyWithCover {
   address?: string | null;
   price?: number | null;
   rent_price?: number | null;
+  area_m2?: number | null;
+  bedrooms?: number | null;
+  bathrooms?: number | null;
   created_at: string;
 
   // ✅ capa (signed URL)
@@ -33,6 +36,9 @@ type PropertyRow = {
   address: string | null;
   price: number | null;
   rent_price: number | null;
+  area_m2: number | null;
+  bedrooms: number | null;
+  bathrooms: number | null;
   created_at: string;
   property_category_id: string | null;
 
@@ -106,6 +112,9 @@ async function attachCovers(
       address: r.address,
       price: r.price,
       rent_price: r.rent_price,
+      area_m2: r.area_m2,
+      bedrooms: r.bedrooms,
+      bathrooms: r.bathrooms,
       created_at: r.created_at,
       cover_url: undefined,
       property_category_id: r.property_category_id,
@@ -144,6 +153,9 @@ async function attachCovers(
       address: r.address,
       price: r.price,
       rent_price: r.rent_price,
+      area_m2: r.area_m2,
+      bedrooms: r.bedrooms,
+      bathrooms: r.bathrooms,
       created_at: r.created_at,
       cover_url: coverUrl,
       property_category_id: r.property_category_id,
@@ -173,6 +185,9 @@ export async function getPropertiesWithCover(): Promise<PropertyWithCover[]> {
       address,
       price,
       rent_price,
+      area_m2,
+      bedrooms,
+      bathrooms,
       created_at,
       property_category_id,
       property_categories ( id, name )
@@ -208,6 +223,9 @@ export async function getMyPropertiesWithCover(
       address,
       price,
       rent_price,
+      area_m2,
+      bedrooms,
+      bathrooms,
       created_at,
       property_category_id,
       property_categories ( id, name )

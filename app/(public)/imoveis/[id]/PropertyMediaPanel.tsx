@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { PropertyGallery } from "./PropertyGallery";
+import PropertyGallery from "./PropertyGallery";
 
 type MediaTab = "photo" | "video" | "map";
 
@@ -45,6 +45,10 @@ export function PropertyMediaPanel({
       { key: "map" as const, label: "Mapa", enabled: hasMap },
     ],
     [hasPhotos, hasVideos, hasMap]
+  );
+  const galleryItems = useMemo(
+    () => images.map((url, idx) => ({ id: `img-${idx}`, url, kind: "image" as const })),
+    [images]
   );
 
   return (
@@ -97,7 +101,7 @@ export function PropertyMediaPanel({
 
       <div style={{ width: "100%" }}>
         {tab === "photo" ? (
-          <PropertyGallery images={images} title={title} />
+          <PropertyGallery items={galleryItems} title={title} />
         ) : null}
 
         {tab === "video" ? (

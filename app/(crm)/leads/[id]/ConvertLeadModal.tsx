@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useTransition } from 'react'
+import { useState, useTransition, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/Button'
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/Card'
@@ -26,6 +26,28 @@ export function ConvertLeadModal({ leadId, leadTitle, onClose, onSuccess }: Conv
   const { success, error: showError } = useToast()
   const [isPending, startTransition] = useTransition()
   const [selectedTypes, setSelectedTypes] = useState<string[]>([])
+  const [personType, setPersonType] = useState<'PF' | 'PJ'>('PF')
+  const [pfForm, setPfForm] = useState({
+    cpf: '',
+    rg: '',
+    rg_issuing_org: '',
+    marital_status: '',
+    birth_date: ''
+  })
+  const [pjForm, setPjForm] = useState({
+    cnpj: '',
+    legal_name: '',
+    trade_name: '',
+    state_registration: '',
+    municipal_registration: ''
+  })
+
+  useEffect(() => {
+    const digits = pjForm.cnpj.replace(/\D/g, '')
+    if (digits.length === 14 && personType !== 'PJ') {
+      setPersonType('PJ')
+    }
+  }, [pjForm.cnpj, personType])
 
   const toggleType = (type: string) => {
     setSelectedTypes(prev => 
@@ -41,7 +63,20 @@ export function ConvertLeadModal({ leadId, leadTitle, onClose, onSuccess }: Conv
         const resp = await fetch(`/api/leads/${leadId}/convert`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ types: selectedTypes })
+          body: JSON.stringify({
+            types: selectedTypes,
+            personType,
+            cpf: pfForm.cpf || null,
+            rg: pfForm.rg || null,
+            rgIssuingOrg: pfForm.rg_issuing_org || null,
+            maritalStatus: pfForm.marital_status || null,
+            birthDate: pfForm.birth_date || null,
+            cnpj: pjForm.cnpj || null,
+            legalName: pjForm.legal_name || null,
+            tradeName: pjForm.trade_name || null,
+            stateRegistration: pjForm.state_registration || null,
+            municipalRegistration: pjForm.municipal_registration || null
+          })
         })
 
         const data = await resp.json()
@@ -92,6 +127,147 @@ export function ConvertLeadModal({ leadId, leadTitle, onClose, onSuccess }: Conv
               ))}
             </div>
           </div>
+
+          <div>
+            <label className="block text-sm font-medium text-[var(--foreground)] mb-2">
+              Tipo de pessoa
+            </label>
+            <select
+              value={personType}
+              onChange={(e) => setPersonType(e.target.value as 'PF' | 'PJ')}
+              className="flex h-10 w-full rounded-[var(--radius)] border border-[var(--input)] bg-[var(--background)] px-3 py-2 text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--background)]"
+            >
+              <option value="PF">PF - Pessoa Física</option>
+              <option value="PJ">PJ - Pessoa Jurídica</option>
+            </select>
+          </div>
+
+          {personType === 'PF' ? (
+            <div className="grid gap-3 sm:grid-cols-2">
+              <div>
+                <label className="block text-sm font-medium text-[var(--foreground)] mb-1">
+                  CPF
+                </label>
+                <input
+                  type="text"
+                  value={pfForm.cpf}
+                  onChange={(e) => setPfForm((prev) => ({ ...prev, cpf: e.target.value }))}
+                  className="flex h-10 w-full rounded-[var(--radius)] border border-[var(--input)] bg-[var(--background)] px-3 py-2 text-sm"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-[var(--foreground)] mb-1">
+                  RG
+                </label>
+                <input
+                  type="text"
+                  value={pfForm.rg}
+                  onChange={(e) => setPfForm((prev) => ({ ...prev, rg: e.target.value }))}
+                  className="flex h-10 w-full rounded-[var(--radius)] border border-[var(--input)] bg-[var(--background)] px-3 py-2 text-sm"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-[var(--foreground)] mb-1">
+                  Órgão emissor
+                </label>
+                <input
+                  type="text"
+                  value={pfForm.rg_issuing_org}
+                  onChange={(e) =>
+                    setPfForm((prev) => ({ ...prev, rg_issuing_org: e.target.value }))
+                  }
+                  className="flex h-10 w-full rounded-[var(--radius)] border border-[var(--input)] bg-[var(--background)] px-3 py-2 text-sm"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-[var(--foreground)] mb-1">
+                  Estado civil
+                </label>
+                <input
+                  type="text"
+                  value={pfForm.marital_status}
+                  onChange={(e) =>
+                    setPfForm((prev) => ({ ...prev, marital_status: e.target.value }))
+                  }
+                  className="flex h-10 w-full rounded-[var(--radius)] border border-[var(--input)] bg-[var(--background)] px-3 py-2 text-sm"
+                />
+              </div>
+              <div className="sm:col-span-2">
+                <label className="block text-sm font-medium text-[var(--foreground)] mb-1">
+                  Nascimento
+                </label>
+                <input
+                  type="text"
+                  placeholder="YYYY-MM-DD"
+                  value={pfForm.birth_date}
+                  onChange={(e) => setPfForm((prev) => ({ ...prev, birth_date: e.target.value }))}
+                  className="flex h-10 w-full rounded-[var(--radius)] border border-[var(--input)] bg-[var(--background)] px-3 py-2 text-sm"
+                />
+              </div>
+            </div>
+          ) : (
+            <div className="grid gap-3 sm:grid-cols-2">
+              <div>
+                <label className="block text-sm font-medium text-[var(--foreground)] mb-1">
+                  CNPJ
+                </label>
+                <input
+                  type="text"
+                  value={pjForm.cnpj}
+                  onChange={(e) => setPjForm((prev) => ({ ...prev, cnpj: e.target.value }))}
+                  className="flex h-10 w-full rounded-[var(--radius)] border border-[var(--input)] bg-[var(--background)] px-3 py-2 text-sm"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-[var(--foreground)] mb-1">
+                  Razão social
+                </label>
+                <input
+                  type="text"
+                  value={pjForm.legal_name}
+                  onChange={(e) => setPjForm((prev) => ({ ...prev, legal_name: e.target.value }))}
+                  className="flex h-10 w-full rounded-[var(--radius)] border border-[var(--input)] bg-[var(--background)] px-3 py-2 text-sm"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-[var(--foreground)] mb-1">
+                  Nome fantasia
+                </label>
+                <input
+                  type="text"
+                  value={pjForm.trade_name}
+                  onChange={(e) => setPjForm((prev) => ({ ...prev, trade_name: e.target.value }))}
+                  className="flex h-10 w-full rounded-[var(--radius)] border border-[var(--input)] bg-[var(--background)] px-3 py-2 text-sm"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-[var(--foreground)] mb-1">
+                  IE
+                </label>
+                <input
+                  type="text"
+                  value={pjForm.state_registration}
+                  onChange={(e) =>
+                    setPjForm((prev) => ({ ...prev, state_registration: e.target.value }))
+                  }
+                  className="flex h-10 w-full rounded-[var(--radius)] border border-[var(--input)] bg-[var(--background)] px-3 py-2 text-sm"
+                />
+              </div>
+              <div className="sm:col-span-2">
+                <label className="block text-sm font-medium text-[var(--foreground)] mb-1">
+                  IM
+                </label>
+                <input
+                  type="text"
+                  value={pjForm.municipal_registration}
+                  onChange={(e) =>
+                    setPjForm((prev) => ({ ...prev, municipal_registration: e.target.value }))
+                  }
+                  className="flex h-10 w-full rounded-[var(--radius)] border border-[var(--input)] bg-[var(--background)] px-3 py-2 text-sm"
+                />
+              </div>
+            </div>
+          )}
 
           <div className="flex gap-2 pt-4">
             <Button 

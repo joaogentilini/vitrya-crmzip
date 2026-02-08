@@ -1,3 +1,4 @@
+/* eslint-disable @next/next/no-img-element */
 "use client";
 
 import Link from "next/link";
@@ -19,6 +20,8 @@ export default function MyPropertiesBoardClient({
 }: {
   properties: PropertyWithCover[];
 }) {
+  const siteBase = (process.env.NEXT_PUBLIC_SITE_URL || "").replace(/\/$/, "");
+
   return (
     <div style={{ padding: 24 }}>
       <div
@@ -149,7 +152,7 @@ export default function MyPropertiesBoardClient({
 
                     {/* ✅ “Ver no site” sem onClick: evita erro e funciona igual */}
                     <a
-                      href={`/imoveis/${p.id}`}
+                      href={`${siteBase}/imoveis/${p.id}`}
                       target="_blank"
                       rel="noreferrer"
                       style={{

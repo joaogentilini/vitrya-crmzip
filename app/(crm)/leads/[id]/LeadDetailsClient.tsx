@@ -85,6 +85,7 @@ export function LeadDetailsClient({
   const [convertModalOpen, setConvertModalOpen] = useState(false);
   const [convertedClientId, setConvertedClientId] = useState<string | null>(lead.client_id || null);
   const [convertedPersonId, setConvertedPersonId] = useState<string | null>(lead.person_id || null);
+  const clientId = lead.client_id || convertedClientId;
 
   const handleChangeOwner = useCallback(
     (newAssignedTo: string) => {
@@ -155,6 +156,24 @@ export function LeadDetailsClient({
     },
     [lead.id, router, success, showError],
   );
+
+  const handleLinkPerson = useCallback(() => {
+    if (lead.person_id || convertedPersonId) return;
+
+    startTransition(async () => {
+      const { linkLeadToPersonAction } = await import("../actions");
+      const result = await linkLeadToPersonAction(lead.id);
+
+      if (!result.ok) {
+        showError(result.message);
+        return;
+      }
+
+      setConvertedPersonId(result.data.personId);
+      success("Pessoa vinculada com sucesso!");
+      router.refresh();
+    });
+  }, [lead.id, lead.person_id, convertedPersonId, router, showError, success]);
 
   return (
     <div className="space-y-6">
@@ -290,30 +309,6 @@ export function LeadDetailsClient({
                 </Button>
               )}
 
-              {(lead.is_converted || convertedClientId) && (lead.person_id || convertedPersonId) && (
-                <Link href={`/people/${lead.person_id || convertedPersonId}`}>
-                  <Button
-                    variant="outline"
-                    className="border-[#294487] text-[#294487] hover:bg-[#294487] hover:text-white"
-                  >
-                    <svg
-                      className="w-4 h-4 mr-1.5"
-                      fill="none"
-                      viewBox="0 0 24 24"
-                      stroke="currentColor"
-                    >
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        strokeWidth={2}
-                        d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"
-                      />
-                    </svg>
-                    Abrir Cliente
-                  </Button>
-                </Link>
-              )}
-
               {lead.status === "open" && (
                 <>
                   <Button
@@ -358,6 +353,61 @@ export function LeadDetailsClient({
                   </Button>
                 </>
               )}
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Pessoa/Cliente</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            <div>
+              <p className="text-xs text-[var(--muted-foreground)] mb-1">
+                Pessoa
+              </p>
+              {lead.person_id || convertedPersonId ? (
+                <Link
+                  href={`/pessoas/${lead.person_id || convertedPersonId}`}
+                  className="text-sm font-medium text-[#294487] hover:underline"
+                >
+                  /pessoas/{lead.person_id || convertedPersonId}
+                </Link>
+              ) : (
+                <Button
+                  variant="outline"
+                  onClick={handleLinkPerson}
+                  disabled={isPending}
+                  className="border-[#294487] text-[#294487] hover:bg-[#294487] hover:text-white"
+                >
+                  Vincular Pessoa
+                </Button>
+              )}
+            </div>
+            <div>
+              <p className="text-xs text-[var(--muted-foreground)] mb-1">
+                Cliente
+              </p>
+              {clientId ? (
+                <Link
+                  href={`/clientes/${clientId}`}
+                  className="text-sm font-medium text-[#294487] hover:underline"
+                >
+                  /clientes/{clientId}
+                </Link>
+              ) : (
+                <p className="text-sm font-medium text-[var(--foreground)]">—</p>
+              )}
+            </div>
+            <div>
+              <p className="text-xs text-[var(--muted-foreground)] mb-1">
+                Status
+              </p>
+              <p className="text-sm font-medium text-[var(--foreground)]">
+                {lead.is_converted || convertedClientId ? "Convertido" : "—"}
+              </p>
             </div>
           </div>
         </CardContent>

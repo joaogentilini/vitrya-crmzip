@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
 import { updatePerson, UpdatePersonData } from './actions'
+import { normalizePersonKindTags, PersonKindTag, PERSON_KIND_TAGS } from '@/lib/types/people2'
 
 interface Person {
   id: string
@@ -13,30 +14,35 @@ interface Person {
   document_id: string | null
   notes: string | null
   kind_tags: string[] | null
-  owner_profile_id: string | null
+  assigned_to?: string | null
   created_by_profile_id: string | null
   created_at: string
   updated_at: string
+  avatar_path?: string | null
 }
 
 interface PersonEditorProps {
   person: Person
-  ownerProfile?: { id: string; full_name: string | null; email: string | null } | null
   creatorProfile?: { id: string; full_name: string | null; email: string | null } | null
+  assignedProfile?: { id: string; full_name: string | null; email: string | null } | null
+  brokers?: { id: string; full_name: string | null; email: string | null }[] | null
 }
 
-const kindTagLabels: Record<string, string> = {
-  comprador: 'Comprador',
-  vendedor: 'Vendedor',
+const kindTagLabels: Record<PersonKindTag, string> = {
   proprietario: 'Proprietário',
-  inquilino: 'Inquilino',
-  investidor: 'Investidor',
-  fornecedor: 'Fornecedor'
+  corretor: 'Corretor',
+  fornecedor: 'Fornecedor',
+  parceiro: 'Parceiro'
 }
 
-const availableTags = Object.keys(kindTagLabels)
+const availableTags = PERSON_KIND_TAGS
 
-export default function PersonEditor({ person, ownerProfile, creatorProfile }: PersonEditorProps) {
+export default function PersonEditor({
+  person,
+  creatorProfile,
+  assignedProfile,
+  brokers
+}: PersonEditorProps) {
   const [isEditing, setIsEditing] = useState(false)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -47,7 +53,8 @@ export default function PersonEditor({ person, ownerProfile, creatorProfile }: P
     email: person.email || '',
     document_id: person.document_id || '',
     notes: person.notes || '',
-    kind_tags: person.kind_tags || []
+    kind_tags: normalizePersonKindTags(person.kind_tags),
+    assigned_to: person.assigned_to || ''
   })
 
   const handleSave = async () => {
@@ -71,19 +78,23 @@ export default function PersonEditor({ person, ownerProfile, creatorProfile }: P
       email: person.email || '',
       document_id: person.document_id || '',
       notes: person.notes || '',
-      kind_tags: person.kind_tags || []
+      kind_tags: normalizePersonKindTags(person.kind_tags),
+      assigned_to: person.assigned_to || ''
     })
     setIsEditing(false)
     setError(null)
   }
 
   const handleTagToggle = (tag: string) => {
-    setFormData(prev => ({
-      ...prev,
-      kind_tags: prev.kind_tags?.includes(tag)
-        ? prev.kind_tags.filter(t => t !== tag)
-        : [...(prev.kind_tags || []), tag]
-    }))
+    setFormData(prev => {
+      const current = normalizePersonKindTags(prev.kind_tags)
+      return {
+        ...prev,
+        kind_tags: current.includes(tag as PersonKindTag)
+          ? current.filter(t => t !== tag)
+          : [...current, tag as PersonKindTag]
+      }
+    })
   }
 
   return (
@@ -107,12 +118,12 @@ export default function PersonEditor({ person, ownerProfile, creatorProfile }: P
                 <h1 className="text-xl font-bold">{person.full_name}</h1>
               )}
               <div className="flex flex-wrap gap-1 mt-1">
-                {formData.kind_tags?.map((tag: string) => (
+                {normalizePersonKindTags(formData.kind_tags).map((tag) => (
                   <span
                     key={tag}
                     className="inline-flex items-center px-2 py-0.5 text-xs font-medium rounded-full bg-[var(--muted)] text-[var(--muted-foreground)]"
                   >
-                    {kindTagLabels[tag] || tag}
+                    {kindTagLabels[tag]}
                   </span>
                 ))}
               </div>
@@ -215,14 +226,41 @@ export default function PersonEditor({ person, ownerProfile, creatorProfile }: P
             )}
           </div>
 
-          {ownerProfile && (
-            <div>
-              <p className="text-xs text-[var(--muted-foreground)] mb-1">Responsável</p>
+          <div>
+            <p className="text-xs text-[var(--muted-foreground)] mb-1">Responsável atual</p>
+            {isEditing ? (
+              brokers && brokers.length > 0 ? (
+                <select
+                  value={formData.assigned_to}
+                  onChange={(e) =>
+                    setFormData(prev => ({ ...prev, assigned_to: e.target.value }))
+                  }
+                  className="text-sm font-medium text-[var(--foreground)] w-full border border-gray-300 rounded px-2 py-1 focus:border-[#294487] focus:outline-none"
+                >
+                  <option value="">Não atribuído</option>
+                  {brokers.map((broker) => (
+                    <option key={broker.id} value={broker.id}>
+                      {broker.full_name || broker.email || broker.id}
+                    </option>
+                  ))}
+                </select>
+              ) : (
+                <input
+                  type="text"
+                  value={formData.assigned_to}
+                  onChange={(e) =>
+                    setFormData(prev => ({ ...prev, assigned_to: e.target.value }))
+                  }
+                  className="text-sm font-medium text-[var(--foreground)] w-full border border-gray-300 rounded px-2 py-1 focus:border-[#294487] focus:outline-none"
+                  placeholder="ID do responsável"
+                />
+              )
+            ) : (
               <p className="text-sm font-medium text-[var(--foreground)]">
-                {ownerProfile.full_name || ownerProfile.email || '—'}
+                {assignedProfile?.full_name || assignedProfile?.email || person.assigned_to || '—'}
               </p>
-            </div>
-          )}
+            )}
+          </div>
 
           {creatorProfile && (
             <div>
@@ -242,7 +280,7 @@ export default function PersonEditor({ person, ownerProfile, creatorProfile }: P
         </div>
 
         <div className="mt-4">
-          <p className="text-xs text-[var(--muted-foreground)] mb-2">Tags/Categorias</p>
+          <p className="text-xs text-[var(--muted-foreground)] mb-2">Cliente</p>
           {isEditing ? (
             <div className="flex flex-wrap gap-2">
               {availableTags.map(tag => (
@@ -251,25 +289,29 @@ export default function PersonEditor({ person, ownerProfile, creatorProfile }: P
                   type="button"
                   onClick={() => handleTagToggle(tag)}
                   className={`px-3 py-1 text-xs font-medium rounded-full border transition-colors ${
-                    formData.kind_tags?.includes(tag)
+                    normalizePersonKindTags(formData.kind_tags).includes(tag)
                       ? 'bg-[#294487] text-white border-[#294487]'
                       : 'bg-white text-gray-700 border-gray-300 hover:border-[#294487]'
                   }`}
                 >
-                  {kindTagLabels[tag]}
+                  {kindTagLabels[tag as PersonKindTag]}
                 </button>
               ))}
             </div>
           ) : (
             <div className="flex flex-wrap gap-1">
-              {person.kind_tags?.map((tag: string) => (
-                <span
-                  key={tag}
-                  className="inline-flex items-center px-2 py-0.5 text-xs font-medium rounded-full bg-[var(--muted)] text-[var(--muted-foreground)]"
-                >
-                  {kindTagLabels[tag] || tag}
-                </span>
-              )) || <span className="text-sm text-gray-500">Nenhuma tag definida</span>}
+              {normalizePersonKindTags(person.kind_tags).length > 0 ? (
+                normalizePersonKindTags(person.kind_tags).map((tag) => (
+                  <span
+                    key={tag}
+                    className="inline-flex items-center px-2 py-0.5 text-xs font-medium rounded-full bg-[var(--muted)] text-[var(--muted-foreground)]"
+                  >
+                    {kindTagLabels[tag]}
+                  </span>
+                ))
+              ) : (
+                <span className="text-sm text-gray-500">Nenhuma tag definida</span>
+              )}
             </div>
           )}
         </div>

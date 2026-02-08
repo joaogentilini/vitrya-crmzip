@@ -8,6 +8,8 @@ import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
 import { useToast } from '@/components/ui/Toast'
 
+const toDigits = (value?: string | null) => (value ? value.replace(/\D/g, '') : '')
+
 type PipelineRow = {
   id: string
   name: string
@@ -61,6 +63,21 @@ export function CreateLeadForm({ pipelines, stages, leadTypes = [], leadInterest
   const [emailError, setEmailError] = useState<string | undefined>()
   const [notes, setNotes] = useState('')
   const [ownerUserId, setOwnerUserId] = useState<string>(currentUserId)
+  const [personType, setPersonType] = useState<'PF' | 'PJ'>('PF')
+  const [pfForm, setPfForm] = useState({
+    cpf: '',
+    rg: '',
+    rg_issuing_org: '',
+    marital_status: '',
+    birth_date: ''
+  })
+  const [pjForm, setPjForm] = useState({
+    cnpj: '',
+    legal_name: '',
+    trade_name: '',
+    state_registration: '',
+    municipal_registration: ''
+  })
 
   const personId = searchParams.get('person_id')
 
@@ -77,7 +94,11 @@ export function CreateLeadForm({ pipelines, stages, leadTypes = [], leadInterest
 
           const { data: person, error } = await supabase
             .from('people')
-            .select('full_name, phone_e164, email')
+            .select(
+              `full_name, phone_e164, email, document_id,
+              person_financing_profiles(cpf, rg, rg_issuing_org, marital_status, birth_date),
+              person_company_profiles(cnpj, legal_name, trade_name, state_registration, municipal_registration)`
+            )
             .eq('id', personId)
             .single()
 
@@ -85,6 +106,36 @@ export function CreateLeadForm({ pipelines, stages, leadTypes = [], leadInterest
             setClientName(person.full_name || '')
             setPhone(person.phone_e164 || '')
             setEmail(person.email || '')
+
+            const financing = Array.isArray(person.person_financing_profiles)
+              ? person.person_financing_profiles[0]
+              : person.person_financing_profiles
+            const company = Array.isArray(person.person_company_profiles)
+              ? person.person_company_profiles[0]
+              : person.person_company_profiles
+            const documentDigits = toDigits(person.document_id)
+
+            if (company?.cnpj || company?.legal_name || company?.trade_name) {
+              setPersonType('PJ')
+              setPjForm({
+                cnpj: company?.cnpj || '',
+                legal_name: company?.legal_name || '',
+                trade_name: company?.trade_name || '',
+                state_registration: company?.state_registration || '',
+                municipal_registration: company?.municipal_registration || ''
+              })
+            } else {
+              if (documentDigits.length === 14) {
+                setPersonType('PJ')
+              }
+              setPfForm({
+                cpf: financing?.cpf || '',
+                rg: financing?.rg || '',
+                rg_issuing_org: financing?.rg_issuing_org || '',
+                marital_status: financing?.marital_status || '',
+                birth_date: financing?.birth_date || ''
+              })
+            }
           }
         } catch (err) {
           console.error('Error loading person data:', err)
@@ -99,6 +150,13 @@ export function CreateLeadForm({ pipelines, stages, leadTypes = [], leadInterest
       setOwnerUserId(currentUserId)
     }
   }, [currentUserId, ownerUserId])
+
+  useEffect(() => {
+    const cnpjDigits = toDigits(pjForm.cnpj)
+    if (cnpjDigits.length === 14 && personType !== 'PJ') {
+      setPersonType('PJ')
+    }
+  }, [pjForm.cnpj, personType])
 
   const [duplicateLead, setDuplicateLead] = useState<DuplicateCheckResult['lead'] | null>(null)
   const [isCheckingPhone, setIsCheckingPhone] = useState(false)
@@ -215,6 +273,17 @@ export function CreateLeadForm({ pipelines, stages, leadTypes = [], leadInterest
         notes: notes.trim() || undefined,
         ownerUserId: ownerUserId || undefined,
         personId: personId || undefined,
+        personType,
+        cpf: pfForm.cpf.trim() || undefined,
+        rg: pfForm.rg.trim() || undefined,
+        rgIssuingOrg: pfForm.rg_issuing_org.trim() || undefined,
+        maritalStatus: pfForm.marital_status.trim() || undefined,
+        birthDate: pfForm.birth_date.trim() || undefined,
+        cnpj: pjForm.cnpj.trim() || undefined,
+        legalName: pjForm.legal_name.trim() || undefined,
+        tradeName: pjForm.trade_name.trim() || undefined,
+        stateRegistration: pjForm.state_registration.trim() || undefined,
+        municipalRegistration: pjForm.municipal_registration.trim() || undefined,
       })
 
       if (!result.ok) {
@@ -242,6 +311,21 @@ export function CreateLeadForm({ pipelines, stages, leadTypes = [], leadInterest
       setLeadSourceId('')
       setNotes('')
       setOwnerUserId(currentUserId)
+      setPersonType('PF')
+      setPfForm({
+        cpf: '',
+        rg: '',
+        rg_issuing_org: '',
+        marital_status: '',
+        birth_date: ''
+      })
+      setPjForm({
+        cnpj: '',
+        legal_name: '',
+        trade_name: '',
+        state_registration: '',
+        municipal_registration: ''
+      })
       setDuplicateLead(null)
       setClientNameError(undefined)
       setPhoneError(undefined)
@@ -326,6 +410,136 @@ export function CreateLeadForm({ pipelines, stages, leadTypes = [], leadInterest
             autoComplete="email"
           />
         </div>
+
+        <div>
+          <label className="block text-sm font-medium mb-1.5 text-[var(--foreground)]">
+            Tipo de pessoa
+          </label>
+          <select
+            value={personType}
+            onChange={(e) => setPersonType(e.target.value as 'PF' | 'PJ')}
+            disabled={isPending}
+            className={selectClass}
+          >
+            <option value="PF">PF - Pessoa Física</option>
+            <option value="PJ">PJ - Pessoa Jurídica</option>
+          </select>
+        </div>
+
+        {personType === 'PF' ? (
+          <>
+            <div>
+              <Input
+                name="cpf"
+                label="CPF"
+                value={pfForm.cpf}
+                onChange={(e) => setPfForm((prev) => ({ ...prev, cpf: e.target.value }))}
+                disabled={isPending}
+              />
+            </div>
+
+            <div>
+              <Input
+                name="rg"
+                label="RG"
+                value={pfForm.rg}
+                onChange={(e) => setPfForm((prev) => ({ ...prev, rg: e.target.value }))}
+                disabled={isPending}
+              />
+            </div>
+
+            <div>
+              <Input
+                name="rgIssuingOrg"
+                label="Órgão emissor"
+                value={pfForm.rg_issuing_org}
+                onChange={(e) =>
+                  setPfForm((prev) => ({ ...prev, rg_issuing_org: e.target.value }))
+                }
+                disabled={isPending}
+              />
+            </div>
+
+            <div>
+              <Input
+                name="maritalStatus"
+                label="Estado civil"
+                value={pfForm.marital_status}
+                onChange={(e) =>
+                  setPfForm((prev) => ({ ...prev, marital_status: e.target.value }))
+                }
+                disabled={isPending}
+              />
+            </div>
+
+            <div>
+              <Input
+                name="birthDate"
+                label="Nascimento"
+                placeholder="YYYY-MM-DD"
+                value={pfForm.birth_date}
+                onChange={(e) => setPfForm((prev) => ({ ...prev, birth_date: e.target.value }))}
+                disabled={isPending}
+              />
+            </div>
+          </>
+        ) : (
+          <>
+            <div>
+              <Input
+                name="cnpj"
+                label="CNPJ"
+                value={pjForm.cnpj}
+                onChange={(e) => setPjForm((prev) => ({ ...prev, cnpj: e.target.value }))}
+                disabled={isPending}
+              />
+            </div>
+
+            <div>
+              <Input
+                name="legalName"
+                label="Razão social"
+                value={pjForm.legal_name}
+                onChange={(e) => setPjForm((prev) => ({ ...prev, legal_name: e.target.value }))}
+                disabled={isPending}
+              />
+            </div>
+
+            <div>
+              <Input
+                name="tradeName"
+                label="Nome fantasia"
+                value={pjForm.trade_name}
+                onChange={(e) => setPjForm((prev) => ({ ...prev, trade_name: e.target.value }))}
+                disabled={isPending}
+              />
+            </div>
+
+            <div>
+              <Input
+                name="stateRegistration"
+                label="IE"
+                value={pjForm.state_registration}
+                onChange={(e) =>
+                  setPjForm((prev) => ({ ...prev, state_registration: e.target.value }))
+                }
+                disabled={isPending}
+              />
+            </div>
+
+            <div>
+              <Input
+                name="municipalRegistration"
+                label="IM"
+                value={pjForm.municipal_registration}
+                onChange={(e) =>
+                  setPjForm((prev) => ({ ...prev, municipal_registration: e.target.value }))
+                }
+                disabled={isPending}
+              />
+            </div>
+          </>
+        )}
 
         <div>
           <label className="block text-sm font-medium mb-1.5 text-[var(--foreground)]">

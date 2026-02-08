@@ -1,3 +1,4 @@
+import Link from 'next/link'
 import { cookies } from 'next/headers'
 import { createServerClient } from '@supabase/ssr'
 import CampaignDetailPage from './CampaignPropertyPage'
@@ -143,18 +144,18 @@ export default async function CampaignByPropertyPage({
             </div>
 
             <div className="flex gap-2">
-              <a
+              <Link
                 href="/campaigns"
                 className="rounded-xl border border-black/10 bg-white px-3 py-2 text-sm text-black/80 hover:bg-black/5"
               >
                 Voltar
-              </a>
-              <a
+              </Link>
+              <Link
                 href={`/properties/${property.id}`}
                 className="rounded-xl border border-black/10 bg-white px-3 py-2 text-sm text-black/80 hover:bg-black/5"
               >
                 Abrir imóvel
-              </a>
+              </Link>
             </div>
           </div>
         </div>

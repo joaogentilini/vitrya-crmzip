@@ -1,4 +1,6 @@
+/* eslint-disable @next/next/no-img-element */
 import type { ReactNode } from "react";
+import Link from "next/link";
 import { buildWhatsAppLink, sanitizePhone } from "@/lib/whatsapp";
 import "./public.css";
 
@@ -27,19 +29,44 @@ export default function PublicLayout({ children }: { children: ReactNode }) {
     <div className="pv-shell">
       <header className="pv-header">
         <div className="pv-header-inner">
-          {/* Só logo (sem texto) */}
-          <a className="pv-brand" href="/imoveis" aria-label="Vitrya Imóveis - Início">
+          {/* Logo */}
+          <Link className="pv-brand" href="/imoveis" aria-label="Vitrya Imóveis - Início">
             <img
               src="/brand/logo_oficial.png"
               alt="Vitrya"
               className="pv-mark"
             />
-          </a>
+          </Link>
 
-          <div className="pv-actions">
-            <a className="pv-btn pv-btn-secondary" href="/crm/login">
-              Área do corretor
-            </a>
+          {/* Ações (discretas) */}
+          <div className="pv-actions" style={{ display: "flex", gap: 8, alignItems: "center" }}>
+            <Link
+              className="pv-btn pv-btn-secondary"
+              href="/cliente"
+              style={{
+                padding: "8px 10px",
+                fontWeight: 800,
+                fontSize: 12,
+                borderRadius: 999,
+                whiteSpace: "nowrap",
+              }}
+            >
+              Acesso Cliente
+            </Link>
+
+            <Link
+              className="pv-btn pv-btn-secondary"
+              href="/crm/login"
+              style={{
+                padding: "8px 10px",
+                fontWeight: 800,
+                fontSize: 12,
+                borderRadius: 999,
+                whiteSpace: "nowrap",
+              }}
+            >
+              Acesso Corretor
+            </Link>
           </div>
         </div>
       </header>

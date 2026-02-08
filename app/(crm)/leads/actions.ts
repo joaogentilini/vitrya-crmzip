@@ -23,6 +23,17 @@ type CreateLeadInput = {
   notes?: string
   ownerUserId?: string
   personId?: string
+  personType?: 'PF' | 'PJ'
+  cpf?: string
+  rg?: string
+  rgIssuingOrg?: string
+  maritalStatus?: string
+  birthDate?: string
+  cnpj?: string
+  legalName?: string
+  tradeName?: string
+  stateRegistration?: string
+  municipalRegistration?: string
 }
 
 type UpdateLeadInput = {
@@ -64,6 +75,13 @@ type LeadRow = {
   owner_user_id: string | null
   created_at: string
   [key: string]: unknown
+}
+
+type PersonRow = {
+  id: string
+  full_name: string | null
+  email: string | null
+  phone_e164: string | null
 }
 
 export async function checkLeadByPhoneAction(phoneRaw: string): Promise<DuplicateCheckResult> {
@@ -240,6 +258,158 @@ export async function createLeadAction(data: CreateLeadInput): Promise<ActionRes
     }
   }
 
+  const personType = data.personType === 'PJ' ? 'PJ' : 'PF'
+  const cpf = data.cpf?.trim() || null
+  const rg = data.rg?.trim() || null
+  const rgIssuingOrg = data.rgIssuingOrg?.trim() || null
+  const maritalStatus = data.maritalStatus?.trim() || null
+  const birthDate = data.birthDate?.trim() || null
+  const cnpj = data.cnpj?.trim() || null
+  const legalName = data.legalName?.trim() || null
+  const tradeName = data.tradeName?.trim() || null
+  const stateRegistration = data.stateRegistration?.trim() || null
+  const municipalRegistration = data.municipalRegistration?.trim() || null
+
+  const hasProfileData =
+    !!cpf ||
+    !!rg ||
+    !!rgIssuingOrg ||
+    !!maritalStatus ||
+    !!birthDate ||
+    !!cnpj ||
+    !!legalName ||
+    !!tradeName ||
+    !!stateRegistration ||
+    !!municipalRegistration
+
+  let personId = data.personId || null
+
+  if (!personId && hasProfileData) {
+    if (personType === 'PF' && cpf) {
+      const { data: personByCpf } = await supabase
+        .from('person_financing_profiles')
+        .select('person_id')
+        .eq('cpf', cpf)
+        .limit(1)
+        .maybeSingle()
+      if (personByCpf?.person_id) {
+        personId = personByCpf.person_id as string
+      }
+    }
+
+    if (!personId && personType === 'PJ' && cnpj) {
+      const { data: personByCnpj } = await supabase
+        .from('person_company_profiles')
+        .select('person_id')
+        .eq('cnpj', cnpj)
+        .limit(1)
+        .maybeSingle()
+      if (personByCnpj?.person_id) {
+        personId = personByCnpj.person_id as string
+      }
+    }
+
+    if (!personId && phoneE164) {
+      const { data: personByPhone } = await supabase
+        .from('people')
+        .select('id')
+        .eq('phone_e164', phoneE164)
+        .limit(1)
+        .maybeSingle()
+      if (personByPhone?.id) {
+        personId = personByPhone.id as string
+      }
+    }
+
+    if (!personId && emailValue) {
+      const { data: personByEmail } = await supabase
+        .from('people')
+        .select('id')
+        .ilike('email', emailValue)
+        .limit(1)
+        .maybeSingle()
+      if (personByEmail?.id) {
+        personId = personByEmail.id as string
+      }
+    }
+
+    if (!personId) {
+      const documentId = personType === 'PJ' ? cnpj : cpf
+      const { data: newPerson, error: personError } = await supabase
+        .from('people')
+        .insert({
+          full_name: data.clientName?.trim() || data.title.trim(),
+          phone_e164: phoneE164,
+          email: emailValue,
+          document_id: documentId || null,
+          owner_profile_id: ownerUserId,
+          created_by_profile_id: actorId
+        })
+        .select('id')
+        .single()
+
+      if (personError || !newPerson) {
+        return {
+          ok: false,
+          code: 'PERSON_CREATE_ERROR',
+          message: 'Erro ao criar pessoa',
+          details: personError
+        }
+      }
+
+      personId = newPerson.id as string
+    }
+
+  }
+
+  if (personId && hasProfileData) {
+    if (personType === 'PF') {
+      const { error: financingError } = await supabase
+        .from('person_financing_profiles')
+        .upsert(
+          {
+            person_id: personId,
+            cpf,
+            rg,
+            rg_issuing_org: rgIssuingOrg,
+            marital_status: maritalStatus,
+            birth_date: birthDate
+          },
+          { onConflict: 'person_id' }
+        )
+      if (financingError) {
+        return {
+          ok: false,
+          code: 'PERSON_PROFILE_ERROR',
+          message: 'Erro ao salvar dados de PF',
+          details: financingError
+        }
+      }
+    } else {
+      const { error: companyError } = await supabase
+        .from('person_company_profiles')
+        .upsert(
+          {
+            person_id: personId,
+            cnpj,
+            legal_name: legalName,
+            trade_name: tradeName,
+            state_registration: stateRegistration,
+            municipal_registration: municipalRegistration
+          },
+          { onConflict: 'person_id' }
+        )
+      if (companyError) {
+        return {
+          ok: false,
+          code: 'PERSON_PROFILE_ERROR',
+          message: 'Erro ao salvar dados de PJ',
+          details: companyError
+        }
+      }
+    }
+  }
+
   // 7. Build payload
   const payload = {
     title: data.title.trim(),
@@ -259,7 +429,7 @@ export async function createLeadAction(data: CreateLeadInput): Promise<ActionRes
     lead_source_id: data.leadSourceId || null,
     budget_range: data.budgetRange?.trim() || null,
     notes: data.notes?.trim() || null,
-    person_id: data.personId || null,
+    person_id: personId,
   }
 
   // 7. Insert lead
@@ -543,4 +713,127 @@ export async function updateLeadOwnerAction(leadId: string, newAssignedTo: strin
   revalidatePath(`/leads/${leadId}`)
   
   return { ok: true, data: { success: true } }
+}
+
+export async function linkLeadToPersonAction(
+  leadId: string
+): Promise<ActionResult<{ personId: string }>> {
+  const supabase = await createClient()
+
+  const { data: userRes, error: authError } = await supabase.auth.getUser()
+  if (authError || !userRes?.user) {
+    return {
+      ok: false,
+      code: 'AUTH_ERROR',
+      message: 'Usuário não autenticado',
+      details: authError
+    }
+  }
+
+  const { data: lead, error: leadError } = await supabase
+    .from('leads')
+    .select('id, title, client_name, phone_e164, email, person_id')
+    .eq('id', leadId)
+    .single()
+
+  if (leadError || !lead) {
+    return {
+      ok: false,
+      code: 'LEAD_NOT_FOUND',
+      message: 'Lead não encontrado',
+      details: leadError
+    }
+  }
+
+  if (lead.person_id) {
+    return { ok: true, data: { personId: lead.person_id } }
+  }
+
+  let person: PersonRow | null = null
+
+  if (lead.phone_e164) {
+    const { data: personByPhone, error: phoneError } = await supabase
+      .from('people')
+      .select('id, full_name, email, phone_e164')
+      .eq('phone_e164', lead.phone_e164)
+      .limit(1)
+      .maybeSingle()
+
+    if (phoneError) {
+      return {
+        ok: false,
+        code: 'PERSON_LOOKUP_ERROR',
+        message: 'Erro ao buscar pessoa por telefone',
+        details: phoneError
+      }
+    }
+
+    person = personByPhone as PersonRow | null
+  }
+
+  if (!person && lead.email) {
+    const { data: personByEmail, error: emailError } = await supabase
+      .from('people')
+      .select('id, full_name, email, phone_e164')
+      .ilike('email', lead.email)
+      .limit(1)
+      .maybeSingle()
+
+    if (emailError) {
+      return {
+        ok: false,
+        code: 'PERSON_LOOKUP_ERROR',
+        message: 'Erro ao buscar pessoa por email',
+        details: emailError
+      }
+    }
+
+    person = personByEmail as PersonRow | null
+  }
+
+  if (!person) {
+    const payload: Record<string, unknown> = {
+      full_name: lead.client_name || lead.title,
+      email: lead.email || null,
+      phone_e164: lead.phone_e164 || null,
+      owner_profile_id: userRes.user.id,
+      created_by_profile_id: userRes.user.id
+    }
+
+    const { data: createdPerson, error: createError } = await supabase
+      .from('people')
+      .insert(payload)
+      .select('id, full_name, email, phone_e164')
+      .single()
+
+    if (createError || !createdPerson) {
+      return {
+        ok: false,
+        code: 'PERSON_CREATE_ERROR',
+        message: 'Erro ao criar pessoa',
+        details: createError
+      }
+    }
+
+    person = createdPerson as PersonRow
+  }
+
+  const { error: updateError } = await supabase
+    .from('leads')
+    .update({ person_id: person.id })
+    .eq('id', leadId)
+
+  if (updateError) {
+    return {
+      ok: false,
+      code: 'LEAD_UPDATE_ERROR',
+      message: 'Erro ao vincular lead à pessoa',
+      details: updateError
+    }
+  }
+
+  revalidatePath(`/leads/${leadId}`)
+  revalidatePath(`/pessoas/${person.id}`)
+
+  return { ok: true, data: { personId: person.id } }
 }

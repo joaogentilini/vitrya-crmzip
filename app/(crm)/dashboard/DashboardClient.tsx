@@ -352,12 +352,12 @@ export function DashboardClient({ isAdmin, profiles, selectedBroker, data }: Das
             <div className="text-sm font-extrabold text-black/90">Próximas tarefas</div>
             <div className="mt-1 text-sm text-black/60">Pendências mais próximas por vencimento.</div>
           </div>
-          <a
+          <Link
             href="/campaigns"
             className="rounded-xl border border-black/10 bg-white px-3 py-2 text-sm text-black/80 hover:bg-black/5"
           >
             Ver tudo
-          </a>
+          </Link>
         </div>
 
         <div className="mt-3 space-y-2">
@@ -384,12 +384,12 @@ export function DashboardClient({ isAdmin, profiles, selectedBroker, data }: Das
                     >
                       {completingId === task.id ? 'Concluindo...' : 'Concluir'}
                     </button>
-                    <a
+                    <Link
                       href={`/campaigns/${task.property_id}`}
                       className="px-3 py-1 text-xs bg-black text-white rounded-lg hover:bg-black/80 transition-colors"
                     >
                       Abrir
-                    </a>
+                    </Link>
                   </div>
                 </div>
               )

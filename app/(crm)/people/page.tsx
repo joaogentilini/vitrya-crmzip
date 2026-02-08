@@ -33,7 +33,7 @@ async function PeopleContent() {
   // 3) Pessoas
   const { data: peopleRaw, error: peopleErr } = await supabase
     .from('people')
-    .select('id, full_name, email, phone_e164, document_id, kind_tags, notes, owner_profile_id, created_by_profile_id, created_at, updated_at')
+    .select('id, full_name, email, phone_e164, document_id, kind_tags, notes, owner_profile_id, created_by_profile_id, created_at, updated_at, avatar_path')
     .order('created_at', { ascending: false })
     .limit(500)
 

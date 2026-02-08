@@ -1,13 +1,13 @@
+/* eslint-disable @next/next/no-img-element */
 'use client'
 
 import { useRouter } from 'next/navigation'
-import { useCallback, useState } from 'react'
+import { useMemo, useState } from 'react'
 import { supabase } from '@/lib/supabaseClient'
-import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/Card'
-import { Badge } from '@/components/ui/Badge'
+import { Card, CardContent } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
 import { useToast } from '@/components/ui/Toast'
-import Link from 'next/link'
+import { normalizePersonKindTags, PersonKindTag } from '@/lib/types/people2'
 
 interface Profile {
   id: string
@@ -18,9 +18,10 @@ interface Person {
   id: string
   full_name: string | null
   email: string | null
-  phone: string | null
+  phone_e164: string | null
+  kind_tags?: string[] | null
+  avatar_path?: string | null
   created_at: string
-  user_id: string
 }
 
 interface PeopleClientProps {
@@ -29,6 +30,8 @@ interface PeopleClientProps {
   selectedBroker?: string
   currentUserId: string
   currentUserRole: 'admin' | 'gestor' | 'corretor'
+  basePath?: string
+  documentsBasePath?: string
 }
 
 export function PeopleClient({ 
@@ -36,61 +39,72 @@ export function PeopleClient({
   corretores,
   selectedBroker, 
   currentUserId, 
-  currentUserRole 
+  currentUserRole,
+  basePath = '/people',
+  documentsBasePath
 }: PeopleClientProps) {
   const router = useRouter()
-  const { success } = useToast()
   const [showCreateModal, setShowCreateModal] = useState(false)
   const [searchTerm, setSearchTerm] = useState('')
   const [sortBy, setSortBy] = useState<'name' | 'created_at'>('created_at')
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc')
 
-  const handleSignOut = useCallback(async () => {
-    await supabase.auth.signOut()
-    success('Você saiu da conta.')
-    router.push('/')
-  }, [router, success])
-
   const handleBrokerChange = (brokerId: string) => {
     const params = new URLSearchParams(window.location.search)
     params.set('broker', brokerId)
-    router.push(`/people?${params.toString()}`)
+    router.push(`${basePath}?${params.toString()}`)
   }
 
   const isAdmin = currentUserRole === 'admin' || currentUserRole === 'gestor'
 
-  const filteredPeople = people
-    .filter(person => {
-      if (!searchTerm) return true
-      const searchLower = searchTerm.toLowerCase()
-      return (
-        person.full_name?.toLowerCase().includes(searchLower) ||
-        person.email?.toLowerCase().includes(searchLower) ||
-        person.phone?.includes(searchTerm)
-      )
-    })
-    .sort((a, b) => {
-      let aValue: string | number
-      let bValue: string | number
+  const filteredPeople = useMemo(() => {
+    return people
+      .filter(person => {
+        if (!searchTerm) return true
+        const searchLower = searchTerm.toLowerCase()
+        return (
+          person.full_name?.toLowerCase().includes(searchLower) ||
+          person.email?.toLowerCase().includes(searchLower) ||
+          person.phone_e164?.includes(searchTerm)
+        )
+      })
+      .sort((a, b) => {
+        let aValue: string | number
+        let bValue: string | number
 
-      if (sortBy === 'name') {
-        aValue = a.full_name || ''
-        bValue = b.full_name || ''
-      } else {
-        aValue = new Date(a.created_at).getTime()
-        bValue = new Date(b.created_at).getTime()
-      }
+        if (sortBy === 'name') {
+          aValue = a.full_name || ''
+          bValue = b.full_name || ''
+        } else {
+          aValue = new Date(a.created_at).getTime()
+          bValue = new Date(b.created_at).getTime()
+        }
 
-      if (typeof aValue === 'string' && typeof bValue === 'string') {
-        return sortOrder === 'asc' 
-          ? aValue.localeCompare(bValue) 
-          : bValue.localeCompare(aValue)
-      }
+        if (typeof aValue === 'string' && typeof bValue === 'string') {
+          return sortOrder === 'asc'
+            ? aValue.localeCompare(bValue)
+            : bValue.localeCompare(aValue)
+        }
 
-      return sortOrder === 'asc' 
-        ? (aValue as number) - (bValue as number) 
-        : (bValue as number) - (aValue as number)
-    })
+        return sortOrder === 'asc'
+          ? (aValue as number) - (bValue as number)
+          : (bValue as number) - (aValue as number)
+      })
+  }, [people, searchTerm, sortBy, sortOrder])
+
+  const kindTagLabels: Record<PersonKindTag, string> = {
+    proprietario: 'Proprietário',
+    corretor: 'Corretor',
+    fornecedor: 'Fornecedor',
+    parceiro: 'Parceiro'
+  }
+
+  const getInitials = (name?: string | null) => {
+    const trimmed = name?.trim()
+    if (!trimmed) return '?'
+    const parts = trimmed.split(/\s+/).slice(0, 2)
+    return parts.map((part) => part[0]?.toUpperCase()).join('')
+  }
 
   return (
     <div className="space-y-6">
@@ -152,49 +166,79 @@ export function PeopleClient({
               </p>
             </div>
           ) : (
-            <div className="space-y-4">
-              <div className="overflow-x-auto">
-                <table className="w-full">
-                  <thead>
-                    <tr className="border-b border-[var(--border)]">
-                      <th className="text-left py-3 px-2 text-sm font-medium text-[var(--muted-foreground)]">Nome</th>
-                      <th className="text-left py-3 px-2 text-sm font-medium text-[var(--muted-foreground)]">Contato</th>
-                      <th className="text-left py-3 px-2 text-sm font-medium text-[var(--muted-foreground)]">Data de Cadastro</th>
-                      <th className="text-left py-3 px-2 text-sm font-medium text-[var(--muted-foreground)]">Ações</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {filteredPeople.map((person) => (
-                      <tr key={person.id} className="border-b border-[var(--border)] hover:bg-[var(--muted)]">
-                        <td className="py-3 px-2">
-                          <div className="font-medium text-[var(--foreground)]">
-                            {person.full_name || 'Nome não informado'}
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+              {filteredPeople.map((person) => {
+                const roles = normalizePersonKindTags(person.kind_tags)
+                const contact = person.phone_e164 || person.email || '—'
+                return (
+                  <div
+                    key={person.id}
+                    role="button"
+                    tabIndex={0}
+                    onClick={() => router.push(`${basePath}/${person.id}`)}
+                    onKeyDown={(event) => {
+                      if (event.key === 'Enter' || event.key === ' ') {
+                        event.preventDefault()
+                        router.push(`${basePath}/${person.id}`)
+                      }
+                    }}
+                    className="group flex flex-col gap-2 rounded-[var(--radius)] border border-[var(--border)] bg-[var(--card)] p-3 transition-colors hover:bg-[var(--accent)]"
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className="h-10 w-10 shrink-0 overflow-hidden rounded-full bg-[var(--muted)] text-[var(--foreground)]">
+                        {person.avatar_path ? (
+                          <img
+                            src={person.avatar_path}
+                            alt={person.full_name || 'Pessoa'}
+                            className="h-full w-full object-cover"
+                          />
+                        ) : (
+                          <div className="flex h-full w-full items-center justify-center text-xs font-semibold">
+                            {getInitials(person.full_name)}
                           </div>
-                        </td>
-                        <td className="py-3 px-2">
-                          <div className="text-sm text-[var(--muted-foreground)] space-y-1">
-                            {person.email && <div>{person.email}</div>}
-                            {person.phone && <div>{person.phone}</div>}
-                          </div>
-                        </td>
-                        <td className="py-3 px-2">
-                          <div className="text-sm text-[var(--muted-foreground)]">
-                            {new Date(person.created_at).toLocaleDateString('pt-BR')}
-                          </div>
-                        </td>
-                        <td className="py-3 px-2">
-                          <Link 
-                            href={`/people/${person.id}`}
-                            className="text-[#294487] hover:underline text-sm"
+                        )}
+                      </div>
+                      <div className="min-w-0">
+                        <p className="truncate text-sm font-semibold text-[var(--foreground)]">
+                          {person.full_name || 'Nome não informado'}
+                        </p>
+                        <p className="truncate text-xs text-[var(--muted-foreground)]">
+                          {contact}
+                        </p>
+                      </div>
+                    </div>
+
+                    {roles.length > 0 ? (
+                      <div className="flex flex-wrap gap-1">
+                        {roles.map((role) => (
+                          <span
+                            key={role}
+                            className="inline-flex items-center rounded-full bg-[var(--muted)] px-2 py-0.5 text-[10px] font-medium text-[var(--muted-foreground)]"
                           >
-                            Ver
-                          </Link>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+                            {kindTagLabels[role]}
+                          </span>
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="text-[10px] text-[var(--muted-foreground)]">Sem papéis</p>
+                    )}
+
+                    <div className="mt-auto flex items-center justify-between text-[10px] text-[var(--muted-foreground)]">
+                      <span>{new Date(person.created_at).toLocaleDateString('pt-BR')}</span>
+                      <button
+                        type="button"
+                        onClick={(event) => {
+                          event.stopPropagation()
+                          router.push(`${documentsBasePath ?? basePath}/${person.id}/documents`)
+                        }}
+                        className="text-[var(--muted-foreground)] hover:text-[var(--foreground)]"
+                      >
+                        Documentos
+                      </button>
+                    </div>
+                  </div>
+                )
+              })}
             </div>
           )}
 
@@ -251,8 +295,8 @@ function CreatePersonModal({
       const personData = {
         full_name: fullName.trim(),
         email: email.trim() || null,
-        phone: phone.trim() || null,
-        user_id: assignedTo || currentUserId,
+        phone_e164: phone.trim() || null,
+        owner_profile_id: assignedTo || currentUserId,
       }
 
       const { error: insertError } = await supabase
@@ -324,7 +368,7 @@ function CreatePersonModal({
             />
           </div>
 
-          {(currentUserRole === 'admin' || currentUserRole === 'manager') && corretores.length > 0 && (
+          {(currentUserRole === 'admin' || currentUserRole === 'gestor') && corretores.length > 0 && (
             <div>
               <label className="block text-sm font-medium text-[var(--foreground)] mb-1">
                 Atribuir para

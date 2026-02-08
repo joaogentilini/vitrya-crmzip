@@ -1,436 +1,403 @@
-// app/(public)/imoveis/[id]/PropertyGallery.tsx
+/* eslint-disable @next/next/no-img-element */
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
-type Props = {
-  images: string[];
-  title?: string;
+type MediaItem = {
+  id: string;
+  url: string;
+  kind?: "image" | "video" | string;
 };
 
-export function PropertyGallery({ images, title = "Imóvel" }: Props) {
-  const safeImages = useMemo(() => (Array.isArray(images) ? images.filter(Boolean) : []), [images]);
+function clampIndex(index: number, length: number) {
+  if (length <= 0) return 0;
+  if (index < 0) return 0;
+  if (index >= length) return length - 1;
+  return index;
+}
 
-  const [index, setIndex] = useState(0);
-  const [isOpen, setIsOpen] = useState(false);
+export default function PropertyGallery({
+  items,
+  title,
+  heroZoom = 1.0,
+}: {
+  items: MediaItem[];
+  title?: string;
+  heroZoom?: number; // ✅ zoom só no hero (não afeta fullscreen)
+}) {
+  const media = useMemo(() => items ?? [], [items]);
+  const [failedIds, setFailedIds] = useState<Set<string>>(new Set());
 
-  // mantém index válido quando lista muda
+  const validMedia = useMemo(() => {
+    const isValidUrl = (url?: string) =>
+      typeof url === "string" &&
+      url.trim().length > 0 &&
+      (url.startsWith("http") || url.startsWith("/"));
+
+    return media.filter((m) => isValidUrl(m.url) && !failedIds.has(m.id));
+  }, [media, failedIds]);
+
+  const hasMedia = validMedia.length > 0;
+  const hasMany = validMedia.length > 1;
+
+  const [idx, setIdx] = useState(0);
+  const [isFullscreen, setIsFullscreen] = useState(false);
+
   useEffect(() => {
-    if (index >= safeImages.length) setIndex(0);
-  }, [safeImages.length, index]);
+    setIdx((prev) => clampIndex(prev, validMedia.length));
+  }, [validMedia.length]);
 
-  const hasImages = safeImages.length > 0;
-  const current = hasImages ? safeImages[index] : null;
+  const current = hasMedia ? validMedia[idx] : null;
+  const counterLabel = hasMedia ? `${idx + 1} / ${validMedia.length}` : "";
 
-  const open = useCallback(() => {
-    if (!hasImages) return;
-    setIsOpen(true);
-  }, [hasImages]);
+  const goPrev = () => setIdx((prev) => clampIndex(prev - 1, validMedia.length));
+  const goNext = () => setIdx((prev) => clampIndex(prev + 1, validMedia.length));
 
-  const close = useCallback(() => setIsOpen(false), []);
-
-  const prev = useCallback(() => {
-    if (!hasImages) return;
-    setIndex((i) => (i - 1 + safeImages.length) % safeImages.length);
-  }, [hasImages, safeImages.length]);
-
-  const next = useCallback(() => {
-    if (!hasImages) return;
-    setIndex((i) => (i + 1) % safeImages.length);
-  }, [hasImages, safeImages.length]);
-
-  // teclado no fullscreen + trava scroll
   useEffect(() => {
-    if (!isOpen) return;
-
     const onKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "Escape") close();
-      if (e.key === "ArrowLeft") prev();
-      if (e.key === "ArrowRight") next();
+      if (!isFullscreen) return;
+      if (e.key === "Escape") setIsFullscreen(false);
+      if (e.key === "ArrowLeft") goPrev();
+      if (e.key === "ArrowRight") goNext();
     };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isFullscreen, validMedia.length]);
 
-    document.addEventListener("keydown", onKeyDown);
-    const prevOverflow = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
+  // ✅ zoom apenas no modo normal
+  const heroMediaStyle: React.CSSProperties = {
+    width: "100%",
+    height: "100%",
+    objectFit: "cover",
+    display: "block",
+    transform: heroZoom && heroZoom !== 1 ? `scale(${heroZoom})` : undefined,
+    transformOrigin: "center",
+  };
 
-    return () => {
-      document.removeEventListener("keydown", onKeyDown);
-      document.body.style.overflow = prevOverflow;
-    };
-  }, [isOpen, close, prev, next]);
-
-  // swipe no fullscreen
-  useEffect(() => {
-    if (!isOpen) return;
-
-    let startX = 0;
-    let startY = 0;
-
-    const onTouchStart = (e: TouchEvent) => {
-      const t = e.touches[0];
-      if (!t) return;
-      startX = t.clientX;
-      startY = t.clientY;
-    };
-
-    const onTouchEnd = (e: TouchEvent) => {
-      const t = e.changedTouches[0];
-      if (!t) return;
-
-      const dx = t.clientX - startX;
-      const dy = t.clientY - startY;
-
-      // evita swipe quando for mais “vertical” (scroll)
-      if (Math.abs(dy) > Math.abs(dx)) return;
-
-      if (dx > 40) prev();
-      if (dx < -40) next();
-    };
-
-    document.addEventListener("touchstart", onTouchStart, { passive: true });
-    document.addEventListener("touchend", onTouchEnd, { passive: true });
-
-    return () => {
-      document.removeEventListener("touchstart", onTouchStart);
-      document.removeEventListener("touchend", onTouchEnd);
-    };
-  }, [isOpen, prev, next]);
+  const onMediaError = (id?: string) => {
+    if (!id) return;
+    setFailedIds((prev) => {
+      const next = new Set(prev);
+      next.add(id);
+      return next;
+    });
+  };
 
   return (
-    <div>
-      {/* CARD / HERO IMAGE */}
+    <div style={{ width: "100%", maxWidth: "100%", minWidth: 0 }}>
       <div
-        role={hasImages ? "button" : undefined}
-        tabIndex={hasImages ? 0 : -1}
-        onClick={open}
-        onKeyDown={(e) => {
-          if (!hasImages) return;
-          if (e.key === "Enter" || e.key === " ") open();
-        }}
+        className="pv-gallery"
         style={{
+          position: "relative",
           borderRadius: 18,
           overflow: "hidden",
-          border: "1px solid rgba(0,0,0,0.10)",
-          background: "rgba(255,255,255,.75)",
-          position: "relative",
-          cursor: hasImages ? "zoom-in" : "default",
+          background: "rgba(0,0,0,0.06)",
+          width: "100%",
+          maxWidth: "100%",
+          minWidth: 0,
         }}
-        aria-label={hasImages ? "Abrir galeria em tela cheia" : "Sem fotos"}
       >
-        <div
+        {/* MAIN */}
+        <button
+          type="button"
+          onClick={() => {
+            if (hasMedia) setIsFullscreen(true);
+          }}
+          aria-label="Abrir em tela cheia"
           style={{
+            padding: 0,
+            border: "none",
+            background: "transparent",
             width: "100%",
-            aspectRatio: "16/10",
-            background: "rgba(0,0,0,0.04)",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
+            display: "block",
+            cursor: hasMedia ? "pointer" : "default",
           }}
         >
-          {current ? (
-            <img
-              src={current}
-              alt={`${title} — foto ${index + 1}`}
-              style={{ width: "100%", height: "100%", objectFit: "cover" }}
-              loading="eager"
-            />
-          ) : (
-            <div style={{ fontSize: 13, opacity: 0.7, fontWeight: 800 }}>Sem fotos</div>
-          )}
-        </div>
-
-        {/* overlay contador */}
-        {hasImages ? (
           <div
             style={{
-              position: "absolute",
-              left: 12,
-              bottom: 12,
-              padding: "6px 10px",
-              borderRadius: 999,
-              background: "rgba(0,0,0,.55)",
-              color: "white",
-              fontSize: 12,
-              fontWeight: 900,
-              backdropFilter: "blur(8px)",
+              aspectRatio: "16 / 9",
+              width: "100%",
+              maxWidth: "100%",
+              background: "rgba(0,0,0,0.04)",
+              display: "grid",
+              placeItems: "center",
+              overflow: "hidden",
             }}
           >
-            {index + 1} / {safeImages.length}
+            {current?.kind === "video" ? (
+              <video
+                src={current.url}
+                controls
+                style={heroMediaStyle}
+                onClick={(e) => e.stopPropagation()}
+                onError={() => onMediaError(current?.id)}
+              />
+            ) : current?.url ? (
+              <img
+                src={current.url}
+                alt={title || "Imóvel"}
+                onError={() => onMediaError(current?.id)}
+                style={heroMediaStyle}
+              />
+            ) : (
+              <div style={{ padding: 24, color: "white" }}>Sem mídia</div>
+            )}
           </div>
-        ) : null}
+        </button>
 
-        {/* setas no card (não fullscreen) */}
-        {hasImages && safeImages.length > 1 ? (
+        {/* CONTROLS */}
+        {hasMedia && (
           <>
-            <button
-              type="button"
-              onClick={(e) => {
-                e.stopPropagation();
-                prev();
+            {hasMany && (
+              <>
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    goPrev();
+                  }}
+                  aria-label="Anterior"
+                  style={{
+                    position: "absolute",
+                    left: 12,
+                    top: "50%",
+                    transform: "translateY(-50%)",
+                    width: 44,
+                    height: 44,
+                    borderRadius: 999,
+                    border: "1px solid rgba(255,255,255,0.35)",
+                    background: "rgba(0,0,0,0.35)",
+                    color: "white",
+                    display: "grid",
+                    placeItems: "center",
+                    cursor: "pointer",
+                    userSelect: "none",
+                  }}
+                >
+                  ‹
+                </button>
+
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    goNext();
+                  }}
+                  aria-label="Próximo"
+                  style={{
+                    position: "absolute",
+                    right: 12,
+                    top: "50%",
+                    transform: "translateY(-50%)",
+                    width: 44,
+                    height: 44,
+                    borderRadius: 999,
+                    border: "1px solid rgba(255,255,255,0.35)",
+                    background: "rgba(0,0,0,0.35)",
+                    color: "white",
+                    display: "grid",
+                    placeItems: "center",
+                    cursor: "pointer",
+                    userSelect: "none",
+                  }}
+                >
+                  ›
+                </button>
+              </>
+            )}
+
+            <div
+              style={{
+                position: "absolute",
+                left: 12,
+                bottom: 12,
+                padding: "6px 10px",
+                borderRadius: 999,
+                border: "1px solid rgba(255,255,255,0.25)",
+                background: "rgba(0,0,0,0.28)",
+                color: "white",
+                fontSize: 12,
+                lineHeight: 1,
               }}
-              aria-label="Foto anterior"
-              style={navBtnStyle("left")}
             >
-              ‹
-            </button>
-            <button
-              type="button"
-              onClick={(e) => {
-                e.stopPropagation();
-                next();
-              }}
-              aria-label="Próxima foto"
-              style={navBtnStyle("right")}
-            >
-              ›
-            </button>
+              {counterLabel}
+            </div>
+
+            {hasMany && (
+              <div
+                style={{
+                  position: "absolute",
+                  left: "50%",
+                  bottom: 12,
+                  transform: "translateX(-50%)",
+                  display: "flex",
+                  gap: 8,
+                  padding: "6px 10px",
+                  borderRadius: 999,
+                  background: "rgba(0,0,0,0.28)",
+                  border: "1px solid rgba(255,255,255,0.2)",
+                }}
+              >
+                {validMedia.map((_, i) => {
+                  const isActive = i === idx;
+                  return (
+                    <button
+                      key={`dot-${i}`}
+                      type="button"
+                      aria-label={`Ir para mídia ${i + 1}`}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setIdx(i);
+                      }}
+                      style={{
+                        width: isActive ? 10 : 8,
+                        height: isActive ? 10 : 8,
+                        borderRadius: 999,
+                        border: "none",
+                        background: "white",
+                        opacity: isActive ? 0.95 : 0.45,
+                        transform: isActive ? "scale(1.05)" : "scale(1)",
+                        cursor: "pointer",
+                        padding: 0,
+                      }}
+                    />
+                  );
+                })}
+              </div>
+            )}
           </>
-        ) : null}
+        )}
       </div>
 
-      {/* THUMBS */}
-      {hasImages ? (
+      {/* FULLSCREEN (sem zoom, sempre contain) */}
+      {isFullscreen && hasMedia && (
         <div
-          style={{
-            display: "flex",
-            gap: 10,
-            marginTop: 12,
-            overflowX: "auto",
-            paddingBottom: 2,
-          }}
-        >
-          {safeImages.slice(0, 12).map((src, i) => (
-            <button
-              key={`${src}-${i}`}
-              type="button"
-              onClick={() => setIndex(i)}
-              aria-label={`Abrir foto ${i + 1}`}
-              style={{
-                width: 78,
-                height: 54,
-                borderRadius: 12,
-                overflow: "hidden",
-                border: i === index ? "2px solid rgba(23,190,187,.95)" : "1px solid rgba(0,0,0,.10)",
-                padding: 0,
-                background: "rgba(255,255,255,.6)",
-                flex: "0 0 auto",
-                cursor: "pointer",
-              }}
-            >
-              <img src={src} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
-            </button>
-          ))}
-        </div>
-      ) : null}
-
-      {/* FULLSCREEN */}
-      {isOpen && hasImages ? (
-        <div
-          role="dialog"
-          aria-modal="true"
-          aria-label="Galeria de fotos em tela cheia"
-          onClick={close}
+          className="pv-fullscreen"
+          onClick={() => setIsFullscreen(false)}
           style={{
             position: "fixed",
             inset: 0,
-            zIndex: 9999,
-            background: "rgba(0,0,0,.72)",
-            backdropFilter: "blur(8px)",
-            display: "grid",
-            placeItems: "center",
+            zIndex: 60,
+            background: "rgba(0,0,0,0.82)",
             padding: 16,
+            display: "grid",
+            gridTemplateRows: "auto 1fr",
+            gap: 12,
           }}
         >
           <div
             onClick={(e) => e.stopPropagation()}
             style={{
-              width: "min(1100px, 96vw)",
-              maxHeight: "92vh",
-              display: "grid",
-              gap: 12,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+              color: "white",
             }}
           >
-            <div
+            <div style={{ fontSize: 13, opacity: 0.9 }}>{counterLabel}</div>
+            <button
+              type="button"
+              onClick={() => setIsFullscreen(false)}
               style={{
-                borderRadius: 18,
-                overflow: "hidden",
-                background: "rgba(0,0,0,.35)",
-                border: "1px solid rgba(255,255,255,.12)",
-                position: "relative",
+                borderRadius: 999,
+                border: "1px solid rgba(255,255,255,0.25)",
+                background: "rgba(255,255,255,0.08)",
+                color: "white",
+                padding: "8px 12px",
+                cursor: "pointer",
               }}
             >
-              <div
+              Fechar
+            </button>
+          </div>
+
+          <div
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              position: "relative",
+              borderRadius: 18,
+              overflow: "hidden",
+              background: "rgba(255,255,255,0.06)",
+              display: "grid",
+              placeItems: "center",
+            }}
+          >
+            {current?.kind === "video" ? (
+              <video
+                src={current.url}
+                controls
+                style={{ width: "100%", height: "100%", objectFit: "contain" }}
+                onError={() => onMediaError(current?.id)}
+              />
+            ) : (
+              <img
+                src={current?.url}
+                alt={title || "Imóvel"}
+                onError={() => onMediaError(current?.id)}
                 style={{
                   width: "100%",
-                  height: "min(72vh, 720px)",
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
+                  height: "100%",
+                  objectFit: "contain",
+                  display: "block",
                 }}
-              >
-                <img
-                  src={current!}
-                  alt={`${title} — foto ${index + 1}`}
-                  style={{ width: "100%", height: "100%", objectFit: "contain" }}
-                  draggable={false}
-                />
-              </div>
+              />
+            )}
 
-              {/* header actions */}
-              <div
-                style={{
-                  position: "absolute",
-                  left: 12,
-                  right: 12,
-                  top: 12,
-                  display: "flex",
-                  justifyContent: "space-between",
-                  alignItems: "center",
-                  gap: 10,
-                }}
-              >
-                <div
+            {hasMany && (
+              <>
+                <button
+                  type="button"
+                  onClick={goPrev}
+                  aria-label="Anterior"
                   style={{
-                    padding: "6px 10px",
+                    position: "absolute",
+                    left: 12,
+                    top: "50%",
+                    transform: "translateY(-50%)",
+                    width: 48,
+                    height: 48,
                     borderRadius: 999,
-                    background: "rgba(0,0,0,.55)",
+                    border: "1px solid rgba(255,255,255,0.35)",
+                    background: "rgba(0,0,0,0.35)",
                     color: "white",
-                    fontSize: 12,
-                    fontWeight: 900,
+                    display: "grid",
+                    placeItems: "center",
+                    cursor: "pointer",
+                    userSelect: "none",
                   }}
                 >
-                  {index + 1} / {safeImages.length}
-                </div>
+                  ‹
+                </button>
 
                 <button
                   type="button"
-                  onClick={close}
-                  aria-label="Fechar"
+                  onClick={goNext}
+                  aria-label="Próximo"
                   style={{
-                    padding: "8px 10px",
+                    position: "absolute",
+                    right: 12,
+                    top: "50%",
+                    transform: "translateY(-50%)",
+                    width: 48,
+                    height: 48,
                     borderRadius: 999,
-                    background: "rgba(0,0,0,.55)",
+                    border: "1px solid rgba(255,255,255,0.35)",
+                    background: "rgba(0,0,0,0.35)",
                     color: "white",
-                    border: "1px solid rgba(255,255,255,.16)",
+                    display: "grid",
+                    placeItems: "center",
                     cursor: "pointer",
-                    fontWeight: 900,
+                    userSelect: "none",
                   }}
                 >
-                  Fechar ✕
+                  ›
                 </button>
-              </div>
-
-              {/* arrows */}
-              {safeImages.length > 1 ? (
-                <>
-                  <button
-                    type="button"
-                    onClick={prev}
-                    aria-label="Foto anterior"
-                    style={fsNavBtnStyle("left")}
-                  >
-                    ‹
-                  </button>
-                  <button
-                    type="button"
-                    onClick={next}
-                    aria-label="Próxima foto"
-                    style={fsNavBtnStyle("right")}
-                  >
-                    ›
-                  </button>
-                </>
-              ) : null}
-            </div>
-
-            {/* thumbs fullscreen */}
-            {safeImages.length > 1 ? (
-              <div
-                style={{
-                  display: "flex",
-                  gap: 10,
-                  overflowX: "auto",
-                  paddingBottom: 2,
-                }}
-              >
-                {safeImages.slice(0, 16).map((src, i) => (
-                  <button
-                    key={`fs-${src}-${i}`}
-                    type="button"
-                    onClick={() => setIndex(i)}
-                    aria-label={`Selecionar foto ${i + 1}`}
-                    style={{
-                      width: 86,
-                      height: 58,
-                      borderRadius: 12,
-                      overflow: "hidden",
-                      border:
-                        i === index
-                          ? "2px solid rgba(23,190,187,.95)"
-                          : "1px solid rgba(255,255,255,.18)",
-                      padding: 0,
-                      background: "rgba(0,0,0,.25)",
-                      flex: "0 0 auto",
-                      cursor: "pointer",
-                    }}
-                  >
-                    <img
-                      src={src}
-                      alt=""
-                      style={{ width: "100%", height: "100%", objectFit: "cover" }}
-                      draggable={false}
-                    />
-                  </button>
-                ))}
-              </div>
-            ) : null}
+              </>
+            )}
           </div>
         </div>
-      ) : null}
+      )}
     </div>
   );
-}
-
-function navBtnStyle(side: "left" | "right") {
-  return {
-    position: "absolute" as const,
-    top: "50%",
-    transform: "translateY(-50%)",
-    [side]: 10,
-    width: 38,
-    height: 38,
-    borderRadius: 999,
-    border: "1px solid rgba(255,255,255,.18)",
-    background: "rgba(0,0,0,.40)",
-    color: "white",
-    fontSize: 26,
-    lineHeight: "38px",
-    fontWeight: 900,
-    cursor: "pointer",
-    display: "grid",
-    placeItems: "center",
-    backdropFilter: "blur(8px)",
-  };
-}
-
-function fsNavBtnStyle(side: "left" | "right") {
-  return {
-    position: "absolute" as const,
-    top: "50%",
-    transform: "translateY(-50%)",
-    [side]: 14,
-    width: 48,
-    height: 48,
-    borderRadius: 999,
-    border: "1px solid rgba(255,255,255,.18)",
-    background: "rgba(0,0,0,.55)",
-    color: "white",
-    fontSize: 34,
-    lineHeight: "48px",
-    fontWeight: 950,
-    cursor: "pointer",
-    display: "grid",
-    placeItems: "center",
-    backdropFilter: "blur(10px)",
-  };
 }

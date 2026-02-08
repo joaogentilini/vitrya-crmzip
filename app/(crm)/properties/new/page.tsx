@@ -22,12 +22,6 @@ export default function NewPropertyPage() {
   const [formData, setFormData] = useState({
     purpose: 'sale',
     property_category_id: '',
-    title: '',
-    city: '',
-    neighborhood: '',
-    address: '',
-    price: '',
-    rent_price: '',
   })
 
   useEffect(() => {
@@ -86,12 +80,7 @@ export default function NewPropertyPage() {
         status: 'draft',
         purpose: formData.purpose,
         property_category_id: formData.property_category_id,
-        title: formData.title,
-        city: formData.city || null,
-        neighborhood: formData.neighborhood || null,
-        address: formData.address || null,
-        price: formData.price ? parseFloat(formData.price) : null,
-        rent_price: formData.rent_price ? parseFloat(formData.rent_price) : null,
+        title: 'Novo imóvel',
         owner_user_id: user.id,
         created_by: user.id,
       }
@@ -199,133 +188,8 @@ export default function NewPropertyPage() {
           </select>
         </div>
 
-        <div>
-          <label style={{ display: 'block', marginBottom: 4, fontWeight: 500 }}>
-            Título *
-          </label>
-          <input
-            type="text"
-            name="title"
-            value={formData.title}
-            onChange={handleChange}
-            required
-            placeholder="Ex: Apartamento 2 quartos Centro"
-            style={{
-              width: '100%',
-              padding: '8px 12px',
-              border: '1px solid #d1d5db',
-              borderRadius: 6,
-              fontSize: 14
-            }}
-          />
-        </div>
-
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
-          <div>
-            <label style={{ display: 'block', marginBottom: 4, fontWeight: 500 }}>
-              Cidade
-            </label>
-            <input
-              type="text"
-              name="city"
-              value={formData.city}
-              onChange={handleChange}
-              placeholder="Ex: Lucas do Rio Verde"
-              style={{
-                width: '100%',
-                padding: '8px 12px',
-                border: '1px solid #d1d5db',
-                borderRadius: 6,
-                fontSize: 14
-              }}
-            />
-          </div>
-
-          <div>
-            <label style={{ display: 'block', marginBottom: 4, fontWeight: 500 }}>
-              Bairro
-            </label>
-            <input
-              type="text"
-              name="neighborhood"
-              value={formData.neighborhood}
-              onChange={handleChange}
-              placeholder="Ex: Centro"
-              style={{
-                width: '100%',
-                padding: '8px 12px',
-                border: '1px solid #d1d5db',
-                borderRadius: 6,
-                fontSize: 14
-              }}
-            />
-          </div>
-        </div>
-
-        <div>
-          <label style={{ display: 'block', marginBottom: 4, fontWeight: 500 }}>
-            Endereço
-          </label>
-          <input
-            type="text"
-            name="address"
-            value={formData.address}
-            onChange={handleChange}
-            placeholder="Ex: Rua das Flores, 123"
-            style={{
-              width: '100%',
-              padding: '8px 12px',
-              border: '1px solid #d1d5db',
-              borderRadius: 6,
-              fontSize: 14
-            }}
-          />
-        </div>
-
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
-          <div>
-            <label style={{ display: 'block', marginBottom: 4, fontWeight: 500 }}>
-              Preço de Venda
-            </label>
-            <input
-              type="number"
-              name="price"
-              value={formData.price}
-              onChange={handleChange}
-              placeholder="Ex: 500000"
-              min="0"
-              step="0.01"
-              style={{
-                width: '100%',
-                padding: '8px 12px',
-                border: '1px solid #d1d5db',
-                borderRadius: 6,
-                fontSize: 14
-              }}
-            />
-          </div>
-
-          <div>
-            <label style={{ display: 'block', marginBottom: 4, fontWeight: 500 }}>
-              Preço de Aluguel
-            </label>
-            <input
-              type="number"
-              name="rent_price"
-              value={formData.rent_price}
-              onChange={handleChange}
-              placeholder="Ex: 2500"
-              min="0"
-              step="0.01"
-              style={{
-                width: '100%',
-                padding: '8px 12px',
-                border: '1px solid #d1d5db',
-                borderRadius: 6,
-                fontSize: 14
-              }}
-            />
-          </div>
+        <div className="rounded-[var(--radius)] border border-[var(--border)] bg-[var(--card)] p-3 text-sm text-[var(--muted-foreground)]">
+          Após criar o imóvel, você será redirecionado para o editor completo.
         </div>
 
         <div style={{ display: 'flex', gap: 12, marginTop: 24 }}>
