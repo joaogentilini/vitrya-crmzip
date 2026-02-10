@@ -19,10 +19,7 @@ function formatBrazilPhone(raw: string | null) {
 
 export default function PublicLayout({ children }: { children: ReactNode }) {
   const envPhone = sanitizePhone(process.env.NEXT_PUBLIC_WHATSAPP_NUMBER);
-  const whatsappLink = buildWhatsAppLink(
-    envPhone,
-    "Olá! Quero falar com o Comercial Vitrya."
-  );
+  const whatsappLink = buildWhatsAppLink(envPhone, "Olá! Quero falar com o Comercial Vitrya.");
   const formattedPhone = formatBrazilPhone(envPhone);
 
   return (
@@ -31,14 +28,10 @@ export default function PublicLayout({ children }: { children: ReactNode }) {
         <div className="pv-header-inner">
           {/* Logo */}
           <Link className="pv-brand" href="/imoveis" aria-label="Vitrya Imóveis - Início">
-            <img
-              src="/brand/logo_oficial.png"
-              alt="Vitrya"
-              className="pv-mark"
-            />
+            <img src="/brand/logo_oficial.png" alt="Vitrya" className="pv-mark" />
           </Link>
 
-          {/* Ações (discretas) */}
+          {/* Ações */}
           <div className="pv-actions" style={{ display: "flex", gap: 8, alignItems: "center" }}>
             <Link
               className="pv-btn pv-btn-secondary"
@@ -76,11 +69,7 @@ export default function PublicLayout({ children }: { children: ReactNode }) {
       <footer className="pv-footer">
         <div
           className="pv-footer-inner"
-          style={{
-            alignItems: "center",
-            justifyContent: "space-between",
-            flexWrap: "wrap",
-          }}
+          style={{ alignItems: "center", justifyContent: "space-between", flexWrap: "wrap" }}
         >
           <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
             <strong>Comercial Vitrya</strong>

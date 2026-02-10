@@ -5,6 +5,7 @@ import { ReactNode } from 'react'
 import { redirect } from 'next/navigation'
 import { AppShell } from '@/components/layout/AppShell'
 import { createClient } from '@/lib/supabaseServer'
+import { getCrmThemeVars } from '@/lib/theme/getCrmTheme'
 
 interface CrmLayoutProps {
   children: ReactNode
@@ -42,9 +43,15 @@ export default async function CrmLayout({ children }: CrmLayoutProps) {
     await supabase.auth.signOut()
     redirect('/crm/login')
   }
+const themeVars = await getCrmThemeVars()
+const themeCss =
+  Object.keys(themeVars).length
+    ? `:root{\n${Object.entries(themeVars).map(([k,v]) => `${k}:${v};`).join('\n')}\n}`
+    : ''
 
   return (
     <AppShell
+      themeCss={themeCss ? <style dangerouslySetInnerHTML={{ __html: themeCss }} /> : null}
       userEmail={user.email}
       userRole={profile.role} // ✅ necessário para mostrar "Editor de Campanhas" só admin/gestor
       onSignOut={onSignOut}

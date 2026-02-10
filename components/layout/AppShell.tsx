@@ -15,16 +15,298 @@ interface NavItem {
 
 interface AppShellProps {
   children: ReactNode
+  themeCss?: ReactNode
   userEmail?: string | null
-  userRole?: string | null // ✅ novo: 'admin' | 'gestor' | 'corretor'...
+  userRole?: string | null // 'admin' | 'gestor' | 'corretor'...
   onSignOut?: () => void
   pageTitle?: string
   showNewLeadButton?: boolean
   onNewLead?: () => void
 }
 
+/** =========================
+ *  THEME EDITOR (local)
+ *  ========================= */
+type ThemeVarSpec = {
+  label: string
+  cssVar: string // ex: '--sidebar-bg'
+  kind: 'bg' | 'text' | 'border' | 'button' | 'other'
+  /** quando true, deixa o alpha controlável (rgba). */
+  allowAlpha?: boolean
+  /** dica curta que aparece embaixo */
+  hint?: string
+}
+
+const THEME_STORAGE_KEY = 'vitrya_theme_overrides_v1'
+
+const THEME_DEFAULTS: Record<string, string> = {
+  '--background': '#f7f7f8',
+  '--foreground': '#171A21',
+
+  '--card': 'rgba(255,255,255,0.88)',
+  '--border': 'rgba(23,26,33,0.10)',
+  '--accent': 'rgba(23,26,33,0.06)',
+  '--ring': 'rgba(23,190,187,0.55)',
+
+  '--secondary': 'rgba(23,26,33,0.10)',
+  '--secondary-foreground': '#171A21',
+  '--muted-foreground': 'rgba(23,26,33,0.65)',
+
+  // Sidebar
+  '--sidebar-bg': 'rgba(10,12,16,0.70)',
+  '--sidebar-muted': 'rgba(255,255,255,0.80)',
+  '--sidebar-hover': 'rgba(255,255,255,0.10)',
+  '--sidebar-active': 'rgba(255,104,31,0.85)',
+
+  // Topbar (CRM)
+  '--topbar-bg': 'rgba(255,255,255,0.82)',
+}
+
+const THEME_SPECS: ThemeVarSpec[] = [
+  { label: 'Fundo geral do CRM', cssVar: '--background', kind: 'bg' },
+  { label: 'Texto padrão', cssVar: '--foreground', kind: 'text' },
+  { label: 'Cards (fundo)', cssVar: '--card', kind: 'bg', allowAlpha: true },
+  { label: 'Bordas (geral)', cssVar: '--border', kind: 'border', allowAlpha: true },
+  { label: 'Hover/Accent (geral)', cssVar: '--accent', kind: 'bg', allowAlpha: true },
+  { label: 'Ring/Focus', cssVar: '--ring', kind: 'other', allowAlpha: true },
+  { label: 'Texto “muted”', cssVar: '--muted-foreground', kind: 'text', allowAlpha: true },
+
+  { label: 'Sidebar: Fundo', cssVar: '--sidebar-bg', kind: 'bg', allowAlpha: true, hint: 'Painel lateral (menu).' },
+  { label: 'Sidebar: Texto (labels)', cssVar: '--sidebar-muted', kind: 'text', allowAlpha: true, hint: 'Se sumir texto, ajuste aqui.' },
+  { label: 'Sidebar: Hover', cssVar: '--sidebar-hover', kind: 'bg', allowAlpha: true },
+  { label: 'Sidebar: Ativo', cssVar: '--sidebar-active', kind: 'button', allowAlpha: true, hint: 'Item selecionado (ativo).' },
+
+  { label: 'Topbar do CRM (fundo)', cssVar: '--topbar-bg', kind: 'bg', allowAlpha: true },
+]
+
+function clamp(n: number, min: number, max: number) {
+  return Math.max(min, Math.min(max, n))
+}
+
+function hexToRgb(hex: string): { r: number; g: number; b: number } | null {
+  const v = hex.replace('#', '').trim()
+  if (v.length === 3) {
+    const r = parseInt(v[0] + v[0], 16)
+    const g = parseInt(v[1] + v[1], 16)
+    const b = parseInt(v[2] + v[2], 16)
+    return { r, g, b }
+  }
+  if (v.length === 6) {
+    const r = parseInt(v.slice(0, 2), 16)
+    const g = parseInt(v.slice(2, 4), 16)
+    const b = parseInt(v.slice(4, 6), 16)
+    return { r, g, b }
+  }
+  return null
+}
+
+function parseCssColorToHexAndAlpha(input: string): { hex: string; alpha: number } {
+  const s = (input || '').trim()
+
+  // rgba(r,g,b,a)
+  const rgba = s.match(/rgba?\(\s*(\d+)[,\s]+(\d+)[,\s]+(\d+)(?:[,\s/]+([\d.]+))?\s*\)/i)
+  if (rgba) {
+    const r = clamp(Number(rgba[1]), 0, 255)
+    const g = clamp(Number(rgba[2]), 0, 255)
+    const b = clamp(Number(rgba[3]), 0, 255)
+    const a = rgba[4] !== undefined ? clamp(Number(rgba[4]), 0, 1) : 1
+    const hex =
+      '#' +
+      [r, g, b]
+        .map((x) => x.toString(16).padStart(2, '0'))
+        .join('')
+        .toUpperCase()
+    return { hex, alpha: a }
+  }
+
+  // #RRGGBB or #RGB
+  if (s.startsWith('#')) return { hex: s.toUpperCase(), alpha: 1 }
+
+  // fallback
+  return { hex: '#FFFFFF', alpha: 1 }
+}
+
+function applyCssVar(cssVar: string, value: string) {
+  if (typeof document === 'undefined') return
+  document.documentElement.style.setProperty(cssVar, value)
+}
+
+function getCssVar(cssVar: string) {
+  if (typeof document === 'undefined') return ''
+  return getComputedStyle(document.documentElement).getPropertyValue(cssVar).trim()
+}
+
+function loadThemeOverrides(): Record<string, string> {
+  if (typeof window === 'undefined') return {}
+  try {
+    const raw = window.localStorage.getItem(THEME_STORAGE_KEY)
+    if (!raw) return {}
+    const parsed = JSON.parse(raw)
+    if (!parsed || typeof parsed !== 'object') return {}
+    return parsed
+  } catch {
+    return {}
+  }
+}
+
+function saveThemeOverrides(overrides: Record<string, string>) {
+  if (typeof window === 'undefined') return
+  window.localStorage.setItem(THEME_STORAGE_KEY, JSON.stringify(overrides))
+}
+
+function resetThemeOverrides() {
+  if (typeof window === 'undefined') return
+  window.localStorage.removeItem(THEME_STORAGE_KEY)
+}
+
+function ThemeEditorPanel({
+  open,
+  onClose,
+}: {
+  open: boolean
+  onClose: () => void
+}) {
+  const [overrides, setOverrides] = useState<Record<string, string>>({})
+
+  // carregar overrides + aplicar
+  useEffect(() => {
+    const o = loadThemeOverrides()
+    setOverrides(o)
+    for (const [k, v] of Object.entries(o)) applyCssVar(k, v)
+  }, [])
+
+  const updateVar = useCallback(
+    (cssVar: string, nextValue: string) => {
+      const next = { ...overrides, [cssVar]: nextValue }
+      setOverrides(next)
+      saveThemeOverrides(next)
+      applyCssVar(cssVar, nextValue)
+    },
+    [overrides]
+  )
+
+  const handleReset = useCallback(() => {
+    resetThemeOverrides()
+    setOverrides({})
+    // reaplica defaults seguros
+    for (const [k, v] of Object.entries(THEME_DEFAULTS)) applyCssVar(k, v)
+  }, [])
+
+  if (!open) return null
+
+  return (
+    <>
+      <div className="fixed inset-0 z-[60] bg-black/40" onClick={onClose} aria-hidden="true" />
+      <div
+        className="fixed right-4 top-16 z-[61] w-[360px] max-w-[92vw] rounded-2xl border border-white/15 bg-black/60 text-white shadow-2xl backdrop-blur-xl"
+        role="dialog"
+        aria-label="Editor de Tema"
+      >
+        <div className="px-4 py-3 border-b border-white/10 flex items-center justify-between">
+          <div className="flex flex-col">
+            <span className="text-sm font-semibold">Editor de Cores (Tema)</span>
+            <span className="text-xs text-white/70">Ajuste ao vivo • Salva no navegador</span>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={handleReset}
+              className="px-3 py-1.5 text-xs font-semibold rounded-full bg-white/10 hover:bg-white/15 border border-white/10"
+            >
+              Reset
+            </button>
+            <button
+              type="button"
+              onClick={onClose}
+              className="w-8 h-8 grid place-items-center rounded-full bg-white/10 hover:bg-white/15 border border-white/10"
+              aria-label="Fechar"
+            >
+              ✕
+            </button>
+          </div>
+        </div>
+
+        <div className="max-h-[68vh] overflow-auto p-3 space-y-2">
+          {THEME_SPECS.map((spec) => {
+            const current = overrides[spec.cssVar] ?? getCssVar(spec.cssVar) ?? THEME_DEFAULTS[spec.cssVar] ?? ''
+            const parsed = parseCssColorToHexAndAlpha(current)
+            const alphaPct = Math.round(parsed.alpha * 100)
+
+            return (
+              <div key={spec.cssVar} className="rounded-xl border border-white/10 bg-white/5 p-3">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <div className="text-sm font-semibold">{spec.label}</div>
+                    <div className="text-[11px] text-white/70 mt-0.5">
+                      <span className="font-mono">{spec.cssVar}</span>
+                      {spec.hint ? <span className="text-white/60"> • {spec.hint}</span> : null}
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="color"
+                      value={parsed.hex}
+                      onChange={(e) => {
+                        const hex = e.target.value
+                        const rgb = hexToRgb(hex)
+                        if (!rgb) return updateVar(spec.cssVar, hex)
+                        if (spec.allowAlpha) {
+                          updateVar(spec.cssVar, `rgba(${rgb.r},${rgb.g},${rgb.b},${parsed.alpha})`)
+                        } else {
+                          updateVar(spec.cssVar, hex)
+                        }
+                      }}
+                      className="w-10 h-10 rounded-lg overflow-hidden bg-transparent border border-white/10"
+                      aria-label={`Selecionar cor: ${spec.label}`}
+                    />
+                  </div>
+                </div>
+
+                {spec.allowAlpha ? (
+                  <div className="mt-3">
+                    <div className="flex items-center justify-between text-xs text-white/70">
+                      <span>Translucidez</span>
+                      <span className="font-mono">{alphaPct}%</span>
+                    </div>
+                    <input
+                      type="range"
+                      min={0}
+                      max={100}
+                      value={alphaPct}
+                      onChange={(e) => {
+                        const pct = clamp(Number(e.target.value), 0, 100)
+                        const a = pct / 100
+                        const rgb = hexToRgb(parsed.hex)
+                        if (!rgb) return
+                        updateVar(spec.cssVar, `rgba(${rgb.r},${rgb.g},${rgb.b},${a})`)
+                      }}
+                      className="w-full mt-1"
+                      aria-label={`Translucidez: ${spec.label}`}
+                    />
+                  </div>
+                ) : null}
+
+                <div className="mt-2 text-[11px] text-white/70">
+                  Atual: <span className="font-mono text-white/85">{current || '(vazio)'}</span>
+                </div>
+              </div>
+            )
+          })}
+        </div>
+
+        <div className="px-4 py-3 border-t border-white/10 text-xs text-white/70">
+          Dica: se “sumirem letras” na sidebar, ajuste <span className="font-mono text-white/85">--sidebar-muted</span>.
+        </div>
+      </div>
+    </>
+  )
+}
+
 export function AppShell({
   children,
+  themeCss,
   userEmail,
   userRole,
   onSignOut,
@@ -37,8 +319,25 @@ export function AppShell({
 
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [userMenuOpen, setUserMenuOpen] = useState(false)
+  const [themeOpen, setThemeOpen] = useState(false)
 
   const isManager = useMemo(() => userRole === 'admin' || userRole === 'gestor', [userRole])
+
+  /** Defaults seguros + aplicar overrides salvos */
+  useEffect(() => {
+    if (typeof document === 'undefined') return
+
+    // garante defaults (evita vars vazias quebrando cor)
+    const style = getComputedStyle(document.documentElement)
+    for (const [k, v] of Object.entries(THEME_DEFAULTS)) {
+      const cur = style.getPropertyValue(k).trim()
+      if (!cur) document.documentElement.style.setProperty(k, v)
+    }
+
+    // aplica overrides locais
+    const overrides = loadThemeOverrides()
+    for (const [k, v] of Object.entries(overrides)) applyCssVar(k, v)
+  }, [])
 
   const navItems: NavItem[] = useMemo(() => {
     const items: NavItem[] = [
@@ -57,7 +356,6 @@ export function AppShell({
         ),
       },
 
-      // ✅ Leads agrupado
       {
         href: '/leads',
         label: 'Leads',
@@ -127,6 +425,7 @@ export function AppShell({
           </svg>
         ),
       },
+
       {
         href: '/groups',
         label: 'Grupos',
@@ -142,7 +441,6 @@ export function AppShell({
         ),
       },
 
-      // ✅ Imóveis + Campanhas dentro
       {
         href: '/properties',
         label: 'Imóveis',
@@ -208,7 +506,6 @@ export function AppShell({
         ],
       },
 
-      // ✅ Configurações com Editor de Campanhas somente admin/gestor
       {
         href: '/settings',
         label: 'Configurações',
@@ -262,7 +559,6 @@ export function AppShell({
             ),
           },
 
-          // ✅ Só admin/gestor vê
           ...(isManager
             ? [
                 {
@@ -285,7 +581,6 @@ export function AppShell({
     return items
   }, [isManager])
 
-  // ✅ estado dos accordions (abre automaticamente)
   const [settingsOpen, setSettingsOpen] = useState(() => pathname?.startsWith('/settings') || false)
   const [leadsOpen, setLeadsOpen] = useState(() => pathname?.startsWith('/leads') || false)
   const [propertiesOpen, setPropertiesOpen] = useState(
@@ -300,6 +595,7 @@ export function AppShell({
       if (e.key === 'Escape') {
         closeSidebar()
         closeUserMenu()
+        setThemeOpen(false)
       }
     }
     document.addEventListener('keydown', handleKeyDown)
@@ -315,15 +611,24 @@ export function AppShell({
   const topCenterClass = 'text-xl font-semibold tracking-wide text-[var(--foreground)]'
 
   return (
-    <div className="min-h-screen flex bg-[var(--background)] overflow-x-hidden">
+    <>
+      {themeCss}
+      <div className="min-h-screen flex bg-[var(--background)] overflow-x-hidden">
       <aside
         className={`
-          fixed inset-y-0 left-0 z-30 w-64 bg-[var(--sidebar-bg)]
+          fixed inset-y-0 left-0 z-30 w-64
+          bg-[var(--sidebar-bg)]
           transform transition-transform duration-200 ease-in-out
           lg:translate-x-0 lg:static lg:inset-auto
           ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'}
           flex flex-col
+          border-r border-white/10
+          backdrop-blur-xl
         `}
+        style={{
+          // fallback caso as vars estejam estranhas
+          background: 'var(--sidebar-bg, rgba(10,12,16,0.70))',
+        }}
         role="navigation"
         aria-label="Menu principal"
       >
@@ -372,6 +677,9 @@ export function AppShell({
                           : 'text-[var(--sidebar-muted)] hover:bg-[var(--sidebar-hover)] hover:text-white'
                       }
                     `}
+                    style={{
+                      color: isParentActive ? 'white' : 'var(--sidebar-muted, rgba(255,255,255,0.80))',
+                    }}
                     aria-expanded={isOpen}
                     aria-controls={`submenu-${item.href}`}
                   >
@@ -412,6 +720,9 @@ export function AppShell({
                                   : 'text-[var(--sidebar-muted)] hover:bg-[var(--sidebar-hover)] hover:text-white'
                               }
                             `}
+                            style={{
+                              color: isChildActive || isChildParentActive ? 'white' : 'var(--sidebar-muted, rgba(255,255,255,0.80))',
+                            }}
                           >
                             {child.icon}
                             {child.label}
@@ -442,6 +753,9 @@ export function AppShell({
                         : 'text-[var(--sidebar-muted)] hover:bg-[var(--sidebar-hover)] hover:text-white'
                   }
                 `}
+                style={{
+                  color: isActive || isParentActive ? 'white' : 'var(--sidebar-muted, rgba(255,255,255,0.80))',
+                }}
               >
                 {item.icon}
                 {item.label}
@@ -450,7 +764,7 @@ export function AppShell({
           })}
         </nav>
 
-        <div className="p-3 border-t border-white/10">
+        <div className="p-3 border-t border-white/10 space-y-2">
           {showNewLeadButton && (
             <Button size="sm" onClick={handleNewLead} className="w-full">
               <svg className="w-4 h-4 mr-1.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
@@ -459,13 +773,31 @@ export function AppShell({
               Novo Lead
             </Button>
           )}
+
+          {/* Botão do Theme Editor (só admin/gestor) */}
+          {isManager && (
+            <button
+              type="button"
+              onClick={() => setThemeOpen(true)}
+              className="w-full px-3 py-2 text-sm font-semibold rounded-xl bg-white/10 hover:bg-white/15 border border-white/10 text-white"
+            >
+              🎨 Ajustar Cores (Tema)
+            </button>
+          )}
         </div>
       </aside>
 
       {sidebarOpen && <div className="fixed inset-0 z-20 bg-black/50 lg:hidden" onClick={closeSidebar} aria-hidden="true" />}
 
       <div className="flex-1 flex flex-col min-w-0 overflow-x-hidden">
-        <header className="sticky top-0 z-40 h-14 border-b border-[var(--border)] bg-[var(--card)] flex items-center px-4 gap-4 relative">
+        <header
+          className="sticky top-0 z-40 h-14 border-b border-[var(--border)] flex items-center px-4 gap-4 relative"
+          style={{
+            background: 'var(--topbar-bg, var(--card, rgba(255,255,255,0.88)))',
+            backdropFilter: 'blur(12px)',
+            WebkitBackdropFilter: 'blur(12px)',
+          }}
+        >
           <div className="flex items-center gap-3 min-w-0">
             <button
               type="button"
@@ -478,6 +810,18 @@ export function AppShell({
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
               </svg>
             </button>
+
+            {/* Atalho rápido do tema no topo (opcional) */}
+            {isManager && (
+              <button
+                type="button"
+                onClick={() => setThemeOpen(true)}
+                className="hidden sm:inline-flex items-center gap-2 px-3 py-1.5 text-sm font-semibold rounded-full border border-[var(--border)] hover:bg-[var(--accent)]"
+                aria-label="Abrir editor de tema"
+              >
+                🎨 Tema
+              </button>
+            )}
           </div>
 
           <div className="absolute left-1/2 -translate-x-1/2 pointer-events-none">
@@ -562,6 +906,12 @@ export function AppShell({
           <div className="max-w-[1280px] mx-auto w-full">{children}</div>
         </main>
       </div>
-    </div>
+
+      {/* Theme Editor */}
+      {isManager && (
+        <ThemeEditorPanel open={themeOpen} onClose={() => setThemeOpen(false)} />
+      )}
+      </div>
+    </>
   )
 }

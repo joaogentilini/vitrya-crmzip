@@ -69,6 +69,7 @@ interface DashboardData {
     pct: number
   }
   upcomingCampaignTasks: CampaignTask[]
+   upcomingCampaignTasksTotal: number
   propertyMap: Record<string, Property>
 }
 
@@ -353,14 +354,15 @@ export function DashboardClient({ isAdmin, profiles, selectedBroker, data }: Das
             <div className="mt-1 text-sm text-black/60">Pendências mais próximas por vencimento.</div>
           </div>
           <Link
-            href="/campaigns"
-            className="rounded-xl border border-black/10 bg-white px-3 py-2 text-sm text-black/80 hover:bg-black/5"
-          >
-            Ver tudo
-          </Link>
+  href="/campaigns"
+  className="rounded-xl border border-black/10 bg-white px-3 py-2 text-sm text-black/80 hover:bg-black/5"
+>
+  Ver tudo {data.upcomingCampaignTasksTotal ? `(${data.upcomingCampaignTasksTotal})` : ''}
+</Link>
+
         </div>
 
-        <div className="mt-3 space-y-2">
+        <div className="mt-3 space-y-2 max-h-72 overflow-y-auto pr-1">
           {data.upcomingCampaignTasks.length === 0 ? (
             <p className="text-sm text-black/60">Sem tarefas pendentes.</p>
           ) : (

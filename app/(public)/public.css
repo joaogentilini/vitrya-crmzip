@@ -10,7 +10,7 @@
   --shadow:0 10px 30px rgba(255, 255, 255, 0.08);
 
   /* Glass system */
-  --pv-bg-overlay: rgba(0, 0, 0, 0.244);
+  --pv-bg-overlay: rgba(255, 255, 255, 0.244);
   --pv-glass-bg: rgba(255,255,255,.72);
   --pv-glass-border: rgba(255,255,255,.55);
   --pv-glass-shadow: 0 18px 50px rgba(255, 255, 255, 0.16);
@@ -26,6 +26,20 @@ body{
   overflow-x:hidden;
 }
 
+.material-symbols-rounded{
+  font-family: "Material Symbols Rounded";
+  font-weight: normal;
+  font-style: normal;
+  line-height: 1;
+  letter-spacing: normal;
+  text-transform: none;
+  display: inline-flex;
+  white-space: nowrap;
+  word-wrap: normal;
+  direction: ltr;
+  -webkit-font-smoothing: antialiased;
+}
+
 a{color:inherit}
 img, video, iframe{max-width:100%; height:auto;}
 
@@ -37,7 +51,7 @@ img, video, iframe{max-width:100%; height:auto;}
   display:flex;
   flex-direction:column;
 
-  background-image: url("/brand/vitrine%20site.jpg");
+  background-image: url("/brand/imagemvitrinefundo.png");
   background-size: cover;
   background-position: center;
   background-repeat: no-repeat;
@@ -73,7 +87,7 @@ img, video, iframe{max-width:100%; height:auto;}
   top: 0;
   z-index: 9999;
 
-  background: rgba(23,26,33,.55);
+  background: rgba(255, 255, 255, 0.55);
   backdrop-filter: blur(10px);
   -webkit-backdrop-filter: blur(10px);
 
@@ -160,12 +174,12 @@ img, video, iframe{max-width:100%; height:auto;}
 .pv-btn-primary:hover{filter: brightness(0.98)}
 
 .pv-btn-secondary{
-  background: rgba(250,250,250,.10);
+  background: rgba(0, 0, 0, 0.331);
   color: var(--offwhite);
-  border: 1px solid rgba(250,250,250,.22);
+  border: 1px solid rgba(173, 173, 173, 0.888);
 }
 .pv-btn-secondary:hover{
-  background: rgba(250,250,250,.16);
+  background: rgb(255, 145, 0);
   border-color: rgba(250,250,250,.30);
 }
 
@@ -181,7 +195,7 @@ img, video, iframe{max-width:100%; height:auto;}
   -webkit-backdrop-filter: blur(8px);
 }
 .pv-btn-topbar:hover{
-  background: rgba(0,0,0,.30) !important;
+  background: rgba(255, 255, 255, 0.845) !important;
   border-color: rgba(255,255,255,.24) !important;
 }
 
@@ -235,6 +249,12 @@ img, video, iframe{max-width:100%; height:auto;}
   padding: 22px;
 }
 
+.pv-hero-search{
+  width: 100%;
+  margin-left: 0;
+  margin-right: 0;
+}
+
 /* deixa o conteúdo centralizado e com “respiro” */
 .pv-hero-inner{
   max-width: 1120px;
@@ -271,9 +291,9 @@ img, video, iframe{max-width:100%; height:auto;}
   background:
     linear-gradient(90deg,
       rgba(23,26,33,0.78) 0%,
-      rgba(23,26,33,0.52) 30%,
-      rgba(23,26,33,0.22) 55%,
-      rgba(23,26,33,0.00) 78%
+      rgba(23, 26, 33, 0.607) 30%,
+      rgba(23, 26, 33, 0.308) 55%,
+      rgba(23, 26, 33, 0.128) 78%
     ),
     linear-gradient(180deg,
       rgba(23,26,33,0.35) 0%,
@@ -336,7 +356,7 @@ img, video, iframe{max-width:100%; height:auto;}
   gap: 8px;
   padding: 10px 12px;
   border-radius: 999px;
-  background: rgba(255,255,255,.12);
+  background: rgba(118, 118, 118, 0.438);
   border: 1px solid rgba(255,255,255,.16);
   color: rgba(255,255,255,.92);
   font-weight: 900;
@@ -352,7 +372,7 @@ img, video, iframe{max-width:100%; height:auto;}
 ========================================================= */
 .pv-searchbar{
   margin-top: 16px;
-  background: rgba(250,250,250,.06);
+  background: rgba(118, 118, 118, 0.135);
   border: 1px solid rgba(250,250,250,.10);
   border-radius: 16px;
   padding: 14px;
@@ -368,7 +388,7 @@ img, video, iframe{max-width:100%; height:auto;}
 .pv-label{ font-size:12px; opacity:.78 }
 
 .pv-input, .pv-select{
-  background: rgba(250,250,250,.92);
+  background: rgba(193, 193, 193, 0.313);
   border: 1px solid rgba(23,26,33,.12);
   border-radius: 12px;
   padding: 10px 12px;
@@ -394,7 +414,7 @@ img, video, iframe{max-width:100%; height:auto;}
 
 .pv-chip{
   border: 1px solid var(--border);
-  background: #fff;
+  background: #8a8a8a42;
   border-radius: 999px;
   padding: 8px 10px;
   font-size: 13px;
@@ -494,9 +514,9 @@ img, video, iframe{max-width:100%; height:auto;}
   /* +10% transparência vs 0.74 => ~0.66, mas com highlight p/ não “apagar” */
   background: linear-gradient(
     180deg,
-    rgba(255,255,255,.86) 0%,
+    rgba(118, 118, 118, 0.86) 0%,
     rgba(255,255,255,.66) 55%,
-    rgba(255,255,255,.62) 100%
+    rgba(118, 118, 118, 0.62) 100%
   ) !important;
 
   border: 1px solid rgba(255,255,255,.58) !important;
@@ -505,7 +525,7 @@ img, video, iframe{max-width:100%; height:auto;}
   /* brilho interno pra ficar “clareado” mesmo com fundo escuro */
   box-shadow:
     0 18px 50px rgba(0,0,0,.16),
-    inset 0 1px 0 rgba(255,255,255,.55),
+    inset 0 1px 0 rgba(118, 118, 118, 0.55),
     inset 0 -1px 0 rgba(23,26,33,.06) !important;
 
   backdrop-filter: blur(14px) !important;
@@ -537,7 +557,7 @@ img, video, iframe{max-width:100%; height:auto;}
   break-inside: avoid;
   -webkit-column-break-inside: avoid;
   font-weight: 700;
-  color: rgba(23,26,33,.92);
+  color: rgba(0, 0, 0, 0.858);
 }
 .pv-checklist li::before{
   content: "✓";
@@ -663,4 +683,100 @@ img, video, iframe{max-width:100%; height:auto;}
 }
 @media (max-width: 980px){
   .pv-hero-media{ transform: none; }
+}
+/* =========================================================
+   FIX: HERO DA BUSCA NO PADRÃO VITRYA (GLASS, ARREDONDADO)
+========================================================= */
+.pv-hero.pv-hero-search{
+  /* vira card glass (igual resto do site) */
+  background: rgba(115, 115, 115, 0.137);
+  border: 1px solid rgba(231, 231, 231, 0.55);
+  border-radius: 26px;
+  box-shadow: 0 18px 50px rgba(225, 225, 225, 0.756);
+  color: var(--mirage);
+
+  /* remove “hero full-bleed” e mantém dentro do pv-glass */
+  width: 100%;
+  margin-left: 0;
+  margin-right: 0;
+  padding: 22px;
+
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+
+/* título/subtítulo em modo claro */
+.pv-hero.pv-hero-search .pv-title{
+  color: var(--mirage);
+}
+.pv-hero.pv-hero-search .pv-subtitle{
+  color: rgb(0, 0, 0);
+}
+
+/* =========================================================
+   FIX: SEARCHBAR TRANSLÚCIDA + CANTOS PREMIUM
+========================================================= */
+.pv-hero.pv-hero-search .pv-searchbar{
+  background: rgba(255, 255, 255, 0.635);
+  border: 1px solid rgba(255, 255, 255, 0);
+  border-radius: 22px;
+  box-shadow:
+    0 14px 36px rgba(255, 254, 254, 0.12),
+    inset 0 1px 0 rgba(255, 255, 255, 0.199);
+
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+/* Coluna esquerda do hero vira layout vertical */
+.pv-hero-left{
+  display: flex;
+  flex-direction: column;
+  min-height: 100%;
+}
+
+/* Topo: título + pills */
+.pv-hero-left-top{
+  flex-shrink: 0;
+}
+
+/* Meio: preço + métricas */
+.pv-hero-left-mid{
+  margin-top: 28px;
+  max-width: 50%; /* 🔒 nunca passa do meio */
+}
+
+/* Rodapé do hero */
+.pv-hero-left-bottom{
+  margin-top: auto; /* 👈 empurra tudo pra baixo */
+  padding-bottom: 14px;
+}
+.pv-title{
+  font-size: 34px;
+  line-height: 1.1;
+}
+
+@media (max-width: 640px){
+  .pv-title{
+    font-size: 28px;
+  }
+}
+.pv-price-hero{
+  font-size: 30px;
+  font-weight: 900;
+}
+.pv-metrics-row{
+  margin-top: 16px;
+  gap: 8px;
+}
+
+.pv-metric{
+  padding: 8px 10px;
+  font-size: 12px;
+}
+/* Barra inferior do hero */
+.pv-hero-controls{
+  background: rgba(0,0,0,.36);
+  border: 1px solid rgba(255,255,255,.18);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
 }

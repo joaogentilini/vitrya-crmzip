@@ -1,0 +1,3 @@
+-- placeholder (histórico)
+-- O REMOTE já possui a migration version 20260210 aplicada.
+-- Este arquivo existe apenas para alinhar o histórico local.

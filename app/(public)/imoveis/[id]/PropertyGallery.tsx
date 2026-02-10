@@ -2,402 +2,423 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { createPortal } from "react-dom";
+import { Icon } from "@/components/ui/Icon";
 
-type MediaItem = {
+type GalleryItem = {
   id: string;
   url: string;
-  kind?: "image" | "video" | string;
+  kind?: string; // "image" | "video" (por enquanto tratamos como imagem)
 };
-
-function clampIndex(index: number, length: number) {
-  if (length <= 0) return 0;
-  if (index < 0) return 0;
-  if (index >= length) return length - 1;
-  return index;
-}
 
 export default function PropertyGallery({
   items,
   title,
-  heroZoom = 1.0,
 }: {
-  items: MediaItem[];
-  title?: string;
-  heroZoom?: number; // ✅ zoom só no hero (não afeta fullscreen)
+  items: GalleryItem[];
+  title: string;
 }) {
-  const media = useMemo(() => items ?? [], [items]);
-  const [failedIds, setFailedIds] = useState<Set<string>>(new Set());
-
-  const validMedia = useMemo(() => {
-    const isValidUrl = (url?: string) =>
-      typeof url === "string" &&
-      url.trim().length > 0 &&
-      (url.startsWith("http") || url.startsWith("/"));
-
-    return media.filter((m) => isValidUrl(m.url) && !failedIds.has(m.id));
-  }, [media, failedIds]);
-
-  const hasMedia = validMedia.length > 0;
-  const hasMany = validMedia.length > 1;
+  const safeItems = useMemo(() => {
+    return (items ?? []).filter((it) => !!it?.url);
+  }, [items]);
 
   const [idx, setIdx] = useState(0);
-  const [isFullscreen, setIsFullscreen] = useState(false);
+  const [isOpen, setIsOpen] = useState(false);
+  const [mounted, setMounted] = useState(false);
+
+  const count = safeItems.length;
+  const current = safeItems[idx]?.url;
+
+  useEffect(() => setMounted(true), []);
 
   useEffect(() => {
-    setIdx((prev) => clampIndex(prev, validMedia.length));
-  }, [validMedia.length]);
+    if (idx >= count) setIdx(0);
+  }, [count, idx]);
 
-  const current = hasMedia ? validMedia[idx] : null;
-  const counterLabel = hasMedia ? `${idx + 1} / ${validMedia.length}` : "";
+  const go = (next: number) => {
+    if (!count) return;
+    const n = (next + count) % count;
+    setIdx(n);
+  };
 
-  const goPrev = () => setIdx((prev) => clampIndex(prev - 1, validMedia.length));
-  const goNext = () => setIdx((prev) => clampIndex(prev + 1, validMedia.length));
+  const next = () => go(idx + 1);
+  const prev = () => go(idx - 1);
 
+  // trava scroll quando fullscreen está aberto
   useEffect(() => {
-    const onKeyDown = (e: KeyboardEvent) => {
-      if (!isFullscreen) return;
-      if (e.key === "Escape") setIsFullscreen(false);
-      if (e.key === "ArrowLeft") goPrev();
-      if (e.key === "ArrowRight") goNext();
+    if (!isOpen) return;
+
+    const prevOverflow = document.documentElement.style.overflow;
+    document.documentElement.style.overflow = "hidden";
+    return () => {
+      document.documentElement.style.overflow = prevOverflow;
     };
-    window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [isOpen]);
+
+  // teclado no fullscreen
+  useEffect(() => {
+    if (!isOpen) return;
+
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setIsOpen(false);
+      if (e.key === "ArrowRight") next();
+      if (e.key === "ArrowLeft") prev();
+    };
+
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isFullscreen, validMedia.length]);
+  }, [isOpen, idx, count]);
 
-  // ✅ zoom apenas no modo normal
-  const heroMediaStyle: React.CSSProperties = {
-    width: "100%",
-    height: "100%",
-    objectFit: "cover",
-    display: "block",
-    transform: heroZoom && heroZoom !== 1 ? `scale(${heroZoom})` : undefined,
-    transformOrigin: "center",
-  };
-
-  const onMediaError = (id?: string) => {
-    if (!id) return;
-    setFailedIds((prev) => {
-      const next = new Set(prev);
-      next.add(id);
-      return next;
-    });
-  };
-
-  return (
-    <div style={{ width: "100%", maxWidth: "100%", minWidth: 0 }}>
+  if (!count) {
+    return (
       <div
-        className="pv-gallery"
         style={{
-          position: "relative",
-          borderRadius: 18,
-          overflow: "hidden",
-          background: "rgba(0,0,0,0.06)",
           width: "100%",
-          maxWidth: "100%",
-          minWidth: 0,
+          height: "100%",
+          minHeight: 440,
+          borderRadius: 22,
+          border: "1px solid rgba(255,255,255,.20)",
+          background: "rgba(255,255,255,.08)",
+          display: "grid",
+          placeItems: "center",
+          color: "rgba(255,255,255,.78)",
+          fontWeight: 800,
         }}
       >
-        {/* MAIN */}
+        Sem fotos
+      </div>
+    );
+  }
+
+  return (
+    <>
+      {/* container: ocupa tudo do quadrado vermelho */}
+      <div
+        style={{
+          position: "relative",
+          width: "100%",
+          height: "100%",
+          minHeight: 440,
+          borderRadius: 22,
+          overflow: "hidden",
+          border: "1px solid rgba(255,255,255,.18)",
+          background: "rgba(0,0,0,.18)",
+          boxShadow: "0 22px 60px rgba(0,0,0,.22)",
+        }}
+      >
+        {/* imagem principal (cover) */}
         <button
           type="button"
-          onClick={() => {
-            if (hasMedia) setIsFullscreen(true);
-          }}
-          aria-label="Abrir em tela cheia"
+          onClick={() => setIsOpen(true)}
           style={{
-            padding: 0,
-            border: "none",
-            background: "transparent",
-            width: "100%",
-            display: "block",
-            cursor: hasMedia ? "pointer" : "default",
+            all: "unset",
+            cursor: "zoom-in",
+            position: "absolute",
+            inset: 0,
+            backgroundImage: `url(${current})`,
+            backgroundSize: "cover",
+            backgroundPosition: "center",
+            backgroundRepeat: "no-repeat",
+          }}
+          aria-label="Abrir imagem em tela cheia"
+          title="Clique para abrir em tela cheia"
+        />
+
+        {/* overlay leve só pra legibilidade dos controles */}
+        <div
+          aria-hidden
+          style={{
+            position: "absolute",
+            inset: 0,
+            background:
+              "linear-gradient(180deg, rgba(0,0,0,.10) 0%, rgba(0,0,0,0) 40%, rgba(0,0,0,.28) 100%)",
+            pointerEvents: "none",
+          }}
+        />
+
+        {/* contador */}
+        <div
+          style={{
+            position: "absolute",
+            left: 14,
+            top: 14,
+            padding: "8px 10px",
+            borderRadius: 999,
+            background: "rgba(0,0,0,.35)",
+            border: "1px solid rgba(255,255,255,.18)",
+            color: "rgba(255,255,255,.92)",
+            fontWeight: 900,
+            fontSize: 12,
+            backdropFilter: "blur(10px)",
+            WebkitBackdropFilter: "blur(10px)",
           }}
         >
-          <div
-            style={{
-              aspectRatio: "16 / 9",
-              width: "100%",
-              maxWidth: "100%",
-              background: "rgba(0,0,0,0.04)",
-              display: "grid",
-              placeItems: "center",
-              overflow: "hidden",
-            }}
-          >
-            {current?.kind === "video" ? (
-              <video
-                src={current.url}
-                controls
-                style={heroMediaStyle}
-                onClick={(e) => e.stopPropagation()}
-                onError={() => onMediaError(current?.id)}
-              />
-            ) : current?.url ? (
-              <img
-                src={current.url}
-                alt={title || "Imóvel"}
-                onError={() => onMediaError(current?.id)}
-                style={heroMediaStyle}
-              />
-            ) : (
-              <div style={{ padding: 24, color: "white" }}>Sem mídia</div>
-            )}
-          </div>
-        </button>
+          {idx + 1}/{count}
+        </div>
 
-        {/* CONTROLS */}
-        {hasMedia && (
+        {/* setas */}
+        {count > 1 ? (
           <>
-            {hasMany && (
-              <>
-                <button
-                  type="button"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    goPrev();
-                  }}
-                  aria-label="Anterior"
-                  style={{
-                    position: "absolute",
-                    left: 12,
-                    top: "50%",
-                    transform: "translateY(-50%)",
-                    width: 44,
-                    height: 44,
-                    borderRadius: 999,
-                    border: "1px solid rgba(255,255,255,0.35)",
-                    background: "rgba(0,0,0,0.35)",
-                    color: "white",
-                    display: "grid",
-                    placeItems: "center",
-                    cursor: "pointer",
-                    userSelect: "none",
-                  }}
-                >
-                  ‹
-                </button>
-
-                <button
-                  type="button"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    goNext();
-                  }}
-                  aria-label="Próximo"
-                  style={{
-                    position: "absolute",
-                    right: 12,
-                    top: "50%",
-                    transform: "translateY(-50%)",
-                    width: 44,
-                    height: 44,
-                    borderRadius: 999,
-                    border: "1px solid rgba(255,255,255,0.35)",
-                    background: "rgba(0,0,0,0.35)",
-                    color: "white",
-                    display: "grid",
-                    placeItems: "center",
-                    cursor: "pointer",
-                    userSelect: "none",
-                  }}
-                >
-                  ›
-                </button>
-              </>
-            )}
-
-            <div
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                prev();
+              }}
+              aria-label="Foto anterior"
               style={{
                 position: "absolute",
                 left: 12,
-                bottom: 12,
-                padding: "6px 10px",
+                top: "50%",
+                transform: "translateY(-50%)",
+                width: 42,
+                height: 42,
                 borderRadius: 999,
-                border: "1px solid rgba(255,255,255,0.25)",
-                background: "rgba(0,0,0,0.28)",
+                border: "1px solid rgba(255,255,255,.18)",
+                background: "rgba(0,0,0,.32)",
                 color: "white",
-                fontSize: 12,
-                lineHeight: 1,
+                display: "grid",
+                placeItems: "center",
+                cursor: "pointer",
+                backdropFilter: "blur(10px)",
+                WebkitBackdropFilter: "blur(10px)",
+             
               }}
             >
-              {counterLabel}
-            </div>
+              <Icon name="chevron_left" size={20} />
+            </button>
 
-            {hasMany && (
-              <div
-                style={{
-                  position: "absolute",
-                  left: "50%",
-                  bottom: 12,
-                  transform: "translateX(-50%)",
-                  display: "flex",
-                  gap: 8,
-                  padding: "6px 10px",
-                  borderRadius: 999,
-                  background: "rgba(0,0,0,0.28)",
-                  border: "1px solid rgba(255,255,255,0.2)",
-                }}
-              >
-                {validMedia.map((_, i) => {
-                  const isActive = i === idx;
-                  return (
-                    <button
-                      key={`dot-${i}`}
-                      type="button"
-                      aria-label={`Ir para mídia ${i + 1}`}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setIdx(i);
-                      }}
-                      style={{
-                        width: isActive ? 10 : 8,
-                        height: isActive ? 10 : 8,
-                        borderRadius: 999,
-                        border: "none",
-                        background: "white",
-                        opacity: isActive ? 0.95 : 0.45,
-                        transform: isActive ? "scale(1.05)" : "scale(1)",
-                        cursor: "pointer",
-                        padding: 0,
-                      }}
-                    />
-                  );
-                })}
-              </div>
-            )}
-          </>
-        )}
-      </div>
-
-      {/* FULLSCREEN (sem zoom, sempre contain) */}
-      {isFullscreen && hasMedia && (
-        <div
-          className="pv-fullscreen"
-          onClick={() => setIsFullscreen(false)}
-          style={{
-            position: "fixed",
-            inset: 0,
-            zIndex: 60,
-            background: "rgba(0,0,0,0.82)",
-            padding: 16,
-            display: "grid",
-            gridTemplateRows: "auto 1fr",
-            gap: 12,
-          }}
-        >
-          <div
-            onClick={(e) => e.stopPropagation()}
-            style={{
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "space-between",
-              color: "white",
-            }}
-          >
-            <div style={{ fontSize: 13, opacity: 0.9 }}>{counterLabel}</div>
             <button
               type="button"
-              onClick={() => setIsFullscreen(false)}
+              onClick={(e) => {
+                e.stopPropagation();
+                next();
+              }}
+              aria-label="Próxima foto"
               style={{
+                position: "absolute",
+                right: 12,
+                top: "50%",
+                transform: "translateY(-50%)",
+                width: 42,
+                height: 42,
                 borderRadius: 999,
-                border: "1px solid rgba(255,255,255,0.25)",
-                background: "rgba(255,255,255,0.08)",
+                border: "1px solid rgba(255,255,255,.18)",
+                background: "rgba(0,0,0,.32)",
                 color: "white",
-                padding: "8px 12px",
+                display: "grid",
+                placeItems: "center",
                 cursor: "pointer",
+                backdropFilter: "blur(10px)",
+                WebkitBackdropFilter: "blur(10px)",
               }}
             >
-              Fechar
+              <Icon name="chevron_right" size={20} />
             </button>
-          </div>
+          </>
+        ) : null}
 
+        {/* DOTS embaixo */}
+        {count > 1 ? (
           <div
-            onClick={(e) => e.stopPropagation()}
             style={{
-              position: "relative",
-              borderRadius: 18,
-              overflow: "hidden",
-              background: "rgba(255,255,255,0.06)",
-              display: "grid",
-              placeItems: "center",
+              position: "absolute",
+              left: 0,
+              right: 0,
+              bottom: 14,
+              display: "flex",
+              justifyContent: "center",
+              gap: 8,
+              padding: "0 14px",
             }}
           >
-            {current?.kind === "video" ? (
-              <video
-                src={current.url}
-                controls
-                style={{ width: "100%", height: "100%", objectFit: "contain" }}
-                onError={() => onMediaError(current?.id)}
-              />
-            ) : (
-              <img
-                src={current?.url}
-                alt={title || "Imóvel"}
-                onError={() => onMediaError(current?.id)}
-                style={{
-                  width: "100%",
-                  height: "100%",
-                  objectFit: "contain",
-                  display: "block",
-                }}
-              />
-            )}
-
-            {hasMany && (
-              <>
+            {safeItems.map((_, i) => {
+              const active = i === idx;
+              return (
                 <button
+                  key={safeItems[i].id ?? String(i)}
                   type="button"
-                  onClick={goPrev}
-                  aria-label="Anterior"
-                  style={{
-                    position: "absolute",
-                    left: 12,
-                    top: "50%",
-                    transform: "translateY(-50%)",
-                    width: 48,
-                    height: 48,
-                    borderRadius: 999,
-                    border: "1px solid rgba(255,255,255,0.35)",
-                    background: "rgba(0,0,0,0.35)",
-                    color: "white",
-                    display: "grid",
-                    placeItems: "center",
-                    cursor: "pointer",
-                    userSelect: "none",
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    go(i);
                   }}
-                >
-                  ‹
-                </button>
-
-                <button
-                  type="button"
-                  onClick={goNext}
-                  aria-label="Próximo"
+                  aria-label={`Ir para foto ${i + 1}`}
                   style={{
-                    position: "absolute",
-                    right: 12,
-                    top: "50%",
-                    transform: "translateY(-50%)",
-                    width: 48,
-                    height: 48,
+                    width: active ? 26 : 10,
+                    height: 10,
                     borderRadius: 999,
-                    border: "1px solid rgba(255,255,255,0.35)",
-                    background: "rgba(0,0,0,0.35)",
-                    color: "white",
-                    display: "grid",
-                    placeItems: "center",
+                    border: "1px solid rgba(255,255,255,.28)",
+                    background: active
+                      ? "rgba(255,255,255,.92)"
+                      : "rgba(255,255,255,.38)",
                     cursor: "pointer",
-                    userSelect: "none",
+                    transition: "all .18s ease",
                   }}
-                >
-                  ›
-                </button>
-              </>
-            )}
+                />
+              );
+            })}
           </div>
-        </div>
-      )}
-    </div>
+        ) : null}
+      </div>
+
+      {/* FULLSCREEN REAL via Portal (no document.body) */}
+      {mounted && isOpen
+        ? createPortal(
+            <div
+              role="dialog"
+              aria-modal="true"
+              aria-label="Galeria em tela cheia"
+              onMouseDown={(e) => {
+                // clique fora fecha
+                if (e.target === e.currentTarget) setIsOpen(false);
+              }}
+              style={{
+                position: "fixed",
+                inset: 0,
+                zIndex: 2147483647, // topo absoluto
+                background: "rgba(0,0,0,.88)",
+                display: "grid",
+                placeItems: "center",
+                padding: 18,
+              }}
+            >
+              <div
+                style={{
+                  position: "relative",
+                  width: "min(1400px, 100%)",
+                  height: "min(90vh, 900px)",
+                  borderRadius: 18,
+                  overflow: "hidden",
+                  border: "1px solid rgba(255,255,255,.16)",
+                  background: "rgba(0,0,0,.28)",
+                }}
+              >
+                {/* imagem em contain (pra não cortar no fullscreen) */}
+                <div
+                  style={{
+                    position: "absolute",
+                    inset: 0,
+                    backgroundImage: `url(${current})`,
+                    backgroundSize: "contain",
+                    backgroundPosition: "center",
+                    backgroundRepeat: "no-repeat",
+                  }}
+                />
+
+                {/* fechar */}
+                <button
+                  type="button"
+                  onClick={() => setIsOpen(false)}
+                  aria-label="Fechar"
+                  style={{
+                    position: "absolute",
+                    top: 12,
+                    right: 12,
+                    width: 44,
+                    height: 44,
+                    borderRadius: 999,
+                    border: "1px solid rgba(255,255,255,.18)",
+                    background: "rgba(0,0,0,.42)",
+                    color: "white",
+                    display: "grid",
+                    placeItems: "center",
+                    cursor: "pointer",
+                    backdropFilter: "blur(10px)",
+                    WebkitBackdropFilter: "blur(10px)",
+                  }}
+                >
+                  <Icon name="close" size={20} />
+                </button>
+
+                {/* setas fullscreen */}
+                {count > 1 ? (
+                  <>
+                    <button
+                      type="button"
+                      onClick={prev}
+                      aria-label="Anterior"
+                      style={{
+                        position: "absolute",
+                        left: 12,
+                        top: "50%",
+                        transform: "translateY(-50%)",
+                        width: 52,
+                        height: 52,
+                        borderRadius: 999,
+                        border: "1px solid rgba(255,255,255,.18)",
+                        background: "rgba(0,0,0,.42)",
+                        color: "white",
+                        display: "grid",
+                        placeItems: "center",
+                        cursor: "pointer",
+                      }}
+                    >
+                      <Icon name="chevron_left" size={26} />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={next}
+                      aria-label="Próxima"
+                      style={{
+                        position: "absolute",
+                        right: 12,
+                        top: "50%",
+                        transform: "translateY(-50%)",
+                        width: 52,
+                        height: 52,
+                        borderRadius: 999,
+                        border: "1px solid rgba(255,255,255,.18)",
+                        background: "rgba(0,0,0,.42)",
+                        color: "white",
+                        display: "grid",
+                        placeItems: "center",
+                        cursor: "pointer",
+                      }}
+                    >
+                      <Icon name="chevron_right" size={26} />
+                    </button>
+                  </>
+                ) : null}
+
+                {/* legenda inferior */}
+                <div
+                  style={{
+                    position: "absolute",
+                    left: 0,
+                    right: 0,
+                    bottom: 0,
+                    padding: "12px 14px",
+                    background:
+                      "linear-gradient(180deg, rgba(0,0,0,0) 0%, rgba(0,0,0,.60) 100%)",
+                    color: "rgba(255,255,255,.9)",
+                    display: "flex",
+                    justifyContent: "space-between",
+                    alignItems: "center",
+                    gap: 12,
+                    fontWeight: 800,
+                    fontSize: 12,
+                  }}
+                >
+                  <span
+                    style={{
+                      overflow: "hidden",
+                      textOverflow: "ellipsis",
+                      whiteSpace: "nowrap",
+                      opacity: 0.9,
+                    }}
+                  >
+                    {title}
+                  </span>
+                  <span style={{ opacity: 0.8 }}>
+                    {idx + 1}/{count}
+                  </span>
+                </div>
+              </div>
+            </div>,
+            document.body
+          )
+        : null}
+    </>
   );
 }

@@ -82,9 +82,6 @@ export default function ListingActionsClient({
         Compartilhar
       </button>
 
-      <a href="#mapa" className="pv-btn pv-btn-soft">
-        Ver mapa
-      </a>
     </div>
   );
 }

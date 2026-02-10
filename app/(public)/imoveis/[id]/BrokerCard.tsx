@@ -20,10 +20,10 @@ type Props = {
   creci?: string | null;
   tagline?: string | null;
   bio?: string | null;
-  phoneLabel?: string | null; // vem do server (ex: +5565999999999 ou já formatado)
+  phoneLabel?: string | null;
   email?: string | null;
   socials: SocialItem[];
-  whatsappLink?: string | null; // já com text=... montado no page.tsx
+  whatsappLink?: string | null;
 };
 
 function onlyDigits(v: string) {
@@ -35,18 +35,11 @@ function formatBrazilPhone(raw: string | null | undefined) {
   const digits = onlyDigits(raw);
   if (!digits) return raw;
 
-  // remove +55 caso venha
   let d = digits;
   if (d.startsWith("55") && d.length >= 12) d = d.slice(2);
 
-  // (65) 99999-9999
-  if (d.length === 11) {
-    return `(${d.slice(0, 2)}) ${d.slice(2, 7)}-${d.slice(7)}`;
-  }
-  // (65) 9999-9999
-  if (d.length === 10) {
-    return `(${d.slice(0, 2)}) ${d.slice(2, 6)}-${d.slice(6)}`;
-  }
+  if (d.length === 11) return `(${d.slice(0, 2)}) ${d.slice(2, 7)}-${d.slice(7)}`;
+  if (d.length === 10) return `(${d.slice(0, 2)}) ${d.slice(2, 6)}-${d.slice(6)}`;
 
   return raw;
 }
@@ -58,7 +51,7 @@ export function BrokerCard({
   avatarUrl,
   creci,
   phoneLabel,
-  socials: _socials, // mantido por compat, mas não exibimos nesse layout
+  socials: _socials,
   whatsappLink,
 }: Props) {
   const router = useRouter();
@@ -68,24 +61,17 @@ export function BrokerCard({
     return cleaned ? `CRECI ${cleaned}` : "CRECI não informado";
   }, [creci]);
 
-  const phonePretty = useMemo(() => {
-    const formatted = formatBrazilPhone(phoneLabel ?? null);
-    return formatted ?? "(--) ----- ----";
-  }, [phoneLabel]);
+  const phonePretty = useMemo(() => formatBrazilPhone(phoneLabel ?? null) ?? "(--) ----- ----", [phoneLabel]);
 
   const phoneDigits = useMemo(() => {
     const d = onlyDigits(phoneLabel ?? "");
     if (!d) return "";
-    // garante E.164 BR
     if (d.startsWith("55")) return d;
     if (d.length >= 10) return `55${d}`;
     return d;
   }, [phoneLabel]);
 
-  const goProfile = () => {
-    if (!href) return;
-    router.push(href);
-  };
+  const goProfile = () => href && router.push(href);
 
   const openWhatsApp = () => {
     if (!whatsappLink) return;
@@ -98,11 +84,8 @@ export function BrokerCard({
   };
 
   const handlePhoneClick = () => {
-    // preferencial: WhatsApp com texto (vem do page.tsx)
     if (whatsappLink) return openWhatsApp();
-    // fallback: ligação
     if (phoneDigits) return callPhone();
-    // fallback final: perfil
     return goProfile();
   };
 
@@ -111,14 +94,14 @@ export function BrokerCard({
       style={{
         borderRadius: 22,
         padding: 14,
-        background: "rgba(255,255,255,0.72)",
-        border: "1px solid rgba(23,26,33,0.10)",
-        boxShadow: "0 14px 34px rgba(0,0,0,0.10)",
+        background: "rgba(206, 206, 206, 0)",
+        border: "1px solid rgba(255, 255, 255, 0.1)",
+        boxShadow: "0 14px 34px rgba(0, 0, 0, 0)",
         backdropFilter: "blur(14px)",
         WebkitBackdropFilter: "blur(14px)",
       }}
     >
-      {/* Título igual referência */}
+      {/* ✅ título correto */}
       <div
         style={{
           fontWeight: 900,
@@ -127,14 +110,14 @@ export function BrokerCard({
           marginBottom: 10,
         }}
       >
-        Resenviôeio {name}
+        Corretor responsável
       </div>
 
-      {/* Linha topo: avatar + creci / phone + chevron */}
+      {/* topo */}
       <div
         style={{
           display: "grid",
-          gridTemplateColumns: "56px minmax(0, 1fr) 24px",
+          gridTemplateColumns: "56px minmax(0, 1fr)",
           gap: 12,
           alignItems: "center",
           padding: "4px 2px 10px 2px",
@@ -188,49 +171,14 @@ export function BrokerCard({
             {name}
           </div>
 
-          <div
-            style={{
-              marginTop: 4,
-              display: "flex",
-              gap: 10,
-              alignItems: "center",
-              flexWrap: "wrap",
-              fontSize: 13,
-              color: "rgba(23,26,33,0.68)",
-            }}
-          >
-            <span>{creciLabel}</span>
-            <span style={{ opacity: 0.6 }}>•</span>
-
-            {/* telefone pequeno (clicável também) */}
-            <button
-              type="button"
-              onClick={handlePhoneClick}
-              style={{
-                background: "transparent",
-                border: "none",
-                padding: 0,
-                margin: 0,
-                cursor: whatsappLink || phoneDigits ? "pointer" : "default",
-                color: "inherit",
-                font: "inherit",
-                textDecoration: whatsappLink || phoneDigits ? "underline" : "none",
-                textUnderlineOffset: 3,
-                opacity: 0.95,
-              }}
-              title={whatsappLink ? "Abrir WhatsApp" : phoneDigits ? "Ligar" : ""}
-            >
-              {phonePretty}
-            </button>
+          {/* ✅ aqui fica SÓ o CRECI (sem telefone duplicado) */}
+          <div style={{ marginTop: 4, fontSize: 13, color: "rgba(23,26,33,0.72)", fontWeight: 800 }}>
+            {creciLabel}
           </div>
-        </div>
-
-        <div style={{ display: "grid", placeItems: "center", opacity: 0.55 }}>
-          <Icon name="chevron_right" size={18} />
         </div>
       </div>
 
-      {/* “Campo” grande de telefone (estilo input) */}
+      {/* campo grande de telefone */}
       <button
         type="button"
         onClick={handlePhoneClick}
@@ -239,7 +187,7 @@ export function BrokerCard({
           textAlign: "left",
           borderRadius: 16,
           padding: "12px 12px",
-          background: "rgba(255,255,255,0.70)",
+          background: "rgba(254, 254, 254, 0.4)",
           border: "1px solid rgba(23,26,33,0.14)",
           display: "grid",
           gridTemplateColumns: "1fr 22px",
@@ -249,22 +197,14 @@ export function BrokerCard({
         }}
         title={whatsappLink ? "Abrir WhatsApp com mensagem" : phoneDigits ? "Ligar" : ""}
       >
-        <div
-          style={{
-            fontWeight: 800,
-            fontSize: 18,
-            color: "rgba(23,26,33,0.72)",
-            letterSpacing: 0.2,
-          }}
-        >
+        <div style={{ fontWeight: 900, fontSize: 18, color: "rgba(23,26,33,0.78)", letterSpacing: 0.2 }}>
           {phonePretty}
         </div>
-        <div style={{ display: "grid", placeItems: "center", opacity: 0.55 }}>
+        <div style={{ display: "grid", placeItems: "center", opacity: 0.7 }}>
           <Icon name="chevron_right" size={18} />
         </div>
       </button>
 
-      {/* Botões */}
       <div style={{ display: "grid", gap: 10, marginTop: 12 }}>
         <button
           type="button"
@@ -277,8 +217,7 @@ export function BrokerCard({
             padding: "12px 14px",
             borderRadius: 16,
             border: "1px solid rgba(255,104,31,0.34)",
-            background:
-              "linear-gradient(180deg, rgba(255,104,31,0.92), rgba(255,104,31,0.78))",
+            background: "linear-gradient(180deg, rgba(255,104,31,0.92), rgba(255,104,31,0.78))",
             color: "white",
             fontWeight: 900,
             fontSize: 16,
@@ -300,12 +239,8 @@ export function BrokerCard({
             width: "100%",
             padding: "12px 14px",
             borderRadius: 16,
-            border: whatsappLink
-              ? "1px solid rgba(37, 211, 102, 0.45)"
-              : "1px solid rgba(23,26,33,0.12)",
-            background: whatsappLink
-              ? "linear-gradient(180deg, #25D366, #1EBE5D)"
-              : "rgba(37, 211, 102, 0.16)",
+            border: whatsappLink ? "1px solid rgba(37, 211, 102, 0.45)" : "1px solid rgba(23,26,33,0.12)",
+            background: whatsappLink ? "linear-gradient(180deg, #25D366, #1EBE5D)" : "rgba(37, 211, 102, 0.16)",
             color: whatsappLink ? "white" : "rgba(23,26,33,0.55)",
             fontWeight: 900,
             fontSize: 16,
@@ -321,8 +256,6 @@ export function BrokerCard({
           Falar no WhatsApp
         </button>
       </div>
-
-      {/* socials/tagline/bio/email ficam no Props por compat, mas não renderizam aqui (layout referência) */}
     </div>
   );
 }

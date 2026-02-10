@@ -96,15 +96,24 @@ async function getDashboardData(userId: string, isAdmin: boolean, filterUserId?:
         : 0
   }
 
+   // =========================
+  // Campanhas — próximas tarefas (enxuto)
   // =========================
-  // Campanhas — próximas tarefas
-  // =========================
+
+  // total pendentes (para botão "Ver todas")
+  const { count: upcomingCampaignTasksTotal } = await supabase
+    .from('property_campaign_tasks')
+    .select('id', { count: 'exact', head: true })
+    .is('done_at', null)
+
+  // lista enxuta (só 3)
   const { data: upcomingCampaignTasks } = await supabase
     .from('property_campaign_tasks')
     .select('id, property_id, title, due_date, done_at')
     .is('done_at', null)
     .order('due_date', { ascending: true })
-    .limit(10)
+    .limit(3)
+
 
   // Buscar properties para nomes (map)
   let propertyMap: Record<string, { title: string | null; city: string | null; neighborhood: string | null }> = {}
@@ -183,6 +192,7 @@ async function getDashboardData(userId: string, isAdmin: boolean, filterUserId?:
     // Campanhas
     campaignMetrics,
     upcomingCampaignTasks: (upcomingCampaignTasks as any[]) || [],
+        upcomingCampaignTasksTotal: upcomingCampaignTasksTotal ?? 0,
     propertyMap,
   }
 }

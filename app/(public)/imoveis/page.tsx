@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
 
 export default function PublicSearchPage() {
@@ -12,17 +12,19 @@ export default function PublicSearchPage() {
   const [maxPrice, setMaxPrice] = useState("");
   const [bedrooms, setBedrooms] = useState("");
 
-  const handleSearch = (e: React.FormEvent) => {
+  const handleSearch = (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
 
     const params = new URLSearchParams();
-    if (query) params.set("query", query);
+
+    const q = query.trim();
+    if (q) params.set("query", q);
     if (purpose) params.set("purpose", purpose);
     if (minPrice) params.set("min", minPrice);
     if (maxPrice) params.set("max", maxPrice);
     if (bedrooms) params.set("bedrooms", bedrooms);
 
-    // ✅ B) Resultados em /imoveis/resultados
+    // Resultados em /imoveis/resultados
     const qs = params.toString();
     router.push(qs ? `/imoveis/resultados?${qs}` : "/imoveis/resultados");
   };
@@ -31,7 +33,7 @@ export default function PublicSearchPage() {
     <main className="pv-main">
       <div className="pv-container">
         <div className="pv-glass">
-          <section className="pv-hero">
+          <section className="pv-hero pv-hero-search">
             <h1 className="pv-title">Encontre seu imóvel ideal</h1>
             <p className="pv-subtitle">
               Busque por localização, preço e características

@@ -4,24 +4,87 @@ type IconProps = {
   name: string;
   size?: number;
   className?: string;
-  fill?: 0 | 1;
-  weight?: number;
-  grade?: number;
   title?: string;
 };
 
-export function Icon({
-  name,
-  size = 18,
-  className,
-  fill = 0,
-  weight = 400,
-  grade = 0,
-  title,
-}: IconProps) {
-  /* ===============================
-   * ÍCONE ESPECIAL: WHATSAPP
-   * =============================== */
+/**
+ * Ícones críticos em SVG para NÃO depender do font Material Symbols em produção.
+ * Se não tiver no map, cai pro material-symbols-rounded (dev/local).
+ */
+const SvgIcon = ({ name, size = 18 }: { name: string; size: number }) => {
+  const common = {
+    width: size,
+    height: size,
+    viewBox: "0 0 24 24",
+    fill: "currentColor",
+    xmlns: "http://www.w3.org/2000/svg",
+    "aria-hidden": "true" as const,
+  };
+
+  switch (name) {
+    case "location_on":
+      return (
+        <svg {...common}>
+          <path d="M12 2c-3.86 0-7 3.14-7 7 0 5.25 7 13 7 13s7-7.75 7-13c0-3.86-3.14-7-7-7zm0 9.5A2.5 2.5 0 1 1 12 6a2.5 2.5 0 0 1 0 5.5z" />
+        </svg>
+      );
+
+    case "chevron_right":
+      return (
+        <svg {...common}>
+          <path d="M9.29 6.71a1 1 0 0 1 1.42 0L15 11l-4.29 4.29a1 1 0 1 1-1.42-1.42L12.17 11 9.29 8.12a1 1 0 0 1 0-1.41z" />
+        </svg>
+      );
+
+    case "straighten":
+      return (
+        <svg {...common}>
+          <path d="M21 6H3c-1.1 0-2 .9-2 2v8c0 1.1.9 2 2 2h18c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2zm0 10H3V8h2v2h2V8h2v2h2V8h2v2h2V8h2v2h2V8h2v8z" />
+        </svg>
+      );
+
+    case "foundation":
+      return (
+        <svg {...common}>
+          <path d="M12 3 2 9v2h20V9L12 3zm8 10H4v8h16v-8zM7 15h2v4H7v-4zm4 0h2v4h-2v-4zm4 0h2v4h-2v-4z" />
+        </svg>
+      );
+
+    case "bed":
+      return (
+        <svg {...common}>
+          <path d="M21 10.5V7c0-1.1-.9-2-2-2H5C3.9 5 3 5.9 3 7v3.5c0 .83.67 1.5 1.5 1.5H5v1H3v6h2v-2h14v2h2v-6h-2v-1h.5c.83 0 1.5-.67 1.5-1.5zM5 7h14v3H5V7z" />
+        </svg>
+      );
+
+    case "king_bed":
+      return (
+        <svg {...common}>
+          <path d="M21 10V7c0-1.1-.9-2-2-2H5C3.9 5 3 5.9 3 7v3c0 1.1.9 2 2 2h.5v1H3v6h2v-2h14v2h2v-6h-2.5v-1H19c1.1 0 2-.9 2-2zM5 7h14v3H5V7z" />
+        </svg>
+      );
+
+    case "bathtub":
+      return (
+        <svg {...common}>
+          <path d="M7 6c0-1.66 1.34-3 3-3h2v2h-2c-.55 0-1 .45-1 1v2h9V6h2v4H4V8c0-1.1.9-2 2-2h1V6zm14 6H3v2c0 2.21 1.79 4 4 4h10c2.21 0 4-1.79 4-4v-2z" />
+        </svg>
+      );
+
+    case "directions_car":
+      return (
+        <svg {...common}>
+          <path d="M18.92 6.01A2 2 0 0 0 17.04 5H6.96a2 2 0 0 0-1.88 1.01L3 10v9c0 .55.45 1 1 1h1c.55 0 1-.45 1-1v-1h12v1c0 .55.45 1 1 1h1c.55 0 1-.45 1-1v-9l-2.08-3.99zM6.5 15A1.5 1.5 0 1 1 8 13.5 1.5 1.5 0 0 1 6.5 15zm11 0A1.5 1.5 0 1 1 19 13.5 1.5 1.5 0 0 1 17.5 15zM5.81 10l1.04-2h10.3l1.04 2H5.81z" />
+        </svg>
+      );
+
+    default:
+      return null;
+  }
+};
+
+export function Icon({ name, size = 18, className, title }: IconProps) {
+  // whatsapp já era svg
   if (name === "whatsapp") {
     return (
       <span
@@ -50,11 +113,30 @@ export function Icon({
     );
   }
 
-  /* ===============================
-   * MATERIAL SYMBOLS (DEFAULT)
-   * =============================== */
+  // ✅ tenta SVG primeiro
+  const svg = <SvgIcon name={name} size={size} />;
+  if ((svg as any).type) {
+    return (
+      <span
+        className={className}
+        title={title}
+        aria-hidden={title ? undefined : true}
+        style={{
+          width: size,
+          height: size,
+          display: "inline-flex",
+          alignItems: "center",
+          justifyContent: "center",
+          lineHeight: 1,
+        }}
+      >
+        {svg}
+      </span>
+    );
+  }
+
+  // fallback (dev/local)
   const style: React.CSSProperties = {
-    fontVariationSettings: `'FILL' ${fill}, 'wght' ${weight}, 'GRAD' ${grade}, 'opsz' ${size}`,
     fontSize: size,
     lineHeight: 1,
     display: "inline-flex",

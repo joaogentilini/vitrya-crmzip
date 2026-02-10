@@ -44,6 +44,22 @@ function fmtMoney(v: number | null) {
   return `R$ ${Number(v).toLocaleString("pt-BR")}`;
 }
 
+function isHttpUrl(v: string) {
+  return /^https?:\/\//i.test(v);
+}
+
+async function resolveMediaUrl(raw: string | null | undefined) {
+  const v = (raw ?? "").toString().trim();
+  if (!v) return null;
+  if (isHttpUrl(v)) return v;
+  try {
+    const signed = await getSignedImageUrl(v);
+    return signed ?? null;
+  } catch {
+    return null;
+  }
+}
+
 export default async function PublicResultsPage({
   searchParams,
 }: {
@@ -135,9 +151,7 @@ export default async function PublicResultsPage({
   // ✅ Resolve URLs assinadas: capa + primeiras imagens do property_media
   const propertiesWithImages: PublicPropertyWithImages[] = await Promise.all(
     properties.map(async (p): Promise<PublicPropertyWithImages> => {
-      const coverUrl = p.cover_media_url
-        ? await getSignedImageUrl(p.cover_media_url)
-        : null;
+      const coverUrl = await resolveMediaUrl(p.cover_media_url);
 
       const mediaRows = mediaByProperty[p.id] || [];
       const mediaPaths = mediaRows.map((m) => m.url).filter(Boolean);
@@ -154,11 +168,7 @@ export default async function PublicResultsPage({
 
       const imageUrls = await Promise.all(
         limitedPaths.map(async (path) => {
-          try {
-            return await getSignedImageUrl(path);
-          } catch {
-            return null;
-          }
+          return await resolveMediaUrl(path);
         })
       );
 

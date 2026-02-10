@@ -1,13 +1,17 @@
-import { createClient } from "@/lib/supabaseServer";
+import type { Metadata } from "next";
+import { headers } from "next/headers";
 import { notFound } from "next/navigation";
-import PropertyGallery from "./PropertyGallery";
+
+import { createClient } from "@/lib/supabase/server";
+import { createPublicClient } from "@/lib/supabase/publicServer";
+import { getSignedImageUrl } from "@/lib/media/getPublicImageUrl";
+
+import HeroBackgroundGalleryClient from "./HeroBackgroundGalleryClient";
 import { BrokerCard } from "./BrokerCard";
 import ListingActionsClient from "./ListingActionsClient";
 import SimilarProperties from "./SimilarProperties";
-import { headers } from "next/headers";
 import { Icon } from "@/components/ui/Icon";
 import DescriptionToggleClient from "./DescriptionToggleClient";
-import { getSignedImageUrl } from "@/lib/media/getPublicImageUrl";
 
 function formatBRL(value: number | null | undefined) {
   if (value === null || value === undefined) return null;
@@ -29,6 +33,167 @@ function isUuid(value: string) {
   );
 }
 
+function safeText(v: any) {
+  const s = (v ?? "").toString().trim();
+  return s.length ? s : null;
+}
+
+function isHttpUrl(v: string) {
+  return /^https?:\/\//i.test(v);
+}
+
+async function resolveMediaUrl(raw: string | null | undefined) {
+  const v = (raw ?? "").toString().trim();
+  if (!v) return null;
+  if (isHttpUrl(v)) return v;
+  try {
+    const signed = await getSignedImageUrl(v);
+    return signed ?? null;
+  } catch {
+    return null;
+  }
+}
+
+async function getMetadataBaseFromHeaders() {
+  const h = await headers();
+  const host = h.get("x-forwarded-host") || h.get("host") || "";
+  const proto = h.get("x-forwarded-proto") || "https";
+  return host ? new URL(`${proto}://${host}`) : null;
+}
+
+type ViewName = "v_public_properties_ext" | "v_public_properties";
+
+async function fetchPropertyForSeo(
+  propertyId: string
+): Promise<(Record<string, any> & { id: string }) | null> {
+  const supabase = createPublicClient();
+
+  const SELECT_EXT =
+    "id,title,description,city,neighborhood,purpose,price,rent_price,property_category_name,cover_media_url,status,created_at";
+
+  const SELECT_BASE =
+    "id,title,description,city,neighborhood,purpose,price,rent_price,cover_media_url,status,created_at";
+
+  const tryView = async (view: ViewName) => {
+    const select = view === "v_public_properties_ext" ? SELECT_EXT : SELECT_BASE;
+    return supabase
+      .from(view)
+      .select(select)
+      .eq("id", propertyId)
+      .eq("status", "active")
+      .maybeSingle();
+  };
+
+  const ext = await tryView("v_public_properties_ext");
+
+  if (!ext.error) return (ext.data as any) ?? null;
+
+  const msg = String(ext.error.message ?? "").toLowerCase();
+  const shouldFallback =
+    msg.includes("relation") ||
+    msg.includes("does not exist") ||
+    msg.includes("schema cache") ||
+    msg.includes("view") ||
+    msg.includes("column");
+
+  if (!shouldFallback) {
+    console.error(ext.error);
+    return (ext.data as any) ?? null;
+  }
+
+  const base = await tryView("v_public_properties");
+  if (base.error) console.error(base.error);
+  return (base.data as any) ?? null;
+}
+
+export async function generateMetadata({
+  params,
+}: {
+  params: { id: string } | Promise<{ id: string }>;
+}): Promise<Metadata> {
+  const resolvedParams = await Promise.resolve(params);
+  const propertyId = resolvedParams?.id;
+
+  const envBase = safeText(process.env.NEXT_PUBLIC_SITE_URL);
+  const metadataBase =
+    envBase ? new URL(envBase) : (await getMetadataBaseFromHeaders()) ?? undefined;
+
+  const canonical =
+    metadataBase && propertyId
+      ? new URL(`/imoveis/${propertyId}`, metadataBase).toString()
+      : undefined;
+
+  // ✅ Segurança: domínio provisório (sem NEXT_PUBLIC_SITE_URL) => noindex
+  const allowIndex = Boolean(envBase);
+
+  if (!propertyId || !isUuid(propertyId)) {
+    return {
+      title: "Imóvel | Vitrya",
+      robots: { index: false, follow: false },
+      metadataBase,
+      alternates: canonical ? { canonical } : undefined,
+    };
+  }
+
+  const p = await fetchPropertyForSeo(propertyId);
+
+  if (!p) {
+    return {
+      title: "Imóvel não encontrado | Vitrya",
+      robots: { index: false, follow: false },
+      metadataBase,
+      alternates: canonical ? { canonical } : undefined,
+    };
+  }
+
+  const title = safeText(p.title) ?? "Imóvel";
+  const city = safeText(p.city);
+  const neighborhood = safeText(p.neighborhood);
+  const category = safeText(p.property_category_name);
+  const purposeLabel =
+    p.purpose === "rent"
+      ? "Aluguel"
+      : p.purpose === "sale"
+      ? "Venda"
+      : safeText(p.purpose);
+
+  const locationBits = [neighborhood, city].filter(Boolean).join(" • ");
+  const headlineBits = [purposeLabel, category, locationBits].filter(Boolean).join(" | ");
+  const seoTitle = `${title}${headlineBits ? ` — ${headlineBits}` : ""} | Vitrya`;
+
+  const rawDesc = safeText(p.description);
+  const seoDesc =
+    rawDesc?.slice(0, 180) ??
+    `Veja detalhes deste imóvel${locationBits ? ` em ${locationBits}` : ""}${
+      purposeLabel ? ` para ${purposeLabel.toLowerCase()}` : ""
+    }. Fotos, características e contato do corretor na Vitrya.`;
+
+  // ✅ OG image: como Storage é privado (signed), para SEO clássico é melhor omitir por enquanto
+  const ogImage: string | null = null;
+
+  return {
+    metadataBase,
+    title: seoTitle,
+    description: seoDesc,
+    alternates: canonical ? { canonical } : undefined,
+    robots: allowIndex ? { index: true, follow: true } : { index: false, follow: false },
+    openGraph: {
+      type: "website",
+      url: canonical,
+      title: seoTitle,
+      description: seoDesc,
+      siteName: "Vitrya",
+      images: ogImage ? [{ url: ogImage, width: 1200, height: 630 }] : undefined,
+    },
+    twitter: {
+      card: ogImage ? "summary_large_image" : "summary",
+      title: seoTitle,
+      description: seoDesc,
+      images: ogImage ? [ogImage] : undefined,
+    },
+  };
+}
+
 type FeatureCatalogItem = {
   id: string;
   key: string;
@@ -47,10 +212,7 @@ type FeatureValueRow = {
   value_json: any | null;
 };
 
-function buildAvailableFeatures(
-  catalog: FeatureCatalogItem[],
-  values: FeatureValueRow[]
-) {
+function buildAvailableFeatures(catalog: FeatureCatalogItem[], values: FeatureValueRow[]) {
   const byId = new Map<string, FeatureCatalogItem>();
   for (const item of catalog) byId.set(String(item.id), item);
 
@@ -69,10 +231,7 @@ function buildAvailableFeatures(
     }
 
     if (type === "number") {
-      if (
-        typeof row.value_number === "number" &&
-        !Number.isNaN(row.value_number)
-      ) {
+      if (typeof row.value_number === "number" && !Number.isNaN(row.value_number)) {
         result.push(`${label}: ${row.value_number}`);
       }
       continue;
@@ -100,6 +259,33 @@ function buildAvailableFeatures(
   }
 
   return result;
+}
+
+function Metric({
+  icon,
+  value,
+  unit,
+  suffix,
+}: {
+  icon: string;
+  value: string | number;
+  unit?: string;
+  suffix?: string;
+}) {
+  return (
+    <div className="pv-metric">
+      <span className="pv-metric-ico">
+        <Icon name={icon} size={18} />
+      </span>
+      <span>
+        <strong>{value}</strong>
+        {unit ? <span style={{ marginLeft: 6, fontWeight: 800 }}>{unit}</span> : null}
+        {suffix ? (
+          <span style={{ opacity: 0.82, marginLeft: 6, fontWeight: 800 }}>{suffix}</span>
+        ) : null}
+      </span>
+    </div>
+  );
 }
 
 export default async function PublicPropertyPage({
@@ -167,11 +353,8 @@ export default async function PublicPropertyPage({
     created_at
   `;
 
-  const fetchFromView = async (
-    view: "v_public_properties_ext" | "v_public_properties"
-  ) => {
+  const fetchFromView = async (view: ViewName) => {
     const select = view === "v_public_properties_ext" ? SELECT_EXT : SELECT_BASE;
-
     return supabase
       .from(view)
       .select(select)
@@ -182,9 +365,7 @@ export default async function PublicPropertyPage({
 
   let property: any = null;
 
-  const { data: propertyExt, error: extError } = await fetchFromView(
-    "v_public_properties_ext"
-  );
+  const { data: propertyExt, error: extError } = await fetchFromView("v_public_properties_ext");
 
   if (extError) {
     const msg = String(extError.message ?? "").toLowerCase();
@@ -196,9 +377,7 @@ export default async function PublicPropertyPage({
       msg.includes("column");
 
     if (shouldFallback) {
-      const { data: propertyBase, error: baseError } = await fetchFromView(
-        "v_public_properties"
-      );
+      const { data: propertyBase, error: baseError } = await fetchFromView("v_public_properties");
       if (baseError) console.error(baseError);
       property = propertyBase ?? null;
     } else {
@@ -211,14 +390,18 @@ export default async function PublicPropertyPage({
 
   if (!property) return notFound();
 
-  // ✅ Share URL (antes do WhatsApp text)
+  // ✅ Share URL (runtime)
   const headerList = await headers();
-  const host =
-    headerList.get("x-forwarded-host") || headerList.get("host") || "";
+  const host = headerList.get("x-forwarded-host") || headerList.get("host") || "";
   const proto = headerList.get("x-forwarded-proto") || "https";
   const shareUrl = host ? `${proto}://${host}/imoveis/${property.id}` : "";
 
-  // ✅ Media (assinado)
+  // ✅ Canonical base (SEO)
+  const baseUrlEnv = (process.env.NEXT_PUBLIC_SITE_URL ?? "").trim();
+  const baseUrl = baseUrlEnv || (host ? `${proto}://${host}` : "");
+  const canonicalUrl = baseUrl ? `${baseUrl}/imoveis/${property.id}` : shareUrl || "";
+
+  // ✅ Media (signed)
   const { data: mediaRows, error: mediaError } = await supabase
     .from("property_media")
     .select("id, url, kind, position")
@@ -237,18 +420,14 @@ export default async function PublicPropertyPage({
   const signedMediaItems = (
     await Promise.all(
       rawMediaItems.map(async (item) => {
-        try {
-          const signedUrl = await getSignedImageUrl(item.url);
-          if (!signedUrl) return null;
-          return { ...item, url: signedUrl };
-        } catch {
-          return null;
-        }
+        const signedUrl = await resolveMediaUrl(item.url);
+        if (!signedUrl) return null;
+        return { ...item, url: signedUrl };
       })
     )
   ).filter(Boolean) as { id: string; url: string; kind?: string }[];
 
-  const coverSignedUrl = await getSignedImageUrl(property.cover_media_url ?? null);
+  const coverSignedUrl = await resolveMediaUrl(property.cover_media_url ?? null);
   const mediaItems = [...signedMediaItems];
 
   if (coverSignedUrl && !mediaItems.some((m) => m.url === coverSignedUrl)) {
@@ -272,10 +451,7 @@ export default async function PublicPropertyPage({
   ]);
 
   if (catalogRes.error || valuesRes.error) {
-    console.error(
-      "Erro ao carregar características:",
-      catalogRes.error || valuesRes.error
-    );
+    console.error("Erro ao carregar características:", catalogRes.error || valuesRes.error);
   }
 
   const availableFeatures = buildAvailableFeatures(
@@ -284,8 +460,7 @@ export default async function PublicPropertyPage({
   );
 
   // ✅ Broker + WhatsApp
-  const brokerName =
-    property?.broker_public_name || property?.broker_full_name || "Corretor";
+  const brokerName = property?.broker_public_name || property?.broker_full_name || "Corretor";
 
   const initials =
     brokerName
@@ -296,7 +471,6 @@ export default async function PublicPropertyPage({
       .join("") || "CR";
 
   const phoneLabel: string | null = property?.broker_phone_e164 || null;
-
   const phoneDigits = phoneLabel ? phoneLabel.replace(/\D/g, "") : "";
   const whatsappPhone =
     phoneDigits.length >= 10
@@ -308,7 +482,7 @@ export default async function PublicPropertyPage({
   const whatsappText = [
     "Olá! Vim pelo portal da Vitrya.",
     property?.title ? `Imóvel: ${property.title}` : null,
-    shareUrl ? `Link: ${shareUrl}` : null,
+    canonicalUrl ? `Link: ${canonicalUrl}` : shareUrl ? `Link: ${shareUrl}` : null,
   ]
     .filter(Boolean)
     .join("\n");
@@ -318,25 +492,17 @@ export default async function PublicPropertyPage({
       ? `https://wa.me/${whatsappPhone}?text=${encodeURIComponent(whatsappText)}`
       : null;
 
-  const socials = [] as {
-    key: string;
-    label: string;
-    icon: string;
-    url: string;
-  }[];
+  const socials = [] as { key: string; label: string; icon: string; url: string }[];
 
   const priceLabel =
     property.purpose === "rent"
       ? formatBRL(property.rent_price)
       : formatBRL(property.price ?? property.sale_value);
 
-  const locationLabel = [property.neighborhood, property.city]
-    .filter(Boolean)
-    .join(", ");
+  const locationLabel = [property.neighborhood, property.city].filter(Boolean).join(", ");
 
   const isHouseLike =
-    Number(property.land_area_m2 ?? 0) > 0 ||
-    Number(property.built_area_m2 ?? 0) > 0;
+    Number(property.land_area_m2 ?? 0) > 0 || Number(property.built_area_m2 ?? 0) > 0;
 
   const areaMain = isHouseLike
     ? property.built_area_m2 ?? property.area_m2 ?? null
@@ -344,23 +510,77 @@ export default async function PublicPropertyPage({
 
   const areaLand = isHouseLike ? property.land_area_m2 ?? null : null;
 
+  const priceNumber =
+    property.purpose === "rent"
+      ? typeof property.rent_price === "number"
+        ? property.rent_price
+        : null
+      : typeof property.price === "number"
+      ? property.price
+      : null;
+
+  // ✅ JSON-LD
+  const jsonLd: any = {
+    "@context": "https://schema.org",
+    "@type": "RealEstateListing",
+    "@id": canonicalUrl || undefined,
+    name: property.title || "Imóvel",
+    description: property.description || undefined,
+    url: canonicalUrl || undefined,
+    datePosted: property.created_at || undefined,
+    image: coverSignedUrl ? [coverSignedUrl] : undefined,
+    offers: priceNumber
+      ? {
+          "@type": "Offer",
+          price: String(priceNumber),
+          priceCurrency: "BRL",
+          availability: "https://schema.org/InStock",
+        }
+      : undefined,
+    address:
+      property.city || property.neighborhood
+        ? {
+            "@type": "PostalAddress",
+            addressLocality: property.city || undefined,
+            addressNeighborhood: property.neighborhood || undefined,
+            addressCountry: "BR",
+          }
+        : undefined,
+  };
+
   return (
     <>
-    <div className="pv-hero pv-hero-full">
-  <div className="pv-hero-card">
-    {heroBgUrl ? (
-      <>
-        <div
-          aria-hidden
-          className="pv-hero-card-bg"
-          style={{ backgroundImage: `url(${heroBgUrl})` }}
+      {canonicalUrl ? (
+        <script
+          type="application/ld+json"
+          // eslint-disable-next-line react/no-danger
+          dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
         />
-        <div aria-hidden className="pv-hero-card-overlay" />
-      </>
-    ) : null}
+      ) : null}
 
-    <div className="pv-hero-inner" style={{ position: "relative", zIndex: 2 }}>
-      <div className="pv-hero-left" style={{ minWidth: 0 }}>
+      <style>{`
+        .pv-actions-legacy a[href="#pv-map"]{ display:none !important; }
+      `}</style>
+
+   {/* HERO (foto + degradê + conteúdo por cima) */}
+<HeroBackgroundGalleryClient
+  items={mediaItems}
+  title={property.title || "Imóvel"}
+  heroMinHeight={560}
+  leftContent={
+    <div
+      className="pv-hero-left"
+      style={{
+        minWidth: 0,
+        height: "100%",
+        display: "flex",
+        flexDirection: "column",
+      }}
+    >
+      {/* =========================
+          TOPO (título + pills)
+      ========================== */}
+      <div className="pv-hero-left-top" style={{ minWidth: 0 }}>
         <div style={{ opacity: 0.9, fontSize: 13 }}>
           Início · {property.city || "—"} · {property.neighborhood || "—"}
         </div>
@@ -378,20 +598,34 @@ export default async function PublicPropertyPage({
             {property.property_category_name || "Categoria"}
           </span>
         </div>
+      </div>
 
-        <div style={{ marginTop: 12, opacity: 0.95 }}>
+      {/* =========================
+          MEIO (local + preço + métricas)
+          ✅ trava no “meio da tela”
+      ========================== */}
+      <div
+        className="pv-hero-left-mid"
+        style={{
+          minWidth: 0,
+          marginTop: 14,
+          // 🔒 nunca passa do meio no desktop
+          maxWidth: "min(520px, 50vw)",
+        }}
+      >
+        <div style={{ opacity: 0.95 }}>
           <div style={{ fontSize: 14 }}>
             {locationLabel || "Localização não informada"}
           </div>
 
           {priceLabel ? (
-            <div style={{ fontSize: 26, fontWeight: 900, marginTop: 6 }}>
+            <div style={{ fontSize: 30, fontWeight: 900, marginTop: 6, lineHeight: 1.1 }}>
               {priceLabel}
               <span
                 style={{
                   fontSize: 13,
-                  fontWeight: 700,
-                  opacity: 0.7,
+                  fontWeight: 800,
+                  opacity: 0.82,
                   marginLeft: 8,
                 }}
               >
@@ -401,117 +635,116 @@ export default async function PublicPropertyPage({
           ) : null}
         </div>
 
-        <div className="pv-metrics-row" style={{ marginTop: 18 }}>
+        {/* MÉTRICAS (wrap + limite no meio) */}
+        <div
+          className="pv-metrics-row"
+          style={{
+            marginTop: 16,
+            // ✅ trava: não deixa as pills “forçarem” largura
+            maxWidth: "100%",
+            display: "flex",
+            flexWrap: "wrap",
+            gap: 8,
+          }}
+        >
           {areaMain ? (
-            <div className="pv-metric">
-              <span className="pv-metric-ico">
-                <Icon name="straighten" size={18} />
-              </span>
-              <span>
-                <strong>{Number(areaMain)}</strong> m²
-                <span style={{ opacity: 0.7, marginLeft: 6 }}>
-                  {isHouseLike ? "construída" : ""}
-                </span>
-              </span>
-            </div>
+            <Metric
+              icon="straighten"
+              value={Number(areaMain)}
+              unit="m²"
+              suffix={isHouseLike ? "construída" : ""}
+            />
           ) : null}
 
           {areaLand ? (
-            <div className="pv-metric">
-              <span className="pv-metric-ico">
-                <Icon name="foundation" size={18} />
-              </span>
-              <span>
-                <strong>{Number(areaLand)}</strong> m²{" "}
-                <span style={{ opacity: 0.7 }}>terreno</span>
-              </span>
-            </div>
+            <Metric icon="foundation" value={Number(areaLand)} unit="m²" suffix="terreno" />
           ) : null}
 
           {property.bedrooms ? (
-            <div className="pv-metric">
-              <span className="pv-metric-ico">
-                <Icon name="bed" size={18} />
-              </span>
-              <span>
-                <strong>{property.bedrooms}</strong>{" "}
-                quarto{property.bedrooms > 1 ? "s" : ""}
-              </span>
-            </div>
+            <Metric
+              icon="bed"
+              value={property.bedrooms}
+              suffix={`quarto${property.bedrooms > 1 ? "s" : ""}`}
+            />
           ) : null}
 
           {property.suites ? (
-            <div className="pv-metric">
-              <span className="pv-metric-ico">
-                <Icon name="king_bed" size={18} />
-              </span>
-              <span>
-                <strong>{property.suites}</strong>{" "}
-                suíte{property.suites > 1 ? "s" : ""}
-              </span>
-            </div>
+            <Metric
+              icon="king_bed"
+              value={property.suites}
+              suffix={`suíte${property.suites > 1 ? "s" : ""}`}
+            />
           ) : null}
 
           {property.bathrooms ? (
-            <div className="pv-metric">
-              <span className="pv-metric-ico">
-                <Icon name="bathtub" size={18} />
-              </span>
-              <span>
-                <strong>{property.bathrooms}</strong>{" "}
-                banheiro{property.bathrooms > 1 ? "s" : ""}
-              </span>
-            </div>
+            <Metric
+              icon="bathtub"
+              value={property.bathrooms}
+              suffix={`banheiro${property.bathrooms > 1 ? "s" : ""}`}
+            />
           ) : null}
 
           {property.parking ? (
-            <div className="pv-metric">
-              <span className="pv-metric-ico">
-                <Icon name="directions_car" size={18} />
-              </span>
-              <span>
-                <strong>{property.parking}</strong>{" "}
-                vaga{property.parking > 1 ? "s" : ""}
-              </span>
-            </div>
+            <Metric
+              icon="directions_car"
+              value={property.parking}
+              suffix={`vaga${property.parking > 1 ? "s" : ""}`}
+            />
           ) : null}
         </div>
-
-        <div style={{ marginTop: 18, display: "flex", gap: 14, flexWrap: "wrap" }}>
-          <ListingActionsClient propertyId={String(property.id)} shareUrl={shareUrl} />
-
-          <a
-            href="#pv-map"
-            style={{
-              textDecoration: "none",
-              display: "inline-flex",
-              alignItems: "center",
-              gap: 8,
-              padding: "10px 14px",
-              borderRadius: 999,
-              background: "rgba(255,255,255,.14)",
-              border: "1px solid rgba(255,255,255,.20)",
-              color: "white",
-              fontWeight: 800,
-              fontSize: 13,
-              backdropFilter: "blur(10px)",
-            }}
-          >
-            <Icon name="location_on" size={18} /> Ver no mapa
-          </a>
-        </div>
       </div>
 
-      <div className="pv-hero-right">
-        <div className="pv-hero-media">
-          <PropertyGallery items={mediaItems} title={property.title || "Imóvel"} />
+      {/* =========================
+          ESPAÇADOR (empurra ações para o rodapé do hero)
+      ========================== */}
+      <div style={{ flex: 1 }} />
+
+      {/* =========================
+          RODAPÉ (ações no fundo)
+      ========================== */}
+      <div className="pv-hero-left-bottom" style={{ display: "flex", gap: 14, flexWrap: "wrap" }}>
+        <div className="pv-actions-legacy">
+          <ListingActionsClient
+            propertyId={String(property.id)}
+            shareUrl={canonicalUrl || shareUrl}
+          />
         </div>
+
+        <a
+          href="#pv-map"
+          style={{
+            textDecoration: "none",
+            display: "inline-flex",
+            alignItems: "center",
+            gap: 8,
+            padding: "10px 14px",
+            borderRadius: 999,
+            background: "rgba(255,255,255,.14)",
+            border: "1px solid rgba(255,255,255,.20)",
+            color: "white",
+            fontWeight: 800,
+            fontSize: 13,
+            backdropFilter: "blur(10px)",
+            WebkitBackdropFilter: "blur(10px)",
+          }}
+        >
+          <Icon name="location_on" size={18} /> Ver no mapa
+        </a>
       </div>
+
+      {/* ✅ Mobile: permite usar 100% da largura (sem cortar) */}
+      <style>{`
+        @media (max-width: 980px){
+          .pv-hero-left-mid{ max-width: 100% !important; }
+        }
+      `}</style>
     </div>
-  </div>
-</div>
+  }
+/>
 
 
+
+      {/* CONTEÚDO */}
       <div className="pv-content">
         <div
           style={{
@@ -529,9 +762,7 @@ export default async function PublicPropertyPage({
               <h3 style={{ margin: "0 0 10px 0", fontSize: 18 }}>Itens disponíveis</h3>
 
               {availableFeatures.length === 0 ? (
-                <p style={{ opacity: 0.7, margin: 0 }}>
-                  Informações principais não disponíveis.
-                </p>
+                <p style={{ opacity: 0.7, margin: 0 }}>Informações principais não disponíveis.</p>
               ) : (
                 <ul
                   className="pv-checklist"
@@ -574,8 +805,7 @@ export default async function PublicPropertyPage({
                   marginTop: 14,
                   borderRadius: 16,
                   border: "1px solid rgba(23,26,33,0.1)",
-                  background:
-                    "linear-gradient(180deg, rgba(23,26,33,0.04), rgba(23,26,33,0.02))",
+                  background: "linear-gradient(180deg, rgba(23,26,33,0.04), rgba(23,26,33,0.02))",
                   padding: 12,
                   minHeight: 150,
                   display: "grid",
@@ -587,6 +817,7 @@ export default async function PublicPropertyPage({
                   <Icon name="location_on" size={18} />
                   <strong>Mapa premium em breve</strong>
                 </div>
+
                 <div
                   style={{
                     flex: 1,
@@ -609,9 +840,7 @@ export default async function PublicPropertyPage({
           <div style={{ marginTop: 18 }}>
             <h2 style={{ margin: 0, fontSize: 20, textAlign: "center" }}>Descrição</h2>
             <div style={{ marginTop: 10, opacity: 0.85 }}>
-              <DescriptionToggleClient
-                text={property.description || "Descrição não informada."}
-              />
+              <DescriptionToggleClient text={property.description || "Descrição não informada."} />
             </div>
           </div>
         </div>
