@@ -22,12 +22,26 @@ export default async function PropertyDetailPage({
 
   const supabase = await createClient()
 
+  // ✅ Viewer (server-first): pega user e role/is_active para repassar ao client sem supabase.auth no browser
+  const {
+    data: { user: viewerUser },
+  } = await supabase.auth.getUser()
+
+  const viewerId = viewerUser?.id ?? null
+
+  const viewerProfileRes = viewerId
+    ? await supabase.from('profiles').select('role, is_active').eq('id', viewerId).maybeSingle()
+    : { data: null, error: null }
+
+  const viewerRole = (viewerProfileRes.data as any)?.role ?? null
+  const viewerIsActive = (viewerProfileRes.data as any)?.is_active ?? null
+
   const [propertyRes] = await Promise.all([
     supabase
       .from('properties')
       .select('*, property_categories ( id, name )')
       .eq('id', propertyId)
-      .maybeSingle()
+      .maybeSingle(),
   ])
 
   if (propertyRes.error) {
@@ -58,38 +72,36 @@ export default async function PropertyDetailPage({
 
   const [ownerProfileRes, createdByProfileRes, ownerPersonRes, categoriesRes, features] =
     await Promise.all([
-    ownerUserId
-      ? supabase
-          .from('profiles')
-          .select('id, full_name, email')
-          .eq('id', ownerUserId)
-          .maybeSingle()
-      : Promise.resolve({ data: null, error: null }),
-    createdById
-      ? supabase
-          .from('profiles')
-          .select('id, full_name, email')
-          .eq('id', createdById)
-          .maybeSingle()
-      : Promise.resolve({ data: null, error: null }),
-    ownerClientId
-      ? supabase
-          .from('people')
-          .select('id, full_name, email, phone_e164, document_id')
-          .eq('id', ownerClientId)
-          .maybeSingle()
-      : Promise.resolve({ data: null, error: null }),
-    supabase
-      .from('property_categories')
-      .select('id, name')
-      .eq('is_active', true)
-      .order('position', { ascending: true }),
-    getPropertyFeaturesData(propertyId),
-  ])
+      ownerUserId
+        ? supabase
+            .from('profiles')
+            .select('id, full_name, email')
+            .eq('id', ownerUserId)
+            .maybeSingle()
+        : Promise.resolve({ data: null, error: null }),
+      createdById
+        ? supabase
+            .from('profiles')
+            .select('id, full_name, email')
+            .eq('id', createdById)
+            .maybeSingle()
+        : Promise.resolve({ data: null, error: null }),
+      ownerClientId
+        ? supabase
+            .from('people')
+            .select('id, full_name, email, phone_e164, document_id')
+            .eq('id', ownerClientId)
+            .maybeSingle()
+        : Promise.resolve({ data: null, error: null }),
+      supabase
+        .from('property_categories')
+        .select('id, name')
+        .eq('is_active', true)
+        .order('position', { ascending: true }),
+      getPropertyFeaturesData(propertyId),
+    ])
 
-  const property_category_name = getCategoryName(
-    (property as any)?.property_categories as CategoryRel
-  )
+  const property_category_name = getCategoryName((property as any)?.property_categories as CategoryRel)
 
   const owner = ownerProfileRes.data
   const ownerLabel = owner?.full_name || owner?.email || (owner?.id ? owner.id.slice(0, 8) : '—')
@@ -106,10 +118,7 @@ export default async function PropertyDetailPage({
     owner_person: ownerPersonRes.data ?? null,
   }
 
-  const normalizedFeatures = normalizePropertyFeatures(
-    features?.catalog ?? [],
-    features?.values ?? []
-  )
+  const normalizedFeatures = normalizePropertyFeatures(features?.catalog ?? [], features?.values ?? [])
 
   const featuresCatalog = (normalizedFeatures.catalog ?? []).filter((feature) => {
     const key = feature?.key
@@ -157,6 +166,9 @@ export default async function PropertyDetailPage({
           featuresCatalog={featuresCatalog}
           featureValues={normalizedFeatures.values ?? []}
           featureAliasesToClear={normalizedFeatures.aliasesToClear}
+          // ✅ novas props: usadas para PublishPanel sem auth no client
+          viewerRole={viewerRole}
+          viewerIsActive={viewerIsActive}
         />
       </div>
     </main>

@@ -8,6 +8,7 @@ import { requireActiveUser } from '@/lib/auth'
 export interface PublishResult {
   success: boolean
   error?: string
+
 }
 
 export async function publishProperty(propertyId: string): Promise<PublishResult> {
@@ -42,7 +43,7 @@ export async function publishProperty(propertyId: string): Promise<PublishResult
     return {
       success: false,
       error:
-        'Para publicar o imóvel, anexe e valide o Termo de Autorização do proprietário em “Imóveis → Documentos”.'
+        'Para publicar o imóvel, anexe e valide o Termo de Autorização do proprietário em “Imóveis → Documentos”.',
     }
   }
 
@@ -54,7 +55,7 @@ export async function publishProperty(propertyId: string): Promise<PublishResult
   if (updateError) {
     return {
       success: false,
-      error: `Erro ao publicar imóvel: ${updateError.message}`
+      error: `Erro ao publicar imóvel: ${updateError.message}`,
     }
   }
 
@@ -98,7 +99,7 @@ export async function unpublishProperty(propertyId: string): Promise<PublishResu
   if (updateError) {
     return {
       success: false,
-      error: `Erro ao despublicar imóvel: ${updateError.message}`
+     error: `Erro ao despublicar imóvel: ${updateError.message}`,
     }
   }
 
@@ -170,6 +171,44 @@ export async function updatePropertyFeatures(
   await requireActiveUser()
 
   const supabase = await createClient()
+
+  // 🔐 Permissão: apenas owner do imóvel OU admin/gestor
+  const { data: userRes, error: authError } = await supabase.auth.getUser()
+  if (authError || !userRes?.user) {
+    return { success: false, error: 'Não autenticado.' }
+  }
+  const userId = userRes.user.id
+
+  const { data: property, error: propertyError } = await supabase
+    .from('properties')
+    .select('owner_user_id')
+    .eq('id', propertyId)
+    .maybeSingle()
+
+  if (propertyError || !property) {
+    return { success: false, error: 'Imóvel não encontrado.' }
+  }
+
+  const { data: profile, error: profileError } = await supabase
+    .from('profiles')
+    .select('role, is_active')
+    .eq('id', userId)
+    .maybeSingle()
+
+  if (profileError || !profile?.is_active) {
+    return { success: false, error: 'Perfil inválido ou inativo.' }
+  }
+
+  const isAdmin = profile.role === 'admin'
+  const isGestor = profile.role === 'gestor'
+  const isOwner = property.owner_user_id === userId
+
+  if (!isAdmin && !isGestor && !isOwner) {
+    return {
+      success: false,
+      error: 'Você não tem permissão para editar as características deste imóvel.',
+    }
+  }
 
   const tasks = items.map((item) => {
     const featureId = item.feature_id
@@ -328,14 +367,14 @@ export async function updatePropertyAction(
   if (fetchError) {
     return {
       success: false,
-      error: `Erro ao verificar permissões: ${fetchError.message}`
+      error: `Erro ao verificar permissões: ${fetchError.message}`,
     }
   }
 
   if (!property) {
     return {
       success: false,
-      error: 'Imóvel não encontrado'
+      error: 'Imóvel não encontrado',
     }
   }
 
@@ -349,7 +388,7 @@ export async function updatePropertyAction(
   if (profileError) {
     return {
       success: false,
-      error: `Erro ao verificar perfil: ${profileError.message}`
+      error: `Erro ao verificar perfil: ${profileError.message}`,
     }
   }
 
@@ -360,7 +399,7 @@ export async function updatePropertyAction(
   if (!isAdmin && !isGestor && !isOwner) {
     return {
       success: false,
-      error: 'Você não tem permissão para editar este imóvel'
+      error: 'Você não tem permissão para editar este imóvel',
     }
   }
 
@@ -371,9 +410,7 @@ export async function updatePropertyAction(
 
     // ✅ novo campo
     property_category_id:
-      typeof data.property_category_id === 'undefined'
-        ? undefined
-        : data.property_category_id,
+      typeof data.property_category_id === 'undefined' ? undefined : data.property_category_id,
 
     city: typeof data.city === 'undefined' ? undefined : data.city,
     neighborhood: typeof data.neighborhood === 'undefined' ? undefined : data.neighborhood,
@@ -394,15 +431,12 @@ export async function updatePropertyAction(
     if (typeof patch[k] === 'undefined') delete patch[k]
   }
 
-  const { error: updateError } = await supabase
-    .from('properties')
-    .update(patch)
-    .eq('id', propertyId)
+  const { error: updateError } = await supabase.from('properties').update(patch).eq('id', propertyId)
 
   if (updateError) {
     return {
       success: false,
-      error: `Erro ao atualizar imóvel: ${updateError.message}`
+      error: `Erro ao atualizar imóvel: ${updateError.message}`,
     }
   }
 
@@ -528,9 +562,7 @@ export type PersonSearchRow = {
   kind_tags?: string[] | null
 }
 
-export type SearchPeopleResult =
-  | { ok: true; data: PersonSearchRow[] }
-  | { ok: false; error: string }
+export type SearchPeopleResult = { ok: true; data: PersonSearchRow[] } | { ok: false; error: string }
 
 export async function searchPeople(query: string): Promise<SearchPeopleResult> {
   try {
@@ -547,9 +579,7 @@ export async function searchPeople(query: string): Promise<SearchPeopleResult> {
       .limit(50)
 
     const { data, error } = term
-      ? await baseQuery.or(
-          `full_name.ilike.%${term}%,email.ilike.%${term}%,document_id.ilike.%${term}%`
-        )
+      ? await baseQuery.or(`full_name.ilike.%${term}%,email.ilike.%${term}%,document_id.ilike.%${term}%`)
       : await baseQuery
 
     if (error) {
@@ -580,7 +610,7 @@ export async function addPropertyMedia(propertyId: string, payload: AddPropertyM
     property_id: propertyId,
     url: payload.url,
     kind: payload.kind,
-    position: payload.position ?? null
+    position: payload.position ?? null,
   })
 
   if (error) {
@@ -616,15 +646,386 @@ export async function getPropertyLeads(propertyId: string) {
 
   const supabase = await createClient()
 
-  const { data, error } = await supabase
+  // 1) Leads do imóvel
+  const { data: leads, error: leadsError } = await supabase
     .from('leads')
     .select('id, title, status, value_estimate, created_at, stage_id, person_id, name, phone_e164, email')
     .eq('property_id', propertyId)
     .order('created_at', { ascending: false })
 
-  if (error) {
-    throw new Error(error.message || 'Erro ao carregar negociações.')
+  if (leadsError) {
+    throw new Error(leadsError.message || 'Erro ao carregar negociações.')
   }
 
-  return data ?? []
+  const leadIds = (leads ?? []).map((l: any) => l.id).filter(Boolean)
+  if (leadIds.length === 0) return leads ?? []
+
+  // 2) Mapear property_negotiations (negociação real) para cada lead
+  // Assumindo coluna padrão: property_negotiations.lead_id
+  const { data: negs, error: negError } = await supabase
+    .from('property_negotiations')
+    .select('id, lead_id')
+    .eq('property_id', propertyId)
+    .in('lead_id', leadIds)
+
+  if (negError) {
+    throw new Error(negError.message || 'Erro ao mapear negociações do imóvel.')
+  }
+
+  const map = new Map<string, string>()
+  ;(negs ?? []).forEach((n: any) => {
+    if (n?.lead_id && n?.id) map.set(n.lead_id, n.id)
+  })
+
+  // 3) Retornar leads + property_negotiation_id
+  return (leads ?? []).map((l: any) => ({
+    ...l,
+    property_negotiation_id: map.get(l.id) ?? null,
+  }))
+}
+
+export async function updatePropertyDealStatus(
+  propertyId: string,
+  next: 'reserved' | 'sold' | null
+): Promise<{ success: boolean; error?: string }> {
+  await requireActiveUser()
+  const supabase = await createClient()
+
+  const { data: userRes, error: authError } = await supabase.auth.getUser()
+  if (authError || !userRes?.user) return { success: false, error: 'Não autenticado' }
+  const userId = userRes.user.id
+
+  const { data: prop, error: propErr } = await supabase
+    .from('properties')
+    .select('id, owner_user_id, property_category_id')
+    .eq('id', propertyId)
+    .maybeSingle()
+
+  if (propErr) return { success: false, error: propErr.message }
+  if (!prop) return { success: false, error: 'Imóvel não encontrado' }
+
+  const { data: profile, error: profErr } = await supabase
+    .from('profiles')
+    .select('role, is_active')
+    .eq('id', userId)
+    .maybeSingle()
+
+  if (profErr) return { success: false, error: profErr.message }
+
+  const isAdmin = profile?.role === 'admin' && profile?.is_active
+  const isGestor = profile?.role === 'gestor' && profile?.is_active
+  const isOwner = prop.owner_user_id === userId
+
+  if (!isAdmin && !isGestor && !isOwner) {
+    return { success: false, error: 'Sem permissão: apenas responsável/admin/gestor.' }
+  }
+
+  const patch: any = {
+    deal_status: next,
+    deal_marked_at: next ? new Date().toISOString() : null,
+    deal_visible_until: null,
+  }
+
+  // regra: "sold" fica 7 dias visível
+  if (next === 'sold') {
+    const d = new Date()
+    d.setDate(d.getDate() + 7)
+    patch.deal_visible_until = d.toISOString()
+  }
+
+  const { error: upErr } = await supabase.from('properties').update(patch).eq('id', propertyId)
+  if (upErr) return { success: false, error: upErr.message }
+
+  revalidatePath(`/properties/${propertyId}`)
+  revalidatePath('/properties')
+  return { success: true }
+}
+
+export async function createLeadQuickProposal(
+  propertyId: string,
+  payload: {
+    title?: string | null
+    name?: string | null
+    email?: string | null
+    phone_e164?: string | null
+    value_estimate?: number | null
+  }
+): Promise<{ success: boolean; error?: string; lead?: any }> {
+  await requireActiveUser()
+  const supabase = await createClient()
+
+  // garante user
+  const { data: userRes, error: authError } = await supabase.auth.getUser()
+  if (authError || !userRes?.user) return { success: false, error: 'Não autenticado' }
+  const userId = userRes.user.id
+
+  const insertRow: any = {
+    property_id: propertyId,
+    title: payload.title ?? 'Proposta',
+    status: 'proposta',
+    value_estimate: payload.value_estimate ?? null,
+    name: payload.name ?? null,
+    phone_e164: payload.phone_e164 ?? null,
+    email: payload.email ?? null,
+  }
+
+  // 1) cria lead
+  const { data: lead, error: leadErr } = await supabase.from('leads').insert(insertRow).select('*').single()
+  if (leadErr) return { success: false, error: leadErr.message }
+
+  // 2) cria negociação (property_negotiations) vinculada ao lead
+  // Campos mínimos: property_id + lead_id (owner_user_id pode existir no schema; tentamos setar)
+  const negotiationInsert: any = {
+    property_id: propertyId,
+    lead_id: lead.id,
+    owner_user_id: userId, // se a coluna existir, ótimo; se não existir, veremos erro e ajustamos rápido
+  }
+
+  const { data: negotiation, error: negErr } = await supabase
+    .from('property_negotiations')
+    .insert(negotiationInsert)
+    .select('id')
+    .single()
+
+  if (negErr) {
+    // fallback: tenta sem owner_user_id (caso a coluna não exista)
+    const { data: negotiation2, error: negErr2 } = await supabase
+      .from('property_negotiations')
+      .insert({ property_id: propertyId, lead_id: lead.id })
+      .select('id')
+      .single()
+
+    if (negErr2) return { success: false, error: negErr2.message }
+    revalidatePath(`/properties/${propertyId}`)
+    revalidatePath('/leads')
+    return { success: true, lead: { ...lead, property_negotiation_id: negotiation2?.id ?? null } }
+  }
+
+  revalidatePath(`/properties/${propertyId}`)
+  revalidatePath('/leads')
+
+  return { success: true, lead: { ...lead, property_negotiation_id: negotiation?.id ?? null } }
+}
+export async function createPersonQuickNegotiation(
+  propertyId: string,
+  payload: {
+    full_name?: string | null
+    email?: string | null
+    phone_e164?: string | null
+    value_estimate?: number | null
+    title?: string | null
+  }
+): Promise<{ success: boolean; error?: string; person?: any; negotiation?: any }> {
+  await requireActiveUser()
+  const supabase = await createClient()
+
+  const { data: userRes, error: authError } = await supabase.auth.getUser()
+  if (authError || !userRes?.user) return { success: false, error: 'Não autenticado' }
+  const userId = userRes.user.id
+
+  const full_name = payload.full_name?.trim() || null
+  const email = payload.email?.trim() || null
+  const phone_e164 = payload.phone_e164?.trim() || null
+
+  // 1) Resolver Pessoa (buscar por email/telefone dentro do owner)
+  let personId: string | null = null
+
+  if (email || phone_e164) {
+    const base = supabase
+      .from('people')
+      .select('id, full_name, email, phone_e164')
+      .eq('owner_user_id', userId)
+      .limit(1)
+
+    const { data: existing, error: findErr } = email
+      ? await base.eq('email', email).maybeSingle()
+      : await base.eq('phone_e164', phone_e164).maybeSingle()
+
+    if (findErr) return { success: false, error: findErr.message }
+    if (existing?.id) personId = existing.id
+  }
+
+  // 2) Criar Pessoa se não existir
+  let personRow: any = null
+  if (!personId) {
+    const insertPerson: any = {
+      owner_user_id: userId,
+      full_name,
+      email,
+      phone_e164,
+    }
+
+    Object.keys(insertPerson).forEach((k) => {
+      if (insertPerson[k] === null || typeof insertPerson[k] === 'undefined') delete insertPerson[k]
+    })
+
+    const { data: created, error: personErr } = await supabase
+      .from('people')
+      .insert(insertPerson)
+      .select('*')
+      .single()
+
+    if (personErr) return { success: false, error: personErr.message }
+    personId = created.id
+    personRow = created
+  } else {
+    const { data: loaded, error: loadErr } = await supabase
+      .from('people')
+      .select('*')
+      .eq('id', personId)
+      .single()
+    if (loadErr) return { success: false, error: loadErr.message }
+    personRow = loaded
+  }
+
+  // 3) Criar negociação (property_negotiations) vinculando Pessoa
+  const negotiationInsert: any = {
+    property_id: propertyId,
+    person_id: personId,
+    owner_user_id: userId, // se a coluna existir ok; se não existir, veremos erro e ajustamos
+  }
+
+  const { data: negotiation, error: negErr } = await supabase
+    .from('property_negotiations')
+    .insert(negotiationInsert)
+    .select('*')
+    .single()
+
+  if (negErr) {
+    // fallback caso property_negotiations não tenha owner_user_id
+    const { data: negotiation2, error: negErr2 } = await supabase
+      .from('property_negotiations')
+      .insert({ property_id: propertyId, person_id: personId })
+      .select('*')
+      .single()
+
+    if (negErr2) return { success: false, error: negErr2.message }
+
+    revalidatePath(`/properties/${propertyId}`)
+    revalidatePath('/people')
+
+    return { success: true, person: personRow, negotiation: negotiation2 }
+  }
+
+  revalidatePath(`/properties/${propertyId}`)
+  revalidatePath('/people')
+
+  return { success: true, person: personRow, negotiation }
+}
+
+export async function createPropertyNegotiation(
+  propertyId: string,
+  personId: string
+): Promise<{ success: boolean; error?: string; negotiation?: any }> {
+  await requireActiveUser()
+
+  if (!propertyId || !personId) {
+    return { success: false, error: 'Dados inválidos para criar a negociação.' }
+  }
+
+  const supabase = await createClient()
+
+  const { data: userRes, error: authError } = await supabase.auth.getUser()
+  if (authError || !userRes?.user) return { success: false, error: 'Não autenticado' }
+  const userId = userRes.user.id
+
+  const insertRow: any = {
+    property_id: propertyId,
+    person_id: personId,
+    status: 'aberto',
+    created_by_profile_id: userId,
+  }
+
+  Object.keys(insertRow).forEach((k) => {
+    if (insertRow[k] === null || typeof insertRow[k] === 'undefined') delete insertRow[k]
+  })
+
+  const { data: negotiation, error } = await supabase
+    .from('property_negotiations')
+    .insert(insertRow)
+    .select('*')
+    .single()
+
+  if (error) return { success: false, error: error.message }
+
+  revalidatePath(`/properties/${propertyId}`)
+
+  return { success: true, negotiation }
+}
+export type PropertyNegotiationRow = {
+  id: string
+  property_id: string
+  person_id: string | null
+  lead_id: string | null
+  status: string | null
+  created_at: string | null
+  updated_at: string | null
+  person: {
+    id: string
+    full_name: string | null
+    email: string | null
+    phone_e164: string | null
+  } | null
+}
+
+export async function getPropertyNegotiations(propertyId: string): Promise<PropertyNegotiationRow[]> {
+  await requireActiveUser()
+
+  if (!propertyId) throw new Error('Imóvel inválido.')
+
+  const supabase = await createClient()
+
+  const { data, error } = await supabase
+    .from('property_negotiations')
+    .select(
+      `
+      id,
+      property_id,
+      person_id,
+      lead_id,
+      status,
+      created_at,
+      updated_at,
+      person:people (
+        id,
+        full_name,
+        email,
+        phone_e164
+      )
+    `
+    )
+    .eq('property_id', propertyId)
+    .order('created_at', { ascending: false })
+
+  if (error) throw new Error(error.message || 'Erro ao carregar negociações.')
+
+  // ⚠️ PostgREST às vezes retorna relação como array.
+  // Aqui normalizamos pra SEMPRE ser objeto ou null.
+  const rows = (data ?? []) as any[]
+
+  return rows.map((r) => {
+    const rawPerson = r.person
+    const person =
+      Array.isArray(rawPerson)
+        ? rawPerson[0] ?? null
+        : rawPerson ?? null
+
+    return {
+      id: r.id,
+      property_id: r.property_id,
+      person_id: r.person_id ?? null,
+      lead_id: r.lead_id ?? null,
+      status: r.status ?? null,
+      created_at: r.created_at ?? null,
+      updated_at: r.updated_at ?? null,
+      person: person
+        ? {
+            id: person.id,
+            full_name: person.full_name ?? null,
+            email: person.email ?? null,
+            phone_e164: person.phone_e164 ?? null,
+          }
+        : null,
+    } satisfies PropertyNegotiationRow
+  })
 }

@@ -56,7 +56,13 @@ const THEME_DEFAULTS: Record<string, string> = {
   '--sidebar-bg': 'rgba(10,12,16,0.70)',
   '--sidebar-muted': 'rgba(255,255,255,0.80)',
   '--sidebar-hover': 'rgba(255,255,255,0.10)',
+
+  // Ativo (CRM padrão)
   '--sidebar-active': 'rgba(255,104,31,0.85)',
+
+  // Ativo (ERP cobalt) + "current" (não sobrescreve tema salvo)
+  '--sidebar-active-erp': 'rgba(59,130,246,0.85)',
+  '--sidebar-active-current': 'rgba(255,104,31,0.85)',
 
   // Topbar (CRM)
   '--topbar-bg': 'rgba(255,255,255,0.82)',
@@ -74,7 +80,10 @@ const THEME_SPECS: ThemeVarSpec[] = [
   { label: 'Sidebar: Fundo', cssVar: '--sidebar-bg', kind: 'bg', allowAlpha: true, hint: 'Painel lateral (menu).' },
   { label: 'Sidebar: Texto (labels)', cssVar: '--sidebar-muted', kind: 'text', allowAlpha: true, hint: 'Se sumir texto, ajuste aqui.' },
   { label: 'Sidebar: Hover', cssVar: '--sidebar-hover', kind: 'bg', allowAlpha: true },
-  { label: 'Sidebar: Ativo', cssVar: '--sidebar-active', kind: 'button', allowAlpha: true, hint: 'Item selecionado (ativo).' },
+
+  // Mantém o padrão já existente; o "current" alterna automaticamente (CRM x ERP).
+  { label: 'Sidebar: Ativo (CRM)', cssVar: '--sidebar-active', kind: 'button', allowAlpha: true, hint: 'Item ativo no CRM.' },
+  { label: 'Sidebar: Ativo (ERP cobalt)', cssVar: '--sidebar-active-erp', kind: 'button', allowAlpha: true, hint: 'Item ativo no ERP.' },
 
   { label: 'Topbar do CRM (fundo)', cssVar: '--topbar-bg', kind: 'bg', allowAlpha: true },
 ]
@@ -204,8 +213,12 @@ function ThemeEditorPanel({
       >
         <div className="px-4 py-3 border-b border-white/10 flex items-center justify-between">
           <div className="flex flex-col">
-            <span className="text-sm font-semibold">Editor de Cores (Tema)</span>
-            <span className="text-xs text-white/70">Ajuste ao vivo • Salva no navegador</span>
+            <span className="text-sm font-semibold">
+              <span>Editor de Cores (Tema)</span>
+            </span>
+            <span className="text-xs text-white/70">
+              <span>Ajuste ao vivo • Salva no navegador</span>
+            </span>
           </div>
 
           <div className="flex items-center gap-2">
@@ -214,7 +227,7 @@ function ThemeEditorPanel({
               onClick={handleReset}
               className="px-3 py-1.5 text-xs font-semibold rounded-full bg-white/10 hover:bg-white/15 border border-white/10"
             >
-              Reset
+              <span>Reset</span>
             </button>
             <button
               type="button"
@@ -222,7 +235,7 @@ function ThemeEditorPanel({
               className="w-8 h-8 grid place-items-center rounded-full bg-white/10 hover:bg-white/15 border border-white/10"
               aria-label="Fechar"
             >
-              ✕
+              <span>✕</span>
             </button>
           </div>
         </div>
@@ -237,7 +250,9 @@ function ThemeEditorPanel({
               <div key={spec.cssVar} className="rounded-xl border border-white/10 bg-white/5 p-3">
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
-                    <div className="text-sm font-semibold">{spec.label}</div>
+                    <div className="text-sm font-semibold">
+                      <span>{spec.label}</span>
+                    </div>
                     <div className="text-[11px] text-white/70 mt-0.5">
                       <span className="font-mono">{spec.cssVar}</span>
                       {spec.hint ? <span className="text-white/60"> • {spec.hint}</span> : null}
@@ -289,7 +304,9 @@ function ThemeEditorPanel({
                 ) : null}
 
                 <div className="mt-2 text-[11px] text-white/70">
-                  Atual: <span className="font-mono text-white/85">{current || '(vazio)'}</span>
+                  <span>
+                    Atual: <span className="font-mono text-white/85">{current || '(vazio)'}</span>
+                  </span>
                 </div>
               </div>
             )
@@ -297,7 +314,9 @@ function ThemeEditorPanel({
         </div>
 
         <div className="px-4 py-3 border-t border-white/10 text-xs text-white/70">
-          Dica: se “sumirem letras” na sidebar, ajuste <span className="font-mono text-white/85">--sidebar-muted</span>.
+          <span>
+            Dica: se “sumirem letras” na sidebar, ajuste <span className="font-mono text-white/85">--sidebar-muted</span>.
+          </span>
         </div>
       </div>
     </>
@@ -322,6 +341,8 @@ export function AppShell({
   const [themeOpen, setThemeOpen] = useState(false)
 
   const isManager = useMemo(() => userRole === 'admin' || userRole === 'gestor', [userRole])
+  const isBroker = useMemo(() => userRole === 'corretor', [userRole])
+  const isErpMode = useMemo(() => (pathname ? pathname === '/erp' || pathname.startsWith('/erp/') : false), [pathname])
 
   /** Defaults seguros + aplicar overrides salvos */
   useEffect(() => {
@@ -339,13 +360,30 @@ export function AppShell({
     for (const [k, v] of Object.entries(overrides)) applyCssVar(k, v)
   }, [])
 
+  /**
+   * Modo ERP (cobalt): alterna apenas o "active current" sem sobrescrever customizações.
+   * - CRM usa --sidebar-active
+   * - ERP usa --sidebar-active-erp
+   */
+  useEffect(() => {
+    if (typeof document === 'undefined') return
+
+    const overrides = loadThemeOverrides()
+
+    const crmActive = overrides['--sidebar-active'] ?? getCssVar('--sidebar-active') ?? THEME_DEFAULTS['--sidebar-active']
+    const erpActive =
+      overrides['--sidebar-active-erp'] ?? getCssVar('--sidebar-active-erp') ?? THEME_DEFAULTS['--sidebar-active-erp']
+
+    applyCssVar('--sidebar-active-current', isErpMode ? erpActive : crmActive)
+  }, [isErpMode])
+
   const navItems: NavItem[] = useMemo(() => {
     const items: NavItem[] = [
       {
         href: '/dashboard',
         label: 'Dashboard',
         icon: (
-          <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
             <path
               strokeLinecap="round"
               strokeLinejoin="round"
@@ -356,11 +394,40 @@ export function AppShell({
         ),
       },
 
+      // Atalhos do corretor (perfil financeiro + negociações dele)
+      ...(isBroker
+        ? [
+            {
+              href: '/perfil#financeiro',
+              label: 'Meu Financeiro',
+              icon: (
+                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-10v1m0 9v1m8-5a8 8 0 11-16 0 8 8 0 0116 0z" />
+                </svg>
+              ),
+            },
+            {
+              href: '/leads?scope=mine',
+              label: 'Minhas Negociações',
+              icon: (
+                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h6l4 4v12a2 2 0 01-2 2z"
+                  />
+                </svg>
+              ),
+            },
+          ]
+        : []),
+
       {
         href: '/leads',
         label: 'Leads',
         icon: (
-          <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
             <path
               strokeLinecap="round"
               strokeLinejoin="round"
@@ -374,7 +441,7 @@ export function AppShell({
             href: '/leads',
             label: 'Lista de Leads',
             icon: (
-              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
               </svg>
             ),
@@ -383,7 +450,7 @@ export function AppShell({
             href: '/leads/kanban',
             label: 'Kanban',
             icon: (
-              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
                 <path
                   strokeLinecap="round"
                   strokeLinejoin="round"
@@ -400,7 +467,7 @@ export function AppShell({
         href: '/agenda',
         label: 'Agenda',
         icon: (
-          <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
             <path
               strokeLinecap="round"
               strokeLinejoin="round"
@@ -415,7 +482,7 @@ export function AppShell({
         href: '/pessoas',
         label: 'Pessoas',
         icon: (
-          <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
             <path
               strokeLinecap="round"
               strokeLinejoin="round"
@@ -430,7 +497,7 @@ export function AppShell({
         href: '/groups',
         label: 'Grupos',
         icon: (
-          <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
             <path
               strokeLinecap="round"
               strokeLinejoin="round"
@@ -445,7 +512,7 @@ export function AppShell({
         href: '/properties',
         label: 'Imóveis',
         icon: (
-          <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
             <path
               strokeLinecap="round"
               strokeLinejoin="round"
@@ -459,7 +526,7 @@ export function AppShell({
             href: '/properties',
             label: 'Todos os imóveis',
             icon: (
-              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
                 <path
                   strokeLinecap="round"
                   strokeLinejoin="round"
@@ -473,7 +540,7 @@ export function AppShell({
             href: '/properties/my',
             label: 'Meus imóveis',
             icon: (
-              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
                 <path
                   strokeLinecap="round"
                   strokeLinejoin="round"
@@ -487,7 +554,7 @@ export function AppShell({
             href: '/properties/new',
             label: 'Novo imóvel',
             icon: (
-              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
               </svg>
             ),
@@ -496,7 +563,7 @@ export function AppShell({
             href: '/campaigns',
             label: 'Campanhas',
             icon: (
-              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19V6l12-2v13" />
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 19V8l6-1v12" />
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 19h18" />
@@ -506,11 +573,31 @@ export function AppShell({
         ],
       },
 
+      // ERP (somente admin/gestor)
+      ...(isManager
+        ? [
+            {
+              href: '/erp',
+              label: 'ERP',
+              icon: (
+                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M20 7h-9M20 12h-9M20 17h-9M7 7h.01M7 12h.01M7 17h.01"
+                  />
+                </svg>
+              ),
+            },
+          ]
+        : []),
+
       {
         href: '/settings',
         label: 'Configurações',
         icon: (
-          <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
             <path
               strokeLinecap="round"
               strokeLinejoin="round"
@@ -525,7 +612,7 @@ export function AppShell({
             href: '/settings/users',
             label: 'Usuários',
             icon: (
-              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
                 <path
                   strokeLinecap="round"
                   strokeLinejoin="round"
@@ -539,7 +626,7 @@ export function AppShell({
             href: '/settings/catalogs',
             label: 'Catálogos',
             icon: (
-              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
                 <path
                   strokeLinecap="round"
                   strokeLinejoin="round"
@@ -553,7 +640,7 @@ export function AppShell({
             href: '/settings/automations',
             label: 'Automações',
             icon: (
-              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
               </svg>
             ),
@@ -565,7 +652,7 @@ export function AppShell({
                   href: '/settings/campaigns',
                   label: 'Editor de Campanhas',
                   icon: (
-                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19V6l12-2v13" />
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 19V8l6-1v12" />
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 19h18" />
@@ -579,7 +666,7 @@ export function AppShell({
     ]
 
     return items
-  }, [isManager])
+  }, [isManager, isBroker])
 
   const [settingsOpen, setSettingsOpen] = useState(() => pathname?.startsWith('/settings') || false)
   const [leadsOpen, setLeadsOpen] = useState(() => pathname?.startsWith('/leads') || false)
@@ -607,15 +694,19 @@ export function AppShell({
     else router.push('/leads#new')
   }, [onNewLead, router])
 
-  const topCenterLabel = useMemo(() => pageTitle || 'CRM', [pageTitle])
+  const topCenterLabel = useMemo(() => {
+    if (pageTitle) return pageTitle
+    return isErpMode ? 'ERP' : 'CRM'
+  }, [pageTitle, isErpMode])
+
   const topCenterClass = 'text-xl font-semibold tracking-wide text-[var(--foreground)]'
 
   return (
     <>
       {themeCss}
       <div className="min-h-screen flex bg-[var(--background)] overflow-x-hidden">
-      <aside
-        className={`
+        <aside
+          className={`
           fixed inset-y-0 left-0 z-30 w-64
           bg-[var(--sidebar-bg)]
           transform transition-transform duration-200 ease-in-out
@@ -625,49 +716,48 @@ export function AppShell({
           border-r border-white/10
           backdrop-blur-xl
         `}
-        style={{
-          // fallback caso as vars estejam estranhas
-          background: 'var(--sidebar-bg, rgba(10,12,16,0.70))',
-        }}
-        role="navigation"
-        aria-label="Menu principal"
-      >
-        <div className="h-14 flex items-center px-4 border-b border-white/10">
-          <Link
-            href="/dashboard"
-            className="flex items-center gap-3 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)] rounded-[var(--radius)]"
-            onClick={closeSidebar}
-          >
-            <img src="/brand/logo_oficial.png" alt="Vitrya" className="h-10 w-auto object-contain" loading="eager" />
-          </Link>
-        </div>
+          style={{
+            background: 'var(--sidebar-bg, rgba(10,12,16,0.70))',
+          }}
+          role="navigation"
+          aria-label="Menu principal"
+        >
+          <div className="h-14 flex items-center px-4 border-b border-white/10">
+            <Link
+              href="/dashboard"
+              className="flex items-center gap-3 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)] rounded-[var(--radius)]"
+              onClick={closeSidebar}
+            >
+              <img src="/brand/logo_oficial.png" alt="Vitrya" className="h-10 w-auto object-contain" loading="eager" />
+            </Link>
+          </div>
 
-        <nav className="flex-1 p-3 space-y-1 overflow-y-auto">
-          {navItems.map((item) => {
-            const isActive = pathname === item.href || pathname?.startsWith(item.href + '/')
-            const hasChildren = !!item.children?.length
+          <nav className="flex-1 p-3 space-y-1 overflow-y-auto">
+            {navItems.map((item) => {
+              const isActive = pathname === item.href || pathname?.startsWith(item.href + '/')
+              const hasChildren = !!item.children?.length
 
-            const isParentActive =
-              pathname?.startsWith(item.href + '/') ||
-              pathname === item.href ||
-              (item.href === '/settings' && pathname?.startsWith('/settings')) ||
-              (item.href === '/properties' && (pathname?.startsWith('/properties') || pathname?.startsWith('/campaigns'))) ||
-              (item.href === '/leads' && pathname?.startsWith('/leads'))
+              const isParentActive =
+                pathname?.startsWith(item.href + '/') ||
+                pathname === item.href ||
+                (item.href === '/settings' && pathname?.startsWith('/settings')) ||
+                (item.href === '/properties' && (pathname?.startsWith('/properties') || pathname?.startsWith('/campaigns'))) ||
+                (item.href === '/leads' && pathname?.startsWith('/leads'))
 
-            if (hasChildren) {
-              const isSettings = item.href === '/settings'
-              const isProperties = item.href === '/properties'
-              const isLeads = item.href === '/leads'
+              if (hasChildren) {
+                const isSettings = item.href === '/settings'
+                const isProperties = item.href === '/properties'
+                const isLeads = item.href === '/leads'
 
-              const isOpen = isSettings ? settingsOpen : isProperties ? propertiesOpen : isLeads ? leadsOpen : false
-              const setOpen = isSettings ? setSettingsOpen : isProperties ? setPropertiesOpen : isLeads ? setLeadsOpen : () => {}
+                const isOpen = isSettings ? settingsOpen : isProperties ? propertiesOpen : isLeads ? leadsOpen : false
+                const setOpen = isSettings ? setSettingsOpen : isProperties ? setPropertiesOpen : isLeads ? setLeadsOpen : () => {}
 
-              return (
-                <div key={item.href}>
-                  <button
-                    type="button"
-                    onClick={() => setOpen(!isOpen)}
-                    className={`
+                return (
+                  <div key={item.href}>
+                    <button
+                      type="button"
+                      onClick={() => setOpen(!isOpen)}
+                      className={`
                       w-full flex items-center justify-between gap-3 px-3 py-2.5 rounded-[var(--radius)] text-sm font-medium
                       transition-all duration-150
                       focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)]
@@ -677,240 +767,249 @@ export function AppShell({
                           : 'text-[var(--sidebar-muted)] hover:bg-[var(--sidebar-hover)] hover:text-white'
                       }
                     `}
-                    style={{
-                      color: isParentActive ? 'white' : 'var(--sidebar-muted, rgba(255,255,255,0.80))',
-                    }}
-                    aria-expanded={isOpen}
-                    aria-controls={`submenu-${item.href}`}
-                  >
-                    <span className="flex items-center gap-3">
-                      {item.icon}
-                      {item.label}
-                    </span>
-                    <svg
-                      className={`w-4 h-4 transition-transform duration-200 ${isOpen ? 'rotate-180' : ''}`}
-                      fill="none"
-                      viewBox="0 0 24 24"
-                      stroke="currentColor"
-                      aria-hidden="true"
+                      style={{
+                        color: isParentActive ? 'white' : 'var(--sidebar-muted, rgba(255,255,255,0.80))',
+                      }}
+                      aria-expanded={isOpen}
+                      aria-controls={`submenu-${item.href}`}
                     >
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                    </svg>
-                  </button>
+                      <span className="flex items-center gap-3">
+                        {item.icon}
+                        <span>{item.label}</span>
+                      </span>
+                      <svg
+                        className={`w-4 h-4 transition-transform duration-200 ${isOpen ? 'rotate-180' : ''}`}
+                        fill="none"
+                        viewBox="0 0 24 24"
+                        stroke="currentColor"
+                        aria-hidden="true"
+                      >
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                      </svg>
+                    </button>
 
-                  {isOpen && (
-                    <div id={`submenu-${item.href}`} className="mt-1 ml-4 space-y-1">
-                      {item.children!.map((child) => {
-                        const isChildActive = pathname === child.href
-                        const isChildParentActive = pathname?.startsWith(child.href + '/')
+                    {isOpen && (
+                      <div id={`submenu-${item.href}`} className="mt-1 ml-4 space-y-1">
+                        {item.children!.map((child) => {
+                          const isChildActive = pathname === child.href
+                          const isChildParentActive = pathname?.startsWith(child.href + '/')
 
-                        return (
-                          <Link
-                            key={child.href}
-                            href={child.href}
-                            onClick={closeSidebar}
-                            aria-current={isChildActive ? 'page' : undefined}
-                            className={`
+                          return (
+                            <Link
+                              key={child.href}
+                              href={child.href}
+                              onClick={closeSidebar}
+                              aria-current={isChildActive ? 'page' : undefined}
+                              className={`
                               flex items-center gap-3 px-3 py-2 rounded-[var(--radius)] text-sm font-medium
                               transition-all duration-150
                               focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)]
                               ${
                                 isChildActive || isChildParentActive
-                                  ? 'bg-[var(--sidebar-active)] text-white shadow-sm'
+                                  ? 'bg-[var(--sidebar-active-current)] text-white shadow-sm'
                                   : 'text-[var(--sidebar-muted)] hover:bg-[var(--sidebar-hover)] hover:text-white'
                               }
                             `}
-                            style={{
-                              color: isChildActive || isChildParentActive ? 'white' : 'var(--sidebar-muted, rgba(255,255,255,0.80))',
-                            }}
-                          >
-                            {child.icon}
-                            {child.label}
-                          </Link>
-                        )
-                      })}
-                    </div>
-                  )}
-                </div>
-              )
-            }
+                              style={{
+                                color:
+                                  isChildActive || isChildParentActive
+                                    ? 'white'
+                                    : 'var(--sidebar-muted, rgba(255,255,255,0.80))',
+                              }}
+                            >
+                              {child.icon}
+                              <span>{child.label}</span>
+                            </Link>
+                          )
+                        })}
+                      </div>
+                    )}
+                  </div>
+                )
+              }
 
-            return (
-              <Link
-                key={item.href}
-                href={item.href}
-                onClick={closeSidebar}
-                aria-current={isActive ? 'page' : undefined}
-                className={`
+              return (
+                <Link
+                  key={item.href}
+                  href={item.href}
+                  onClick={closeSidebar}
+                  aria-current={isActive ? 'page' : undefined}
+                  className={`
                   flex items-center gap-3 px-3 py-2.5 rounded-[var(--radius)] text-sm font-medium
                   transition-all duration-150
                   focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)]
                   ${
                     isActive
-                      ? 'bg-[var(--sidebar-active)] text-white shadow-sm'
+                      ? 'bg-[var(--sidebar-active-current)] text-white shadow-sm'
                       : isParentActive
                         ? 'bg-[var(--sidebar-hover)] text-white'
                         : 'text-[var(--sidebar-muted)] hover:bg-[var(--sidebar-hover)] hover:text-white'
                   }
                 `}
-                style={{
-                  color: isActive || isParentActive ? 'white' : 'var(--sidebar-muted, rgba(255,255,255,0.80))',
-                }}
-              >
-                {item.icon}
-                {item.label}
-              </Link>
-            )
-          })}
-        </nav>
+                  style={{
+                    color: isActive || isParentActive ? 'white' : 'var(--sidebar-muted, rgba(255,255,255,0.80))',
+                  }}
+                >
+                  {item.icon}
+                  <span>{item.label}</span>
+                </Link>
+              )
+            })}
+          </nav>
 
-        <div className="p-3 border-t border-white/10 space-y-2">
-          {showNewLeadButton && (
-            <Button size="sm" onClick={handleNewLead} className="w-full">
-              <svg className="w-4 h-4 mr-1.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-              </svg>
-              Novo Lead
-            </Button>
-          )}
+          <div className="p-3 border-t border-white/10 space-y-2">
+            {showNewLeadButton && (
+              <Button size="sm" onClick={handleNewLead} className="w-full">
+                <svg className="w-4 h-4 mr-1.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                </svg>
+                <span>Novo Lead</span>
+              </Button>
+            )}
 
-          {/* Botão do Theme Editor (só admin/gestor) */}
-          {isManager && (
-            <button
-              type="button"
-              onClick={() => setThemeOpen(true)}
-              className="w-full px-3 py-2 text-sm font-semibold rounded-xl bg-white/10 hover:bg-white/15 border border-white/10 text-white"
-            >
-              🎨 Ajustar Cores (Tema)
-            </button>
-          )}
-        </div>
-      </aside>
-
-      {sidebarOpen && <div className="fixed inset-0 z-20 bg-black/50 lg:hidden" onClick={closeSidebar} aria-hidden="true" />}
-
-      <div className="flex-1 flex flex-col min-w-0 overflow-x-hidden">
-        <header
-          className="sticky top-0 z-40 h-14 border-b border-[var(--border)] flex items-center px-4 gap-4 relative"
-          style={{
-            background: 'var(--topbar-bg, var(--card, rgba(255,255,255,0.88)))',
-            backdropFilter: 'blur(12px)',
-            WebkitBackdropFilter: 'blur(12px)',
-          }}
-        >
-          <div className="flex items-center gap-3 min-w-0">
-            <button
-              type="button"
-              onClick={() => setSidebarOpen(!sidebarOpen)}
-              className="lg:hidden p-2 rounded-[var(--radius)] hover:bg-[var(--accent)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)]"
-              aria-label="Abrir menu"
-              aria-expanded={sidebarOpen}
-            >
-              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
-              </svg>
-            </button>
-
-            {/* Atalho rápido do tema no topo (opcional) */}
+            {/* Botão do Theme Editor (só admin/gestor) */}
             {isManager && (
               <button
                 type="button"
                 onClick={() => setThemeOpen(true)}
-                className="hidden sm:inline-flex items-center gap-2 px-3 py-1.5 text-sm font-semibold rounded-full border border-[var(--border)] hover:bg-[var(--accent)]"
-                aria-label="Abrir editor de tema"
+                className="w-full px-3 py-2 text-sm font-semibold rounded-xl bg-white/10 hover:bg-white/15 border border-white/10 text-white"
               >
-                🎨 Tema
+                <span>🎨 Ajustar Cores (Tema)</span>
               </button>
             )}
           </div>
+        </aside>
 
-          <div className="absolute left-1/2 -translate-x-1/2 pointer-events-none">
-            <span className={topCenterClass}>{topCenterLabel}</span>
-          </div>
+        {sidebarOpen && <div className="fixed inset-0 z-20 bg-black/50 lg:hidden" onClick={closeSidebar} aria-hidden="true" />}
 
-          <div className="flex-1" />
-
-          <Link
-            href="/imoveis"
-            className="flex items-center gap-2 px-3 py-1.5 text-sm font-medium text-[var(--foreground)] hover:bg-[var(--accent)] rounded-[var(--radius)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)]"
+        <div className="flex-1 flex flex-col min-w-0 overflow-x-hidden">
+          <header
+            className="sticky top-0 z-40 h-14 border-b border-[var(--border)] flex items-center px-4 gap-4 relative"
+            style={{
+              background: 'var(--topbar-bg, var(--card, rgba(255,255,255,0.88)))',
+              backdropFilter: 'blur(12px)',
+              WebkitBackdropFilter: 'blur(12px)',
+            }}
           >
-            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-            </svg>
-            Vitrine
-          </Link>
-
-          {showNewLeadButton && (
-            <Button size="sm" onClick={handleNewLead} className="hidden sm:inline-flex">
-              <svg className="w-4 h-4 mr-1.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-              </svg>
-              Novo Lead
-            </Button>
-          )}
-
-          {userEmail && (
-            <div className="relative">
+            <div className="flex items-center gap-3 min-w-0">
               <button
                 type="button"
-                onClick={() => setUserMenuOpen(!userMenuOpen)}
-                className="flex items-center gap-2 p-1.5 rounded-[var(--radius)] hover:bg-[var(--accent)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)]"
-                aria-label="Menu do usuário"
-                aria-expanded={userMenuOpen}
+                onClick={() => setSidebarOpen(!sidebarOpen)}
+                className="lg:hidden p-2 rounded-[var(--radius)] hover:bg-[var(--accent)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)]"
+                aria-label="Abrir menu"
+                aria-expanded={sidebarOpen}
               >
-                <div className="w-8 h-8 rounded-full bg-[var(--secondary)] text-[var(--secondary-foreground)] flex items-center justify-center text-sm font-medium">
-                  {userEmail.charAt(0).toUpperCase()}
-                </div>
-                <svg className="w-4 h-4 text-[var(--muted-foreground)] hidden sm:block" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
                 </svg>
               </button>
 
-              {userMenuOpen && (
-                <>
-                  <div className="fixed inset-0 z-40" onClick={() => setUserMenuOpen(false)} />
-                  <div className="absolute right-0 top-full mt-2 w-56 rounded-[var(--radius-lg)] border border-[var(--border)] bg-[var(--card)] shadow-lg z-50">
-                    <div className="p-3 border-b border-[var(--border)]">
-                      <p className="text-sm font-medium text-[var(--foreground)] truncate">{userEmail}</p>
-                    </div>
-                    <div className="p-1">
-                      {onSignOut && (
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setUserMenuOpen(false)
-                            onSignOut()
-                          }}
-                          className="w-full flex items-center gap-2 px-3 py-2 text-sm text-[var(--foreground)] hover:bg-[var(--accent)] rounded-[var(--radius)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)]"
-                        >
-                          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
-                            <path
-                              strokeLinecap="round"
-                              strokeLinejoin="round"
-                              strokeWidth={2}
-                              d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"
-                            />
-                          </svg>
-                          Sair
-                        </button>
-                      )}
-                    </div>
-                  </div>
-                </>
+              {/* Atalho rápido do tema no topo (opcional) */}
+              {isManager && (
+                <button
+                  type="button"
+                  onClick={() => setThemeOpen(true)}
+                  className="hidden sm:inline-flex items-center gap-2 px-3 py-1.5 text-sm font-semibold rounded-full border border-[var(--border)] hover:bg-[var(--accent)]"
+                  aria-label="Abrir editor de tema"
+                >
+                  <span>🎨 Tema</span>
+                </button>
               )}
             </div>
-          )}
-        </header>
 
-        <main className="flex-1 p-4 sm:p-6 lg:p-8 overflow-x-hidden">
-          <div className="max-w-[1280px] mx-auto w-full">{children}</div>
-        </main>
-      </div>
+            <div className="absolute left-1/2 -translate-x-1/2 pointer-events-none">
+              <span className={topCenterClass}>{topCenterLabel}</span>
+            </div>
 
-      {/* Theme Editor */}
-      {isManager && (
-        <ThemeEditorPanel open={themeOpen} onClose={() => setThemeOpen(false)} />
-      )}
+            <div className="flex-1" />
+
+            <Link
+              href="/imoveis"
+              className="flex items-center gap-2 px-3 py-1.5 text-sm font-medium text-[var(--foreground)] hover:bg-[var(--accent)] rounded-[var(--radius)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)]"
+            >
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+              </svg>
+              <span>Vitrine</span>
+            </Link>
+
+            {showNewLeadButton && (
+              <Button size="sm" onClick={handleNewLead} className="hidden sm:inline-flex">
+                <svg className="w-4 h-4 mr-1.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                </svg>
+                <span>Novo Lead</span>
+              </Button>
+            )}
+
+            {userEmail && (
+              <div className="relative">
+                <button
+                  type="button"
+                  onClick={() => setUserMenuOpen(!userMenuOpen)}
+                  className="flex items-center gap-2 p-1.5 rounded-[var(--radius)] hover:bg-[var(--accent)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)]"
+                  aria-label="Menu do usuário"
+                  aria-expanded={userMenuOpen}
+                >
+                  <div className="w-8 h-8 rounded-full bg-[var(--secondary)] text-[var(--secondary-foreground)] flex items-center justify-center text-sm font-medium">
+                    <span>{userEmail.charAt(0).toUpperCase()}</span>
+                  </div>
+                  <svg
+                    className="w-4 h-4 text-[var(--muted-foreground)] hidden sm:block"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    stroke="currentColor"
+                    aria-hidden="true"
+                  >
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                  </svg>
+                </button>
+
+                {userMenuOpen && (
+                  <>
+                    <div className="fixed inset-0 z-40" onClick={() => setUserMenuOpen(false)} />
+                    <div className="absolute right-0 top-full mt-2 w-56 rounded-[var(--radius-lg)] border border-[var(--border)] bg-[var(--card)] shadow-lg z-50">
+                      <div className="p-3 border-b border-[var(--border)]">
+                        <p className="text-sm font-medium text-[var(--foreground)] truncate">
+                          <span>{userEmail}</span>
+                        </p>
+                      </div>
+                      <div className="p-1">
+                        {onSignOut && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setUserMenuOpen(false)
+                              onSignOut()
+                            }}
+                            className="w-full flex items-center gap-2 px-3 py-2 text-sm text-[var(--foreground)] hover:bg-[var(--accent)] rounded-[var(--radius)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)]"
+                          >
+                            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
+                              <path
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                                strokeWidth={2}
+                                d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"
+                              />
+                            </svg>
+                            <span>Sair</span>
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  </>
+                )}
+              </div>
+            )}
+          </header>
+
+          <main className="flex-1 p-4 sm:p-6 lg:p-8 overflow-x-hidden">
+            <div className="max-w-[1280px] mx-auto w-full">{children}</div>
+          </main>
+        </div>
+
+        {/* Theme Editor */}
+        {isManager && <ThemeEditorPanel open={themeOpen} onClose={() => setThemeOpen(false)} />}
       </div>
     </>
   )

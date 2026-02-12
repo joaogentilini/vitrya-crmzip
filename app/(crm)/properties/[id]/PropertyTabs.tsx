@@ -52,6 +52,8 @@ export default function PropertyTabs({
   featuresCatalog,
   featureValues,
   featureAliasesToClear,
+  viewerRole,
+  viewerIsActive,
 }: {
   property: Property;
   propertyCategories: Array<{ id: string; name: string }>;
@@ -80,6 +82,8 @@ export default function PropertyTabs({
     options?: unknown;
     position?: number | null;
   }>;
+  viewerRole: string | null;
+  viewerIsActive: boolean | null;
 }) {
   const [tab, setTab] = useState<TabKey>("overview");
   const [status, setStatus] = useState<string>(property.status);
@@ -106,6 +110,7 @@ export default function PropertyTabs({
           return (
             <button
               key={t.key}
+              type="button"
               onClick={() => setTab(t.key)}
               className={`rounded-[var(--radius)] border px-3 py-2 text-sm font-medium transition-colors ${
                 isActive
@@ -119,7 +124,12 @@ export default function PropertyTabs({
         })}
 
         <div className="ml-auto text-xs text-[var(--muted-foreground)]">
-          Status: <span className="font-semibold text-[var(--foreground)]">{status}</span>
+          <span>
+            Status:{" "}
+            <span className="font-semibold text-[var(--foreground)]">
+              {status}
+            </span>
+          </span>
         </div>
       </div>
 
@@ -156,11 +166,16 @@ export default function PropertyTabs({
             propertyId={property.id}
             initialStatus={status}
             onStatusChange={setStatus}
+            viewerRole={viewerRole}
+            viewerIsActive={viewerIsActive}
           />
         )}
 
         {tab === "campaign" && <CampaignTab propertyId={property.id} />}
-        {tab === "negociacoes" && <PropertyNegotiationsTab propertyId={property.id} />}
+
+        {tab === "negociacoes" && (
+          <PropertyNegotiationsTab propertyId={property.id} />
+        )}
       </div>
     </div>
   );

@@ -1,7 +1,7 @@
+/* eslint-disable react-hooks/exhaustive-deps */
 "use client";
 
-import { useEffect, useState } from "react";
-
+import { useEffect, useMemo, useState } from "react";
 import { supabase } from "@/lib/supabaseClient";
 
 import {
@@ -10,14 +10,20 @@ import {
   checkAuthorizationDocument,
 } from "./actions";
 
+type UserRole = "admin" | "gestor" | "corretor" | string;
+
 export default function PublishPanel({
   propertyId,
   initialStatus,
   onStatusChange,
+  viewerRole,
+  viewerIsActive,
 }: {
   propertyId: string;
   initialStatus: string;
   onStatusChange: (next: string) => void;
+  viewerRole: UserRole | null;
+  viewerIsActive: boolean | null;
 }) {
   const [status, setStatus] = useState(initialStatus);
   const [mediaCount, setMediaCount] = useState<number>(0);
@@ -25,17 +31,17 @@ export default function PublishPanel({
   const [loading, setLoading] = useState<boolean>(true);
   const [busy, setBusy] = useState<boolean>(false);
   const [error, setError] = useState<string>("");
-  const [canApprove, setCanApprove] = useState<boolean>(false);
+
+  const canApprove = useMemo(() => {
+    if (!viewerRole || viewerIsActive !== true) return false;
+    return viewerRole === "admin" || viewerRole === "gestor";
+  }, [viewerRole, viewerIsActive]);
 
   async function refresh() {
     setLoading(true);
     setError("");
 
     try {
-      // user atual
-      const { data: userRes } = await supabase.auth.getUser();
-      const currentUserId = userRes?.user?.id ?? null;
-
       // status do imóvel
       const statusPromise = supabase
         .from("properties")
@@ -82,25 +88,8 @@ export default function PublishPanel({
         setStatus(nextStatus);
         onStatusChange(nextStatus);
       }
-
-      // role (admin/gestor)
-      if (currentUserId) {
-        const { data: profile } = await supabase
-          .from("profiles")
-          .select("role, is_active")
-          .eq("id", currentUserId)
-          .maybeSingle();
-
-        const isAdmin = profile?.role === "admin" && profile?.is_active;
-        const isGestor = profile?.role === "gestor" && profile?.is_active;
-
-        setCanApprove(!!(isAdmin || isGestor));
-      } else {
-        setCanApprove(false);
-      }
     } catch (e: any) {
       setError(e?.message ?? "Falha ao carregar dados de publicação.");
-      setCanApprove(false);
     } finally {
       setLoading(false);
     }
@@ -108,7 +97,6 @@ export default function PublishPanel({
 
   useEffect(() => {
     refresh();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [propertyId]);
 
   const mediaOk = mediaCount > 0;
@@ -153,20 +141,35 @@ export default function PublishPanel({
   }
 
   return (
-    <div
-      style={{
-        border: "1px solid rgba(0,0,0,0.08)",
-        borderRadius: 16,
-        padding: 16,
-      }}
-    >
-      <h2 style={{ marginTop: 0 }}>Publicação</h2>
+    <section className="rounded-2xl border border-[var(--border)] bg-[var(--card)] p-4 shadow-sm">
+      <div className="flex items-start justify-between gap-4">
+        <div className="min-w-0">
+          <h2 className="text-base font-semibold text-[var(--foreground)]">
+            Publicação
+          </h2>
+          <p className="mt-1 text-xs text-[var(--muted-foreground)]">
+            Regra Vitrya: para publicar, precisa ter pelo menos 1 mídia e o Termo
+            de Autorização anexado.
+          </p>
+        </div>
 
-      {loading ? (
-        <p>Carregando status...</p>
-      ) : (
-        <>
-          <div style={{ display: "grid", gap: 8 }}>
+        <div className="text-xs text-[var(--muted-foreground)]">
+          <span>
+            Status atual:{" "}
+            <span className="font-semibold text-[var(--foreground)]">
+              {status}
+            </span>
+          </span>
+        </div>
+      </div>
+
+      <div className="mt-4">
+        {loading ? (
+          <p className="text-sm text-[var(--muted-foreground)]">
+            Carregando status...
+          </p>
+        ) : (
+          <div className="grid gap-2">
             <ChecklistRow
               label="Mídias (≥ 1)"
               ok={mediaOk}
@@ -178,96 +181,81 @@ export default function PublishPanel({
               detail={authOk ? "OK" : "Faltando"}
             />
           </div>
+        )}
+      </div>
 
-          {error && (
-            <div
-              style={{
-                marginTop: 12,
-                padding: 12,
-                borderRadius: 12,
-                background: "rgba(255,0,0,0.06)",
-                border: "1px solid rgba(255,0,0,0.12)",
-              }}
-            >
-              <b>Erro:</b> {error}
-            </div>
-          )}
+      {error ? (
+        <div className="mt-3 rounded-xl border border-red-500/20 bg-red-500/10 p-3 text-sm text-[var(--foreground)]">
+          <span className="font-semibold">Erro:</span>{" "}
+          <span>{error}</span>
+        </div>
+      ) : null}
 
-          <div style={{ display: "flex", gap: 10, marginTop: 16, flexWrap: "wrap" }}>
-            {/* ✅ Aprovar */}
-            <button
-              onClick={handleApprovePublish}
-              disabled={!approveEnabled}
-              style={{
-                padding: "10px 14px",
-                borderRadius: 12,
-                border: 0,
-                background: approveEnabled
-                  ? "rgba(0,160,0,0.92)"
-                  : "rgba(0,0,0,0.10)",
-                color: approveEnabled ? "white" : "rgba(0,0,0,0.55)",
-                cursor: approveEnabled ? "pointer" : "not-allowed",
-                fontWeight: 800,
-              }}
-              title={
-                !canApprove
-                  ? "Apenas admin/gestor pode aprovar."
-                  : !checklistOk
-                  ? "Checklist pendente."
-                  : ""
-              }
-            >
-              Aprovar e publicar
-            </button>
+      <div className="mt-4 flex flex-wrap items-center gap-2">
+        <button
+          type="button"
+          onClick={handleApprovePublish}
+          disabled={!approveEnabled}
+          className={[
+            "px-4 py-2 rounded-xl text-sm font-semibold transition",
+            approveEnabled
+              ? "bg-emerald-600 text-white hover:bg-emerald-700"
+              : "bg-black/10 text-black/50 cursor-not-allowed",
+          ].join(" ")}
+          title={
+            !canApprove
+              ? "Apenas admin/gestor pode aprovar."
+              : !checklistOk
+              ? "Checklist pendente."
+              : ""
+          }
+        >
+          <span>Aprovar e publicar</span>
+        </button>
 
-            {/* ✅ Reprovar */}
-            <button
-              onClick={handleRejectToDraft}
-              disabled={!rejectEnabled}
-              style={{
-                padding: "10px 14px",
-                borderRadius: 12,
-                border: 0,
-                background: rejectEnabled
-                  ? "rgba(220,0,0,0.92)"
-                  : "rgba(0,0,0,0.10)",
-                color: rejectEnabled ? "white" : "rgba(0,0,0,0.55)",
-                cursor: rejectEnabled ? "pointer" : "not-allowed",
-                fontWeight: 800,
-              }}
-              title={!canApprove ? "Apenas admin/gestor pode reprovar." : ""}
-            >
-              Reprovar (voltar rascunho)
-            </button>
+        <button
+          type="button"
+          onClick={handleRejectToDraft}
+          disabled={!rejectEnabled}
+          className={[
+            "px-4 py-2 rounded-xl text-sm font-semibold transition",
+            rejectEnabled
+              ? "bg-red-600 text-white hover:bg-red-700"
+              : "bg-black/10 text-black/50 cursor-not-allowed",
+          ].join(" ")}
+          title={!canApprove ? "Apenas admin/gestor pode reprovar." : ""}
+        >
+          <span>Reprovar</span>
+        </button>
 
-            {/* Recarregar */}
-            <button
-              onClick={refresh}
-              disabled={busy}
-              style={{
-                padding: "10px 14px",
-                borderRadius: 12,
-                border: "1px solid rgba(0,0,0,0.12)",
-                background: "transparent",
-                cursor: busy ? "not-allowed" : "pointer",
-                opacity: busy ? 0.6 : 1,
-              }}
-            >
-              Recarregar
-            </button>
+        <button
+          type="button"
+          onClick={refresh}
+          disabled={busy}
+          className={[
+            "px-4 py-2 rounded-xl text-sm font-semibold border border-[var(--border)] transition",
+            busy
+              ? "opacity-60 cursor-not-allowed"
+              : "hover:bg-[var(--accent)]",
+          ].join(" ")}
+        >
+          <span>Recarregar</span>
+        </button>
 
-            <div style={{ marginLeft: "auto", opacity: 0.75 }}>
-              Status atual: <b>{status}</b>
-            </div>
+        {!canApprove ? (
+          <div className="ml-auto text-xs text-[var(--muted-foreground)]">
+            <span>Apenas admin/gestor pode aprovar/reprovar.</span>
           </div>
-
-          <p style={{ marginTop: 12, opacity: 0.75, fontSize: 12 }}>
-            Regra Vitrya: para publicar, precisa ter pelo menos 1 mídia e o Termo
-            de Autorização anexado.
-          </p>
-        </>
-      )}
-    </div>
+        ) : (
+          <div className="ml-auto text-xs text-[var(--muted-foreground)]">
+            <span>Checklist: </span>
+            <span className="font-semibold text-[var(--foreground)]">
+              {checklistOk ? "OK" : "Pendente"}
+            </span>
+          </div>
+        )}
+      </div>
+    </section>
   );
 }
 
@@ -281,29 +269,27 @@ function ChecklistRow({
   detail?: string;
 }) {
   return (
-    <div
-      style={{
-        display: "flex",
-        gap: 10,
-        alignItems: "center",
-        padding: "10px 12px",
-        borderRadius: 12,
-        background: "rgba(0,0,0,0.03)",
-      }}
-    >
+    <div className="flex items-center gap-3 rounded-xl border border-[var(--border)] bg-[var(--accent)] px-3 py-2">
       <div
-        style={{
-          width: 10,
-          height: 10,
-          borderRadius: 999,
-          background: ok ? "rgba(0,160,0,0.9)" : "rgba(220,0,0,0.9)",
-        }}
+        className={[
+          "w-2.5 h-2.5 rounded-full",
+          ok ? "bg-emerald-600" : "bg-red-600",
+        ].join(" ")}
+        aria-hidden="true"
       />
-      <div style={{ flex: 1 }}>
-        <div style={{ fontWeight: 600 }}>{label}</div>
-        {detail && <div style={{ fontSize: 12, opacity: 0.75 }}>{detail}</div>}
+      <div className="min-w-0 flex-1">
+        <div className="text-sm font-semibold text-[var(--foreground)]">
+          <span>{label}</span>
+        </div>
+        {detail ? (
+          <div className="text-xs text-[var(--muted-foreground)]">
+            <span>{detail}</span>
+          </div>
+        ) : null}
       </div>
-      <div style={{ fontWeight: 700 }}>{ok ? "OK" : "Pendente"}</div>
+      <div className="text-xs font-semibold text-[var(--foreground)]">
+        <span>{ok ? "OK" : "Pendente"}</span>
+      </div>
     </div>
   );
 }

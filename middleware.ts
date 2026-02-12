@@ -1,14 +1,25 @@
 import { NextRequest, NextResponse } from "next/server";
 
-const PROTECTED = ["/settings", "/admin", "/dashboard", "/leads", "/agenda", "/properties", "/people", "/perfil", "/blocked"];
+const PROTECTED = [
+  "/settings",
+  "/admin",
+  "/dashboard",
+  "/leads",
+  "/agenda",
+  "/properties",
+  "/people",
+  "/perfil",
+  "/blocked",
+  "/erp", // ✅ ERP protegido (sessão)
+];
 
 const isDev = process.env.NODE_ENV === "development";
 
 function isSupabaseAuthCookie(cookieName: string): boolean {
   if (!cookieName.startsWith("sb-")) return false;
-  
+
   const lowerName = cookieName.toLowerCase();
-  
+
   if (
     lowerName.includes("auth-token") ||
     lowerName.includes("access-token") ||
@@ -18,12 +29,12 @@ function isSupabaseAuthCookie(cookieName: string): boolean {
   ) {
     return true;
   }
-  
+
   const authTokenChunkPattern = /^sb-[a-z0-9]+-auth-token\.\d+$/i;
   if (authTokenChunkPattern.test(cookieName)) {
     return true;
   }
-  
+
   return false;
 }
 
@@ -38,15 +49,13 @@ export function middleware(req: NextRequest) {
     return NextResponse.next();
   }
 
-  const isProtected = PROTECTED.some(
-    (p) => pathname === p || pathname.startsWith(p + "/")
-  );
+  const isProtected = PROTECTED.some((p) => pathname === p || pathname.startsWith(p + "/"));
   if (!isProtected) return NextResponse.next();
 
   const allCookies = req.cookies.getAll();
-  
+
   if (isDev) {
-    const cookieNames = allCookies.map(c => c.name);
+    const cookieNames = allCookies.map((c) => c.name);
     console.log(`[middleware] pathname=${pathname}, cookies found:`, cookieNames);
   }
 

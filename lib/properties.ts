@@ -98,7 +98,8 @@ async function attachCovers(
     .select("property_id, url")
     .in("property_id", ids)
     .eq("kind", "image")
-    .eq("position", 1);
+.order("position", { ascending: true });
+
 
   // Se falhar, não quebra a página inteira — só retorna sem capa
   if (coversErr) {

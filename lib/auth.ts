@@ -20,91 +20,87 @@ export interface UserProfile {
 export async function getCurrentUser() {
   const supabase = await createClient()
   const { data: { user }, error } = await supabase.auth.getUser()
-  
-  if (error || !user) {
-    return null
-  }
-  
+
+  if (error || !user) return null
   return user
 }
 
 export async function getCurrentUserProfile(): Promise<UserProfile | null> {
   const supabase = await createClient()
   const { data: { user }, error: authError } = await supabase.auth.getUser()
-  
-  if (authError || !user) {
-    return null
-  }
-  
+
+  if (authError || !user) return null
+
   const { data: profile, error: profileError } = await supabase
     .from('profiles')
     .select('*')
     .eq('id', user.id)
     .single()
-  
-  if (profileError || !profile) {
-    return null
-  }
-  
+
+  if (profileError || !profile) return null
   return profile as UserProfile
 }
 
+/**
+ * Importante: sempre redirecionar para /crm/login (não para "/"),
+ * porque "/" é vitrine pública e pode gerar loops indiretos.
+ */
 export async function requireAuth() {
   const user = await getCurrentUser()
-  
-  if (!user) {
-    redirect('/')
-  }
-  
+  if (!user) redirect('/crm/login')
   return user
 }
 
 export async function requireActiveUser(): Promise<UserProfile> {
   const profile = await getCurrentUserProfile()
-  
+
   if (!profile) {
-    redirect('/')
+    // sessão existe mas profile não está ok (ou RLS bloqueou)
+    redirect('/crm/login')
   }
-  
-  if (profile && profile.is_active === false) {
+
+  if (profile.is_active === false) {
     redirect('/blocked')
   }
-  
+
   return profile
 }
 
 export async function requireRole(allowedRoles: UserRole[]): Promise<UserProfile> {
   const profile = await requireActiveUser()
-  
+
   if (!allowedRoles.includes(profile.role)) {
     redirect('/dashboard')
   }
-  
+
   return profile
 }
 
-
+/**
+ * Corrige bug: antes estava lendo "data" e tentando .length.
+ * O correto é usar "count".
+ */
 export async function bootstrapAdminIfNeeded(): Promise<boolean> {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
-  
+
   if (!user) return false
-  
-  const { data: adminCount } = await supabase
+
+  const { count: adminCount } = await supabase
     .from('profiles')
     .select('id', { count: 'exact', head: true })
     .eq('role', 'admin')
-  
-  if (adminCount && adminCount.length > 0) {
+
+  if ((adminCount ?? 0) > 0) {
     return false
   }
-  
+
   const { data: profile } = await supabase
     .from('profiles')
     .select('id')
     .eq('id', user.id)
     .single()
-  
+
   if (!profile) {
     const { error: insertError } = await supabase
       .from('profiles')
@@ -113,49 +109,47 @@ export async function bootstrapAdminIfNeeded(): Promise<boolean> {
         full_name: user.email?.split('@')[0] || 'Admin',
         email: user.email,
         role: 'admin',
-        is_active: true
+        is_active: true,
       })
-    
-    if (!insertError) {
-      return true
-    }
+
+    if (!insertError) return true
   } else {
     const { error: updateError } = await supabase
       .from('profiles')
       .update({ role: 'admin' })
       .eq('id', user.id)
-    
-    if (!updateError) {
-      return true
-    }
+
+    if (!updateError) return true
   }
-  
+
   return false
 }
 
+/**
+ * Garante que todo usuário autenticado tenha um profile.
+ * Se for o primeiro usuário do sistema, vira admin.
+ */
 export async function ensureUserProfile(): Promise<UserProfile | null> {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
-  
+
   if (!user) return null
-  
+
   const { data: existingProfile } = await supabase
     .from('profiles')
     .select('*')
     .eq('id', user.id)
     .single()
-  
-  if (existingProfile) {
-    return existingProfile as UserProfile
-  }
-  
+
+  if (existingProfile) return existingProfile as UserProfile
+
   const { count: adminCount } = await supabase
     .from('profiles')
     .select('id', { count: 'exact', head: true })
     .eq('role', 'admin')
-  
+
   const isFirstUser = (adminCount ?? 0) === 0
-  
+
   const { data: newProfile, error } = await supabase
     .from('profiles')
     .insert({
@@ -163,15 +157,15 @@ export async function ensureUserProfile(): Promise<UserProfile | null> {
       full_name: user.email?.split('@')[0] || 'User',
       email: user.email,
       role: isFirstUser ? 'admin' : 'corretor',
-      is_active: true
+      is_active: true,
     })
     .select()
     .single()
-  
+
   if (error) {
     console.error('[ensureUserProfile] Failed to create profile:', error)
     return null
   }
-  
+
   return newProfile as UserProfile
 }

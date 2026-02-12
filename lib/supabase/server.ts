@@ -1,15 +1,23 @@
-import { cookies } from "next/headers";
-import { createServerClient } from "@supabase/ssr";
+import { createServerClient } from '@supabase/ssr'
+import { cookies } from 'next/headers'
 
-function isRefreshTokenAlreadyUsed(err: unknown) {
-  const anyErr = err as any;
-  const code = String(anyErr?.code ?? "");
-  const msg = String(anyErr?.message ?? "");
-  return code === "refresh_token_already_used" || msg.includes("Already Used");
+function isRefreshTokenNotFound(err: unknown) {
+  const msg =
+    err instanceof Error ? err.message : typeof err === 'string' ? err : ''
+
+  return (
+    msg.includes('Invalid Refresh Token') ||
+    msg.includes('Refresh Token Not Found') ||
+    msg.includes('refresh_token_not_found')
+  )
 }
 
+/**
+ * Server-first (cookies).
+ * - Não quebra render quando refresh token não existe.
+ */
 export async function createClient() {
-  const cookieStore = await cookies();
+  const cookieStore = await cookies()
 
   const supabase = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -17,50 +25,61 @@ export async function createClient() {
     {
       cookies: {
         getAll() {
-          return cookieStore.getAll();
+          return cookieStore.getAll()
         },
         setAll(cookiesToSet) {
           try {
-            cookiesToSet.forEach(({ name, value, options }) => {
-              // Next 15/16: cookieStore é ReadonlyRequestCookies
-              // set pode falhar em Server Components (por isso o try/catch)
-              (cookieStore as any).set(name, value, options);
-            });
+            for (const { name, value, options } of cookiesToSet) {
+              cookieStore.set(name, value, options)
+            }
           } catch {
-            // Server Component - ignore set cookie errors
+            // Pode falhar em alguns contextos (RSC). Ignorar para não quebrar render.
           }
         },
       },
     }
-  );
+  )
 
-  /**
-   * ✅ Blindagem contra "refresh_token_already_used"
-   * Isso ocorre quando há concorrência e o refresh tenta rodar 2x.
-   * Ao detectar, limpamos a sessão e seguimos.
-   */
-  async function safeGetSession() {
-    try {
-      return await supabase.auth.getSession();
-    } catch (err) {
-      if (isRefreshTokenAlreadyUsed(err)) {
-        try {
-          await supabase.auth.signOut();
-        } catch {
-          // ignore
-        }
-        return { data: { session: null }, error: null };
-      }
-      throw err;
+  return supabase
+}
+
+/**
+ * Use isso no lugar de supabase.auth.getSession() em server components/actions
+ * quando você quer estabilidade total.
+ */
+export async function getSessionSafe() {
+  const supabase = await createClient()
+
+  try {
+    const { data, error } = await supabase.auth.getSession()
+
+    if (error) {
+      if (isRefreshTokenNotFound(error)) return { session: null }
+      return { session: null }
     }
+
+    return { session: data.session ?? null }
+  } catch (err) {
+    if (isRefreshTokenNotFound(err)) return { session: null }
+    return { session: null }
   }
+}
 
-  // Opcional: só chama no CRM/middleware. No público, evita refresh desnecessário.
-  // Você pode comentar/descomentar conforme uso.
-  // await safeGetSession();
+/**
+ * SignOut safe (não quebra se já estiver sem sessão)
+ */
+export async function signOutSafe() {
+  const supabase = await createClient()
 
-  // expõe helper caso você queira usar explicitamente no CRM
-  (supabase as any).safeGetSession = safeGetSession;
-
-  return supabase;
+  try {
+    const { error } = await supabase.auth.signOut()
+    if (error && !isRefreshTokenNotFound(error)) {
+      // não joga erro — só retorna false
+      return false
+    }
+    return true
+  } catch (err) {
+    if (isRefreshTokenNotFound(err)) return true
+    return false
+  }
 }
