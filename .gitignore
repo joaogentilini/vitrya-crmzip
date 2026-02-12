@@ -48,3 +48,6 @@ supabase/.temp/
 # local dev
 .vscode/
 supabase/.temp/
+
+# módulos em desenvolvimento
+app/(erp)/
