@@ -44,3 +44,7 @@ vitrya-clean.zip
 # Supabase temp
 supabase/.temp/
 
+
+# local dev
+.vscode/
+supabase/.temp/
