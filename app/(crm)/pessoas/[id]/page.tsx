@@ -64,6 +64,8 @@ export default async function PessoaPage({ params }: PageProps) {
 
   if (personError || !person) notFound()
 
+  const assignedProfileId = (person as any).assigned_to ?? (person as any).owner_profile_id ?? null
+
   const creatorProfilePromise = person.created_by_profile_id
     ? supabase
         .from('profiles')
@@ -72,11 +74,11 @@ export default async function PessoaPage({ params }: PageProps) {
         .maybeSingle()
     : Promise.resolve({ data: null as any, error: null as any })
 
-  const assignedProfilePromise = person.assigned_to
+  const assignedProfilePromise = assignedProfileId
     ? supabase
         .from('profiles')
         .select('id, full_name, email, role')
-        .eq('id', person.assigned_to)
+        .eq('id', assignedProfileId)
         .maybeSingle()
     : Promise.resolve({ data: null as any, error: null as any })
 
@@ -225,6 +227,11 @@ export default async function PessoaPage({ params }: PageProps) {
     }
   })
 
+  const personForClient = {
+    ...(person as Record<string, unknown>),
+    assigned_to: assignedProfileId
+  }
+
   return (
     <main className="p-6 space-y-6">
       <div className="flex items-center gap-2 text-sm text-[var(--muted-foreground)]">
@@ -243,7 +250,7 @@ export default async function PessoaPage({ params }: PageProps) {
       </div>
 
       <PessoasTabsClient
-        person={person as unknown as PersonRecord}
+        person={personForClient as unknown as PersonRecord}
         creatorProfile={creatorProfileRes.data}
         assignedProfile={assignedProfileRes.data}
         currentUserRole={currentUserRole}

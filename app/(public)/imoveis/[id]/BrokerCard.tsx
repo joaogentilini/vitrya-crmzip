@@ -17,6 +17,9 @@ type Props = {
   name: string;
   initials: string;
   avatarUrl?: string | null;
+  avatarFocusX?: number | null;
+  avatarFocusY?: number | null;
+  avatarZoom?: number | null;
   creci?: string | null;
   tagline?: string | null;
   bio?: string | null;
@@ -49,6 +52,9 @@ export function BrokerCard({
   name,
   initials,
   avatarUrl,
+  avatarFocusX,
+  avatarFocusY,
+  avatarZoom,
   creci,
   phoneLabel,
   socials: _socials,
@@ -58,10 +64,13 @@ export function BrokerCard({
 
   const creciLabel = useMemo(() => {
     const cleaned = (creci ?? "").trim();
-    return cleaned ? `CRECI ${cleaned}` : "CRECI não informado";
+    return cleaned ? `CRECI ${cleaned}` : "CRECI nao informado";
   }, [creci]);
 
-  const phonePretty = useMemo(() => formatBrazilPhone(phoneLabel ?? null) ?? "(--) ----- ----", [phoneLabel]);
+  const phonePretty = useMemo(
+    () => formatBrazilPhone(phoneLabel ?? null) ?? "(--) ----- ----",
+    [phoneLabel]
+  );
 
   const phoneDigits = useMemo(() => {
     const d = onlyDigits(phoneLabel ?? "");
@@ -70,6 +79,27 @@ export function BrokerCard({
     if (d.length >= 10) return `55${d}`;
     return d;
   }, [phoneLabel]);
+
+  const imageFocusX = useMemo(() => {
+    if (typeof avatarFocusX !== "number" || Number.isNaN(avatarFocusX)) return 50;
+    if (avatarFocusX < 0) return 0;
+    if (avatarFocusX > 100) return 100;
+    return avatarFocusX;
+  }, [avatarFocusX]);
+
+  const imageFocusY = useMemo(() => {
+    if (typeof avatarFocusY !== "number" || Number.isNaN(avatarFocusY)) return 50;
+    if (avatarFocusY < 0) return 0;
+    if (avatarFocusY > 100) return 100;
+    return avatarFocusY;
+  }, [avatarFocusY]);
+
+  const imageScale = useMemo(() => {
+    if (typeof avatarZoom !== "number" || Number.isNaN(avatarZoom)) return 1;
+    if (avatarZoom < 1) return 1;
+    if (avatarZoom > 3) return 3;
+    return avatarZoom;
+  }, [avatarZoom]);
 
   const goProfile = () => href && router.push(href);
 
@@ -101,7 +131,6 @@ export function BrokerCard({
         WebkitBackdropFilter: "blur(14px)",
       }}
     >
-      {/* ✅ título correto */}
       <div
         style={{
           fontWeight: 900,
@@ -110,10 +139,9 @@ export function BrokerCard({
           marginBottom: 10,
         }}
       >
-        Corretor responsável
+        Corretor responsavel
       </div>
 
-      {/* topo */}
       <div
         style={{
           display: "grid",
@@ -132,6 +160,9 @@ export function BrokerCard({
               height: 56,
               borderRadius: "50%",
               objectFit: "cover",
+              objectPosition: `${imageFocusX}% ${imageFocusY}%`,
+              transform: `scale(${imageScale})`,
+              transformOrigin: "center center",
               border: "2px solid rgba(255,255,255,0.85)",
               boxShadow: "0 6px 18px rgba(0,0,0,0.10)",
             }}
@@ -170,15 +201,19 @@ export function BrokerCard({
           >
             {name}
           </div>
-
-          {/* ✅ aqui fica SÓ o CRECI (sem telefone duplicado) */}
-          <div style={{ marginTop: 4, fontSize: 13, color: "rgba(23,26,33,0.72)", fontWeight: 800 }}>
+          <div
+            style={{
+              marginTop: 4,
+              fontSize: 13,
+              color: "rgba(23,26,33,0.72)",
+              fontWeight: 800,
+            }}
+          >
             {creciLabel}
           </div>
         </div>
       </div>
 
-      {/* campo grande de telefone */}
       <button
         type="button"
         onClick={handlePhoneClick}
@@ -239,8 +274,12 @@ export function BrokerCard({
             width: "100%",
             padding: "12px 14px",
             borderRadius: 16,
-            border: whatsappLink ? "1px solid rgba(37, 211, 102, 0.45)" : "1px solid rgba(23,26,33,0.12)",
-            background: whatsappLink ? "linear-gradient(180deg, #25D366, #1EBE5D)" : "rgba(37, 211, 102, 0.16)",
+            border: whatsappLink
+              ? "1px solid rgba(37, 211, 102, 0.45)"
+              : "1px solid rgba(23,26,33,0.12)",
+            background: whatsappLink
+              ? "linear-gradient(180deg, #25D366, #1EBE5D)"
+              : "rgba(37, 211, 102, 0.16)",
             color: whatsappLink ? "white" : "rgba(23,26,33,0.55)",
             fontWeight: 900,
             fontSize: 16,

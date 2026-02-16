@@ -80,27 +80,43 @@ export async function updatePersonBasics(personId: string, payload: UpdatePerson
 
   if (!personId) throw new Error('Pessoa inválida.')
 
-  const nextOwnerProfileId =
-    payload.owner_profile_id ?? payload.assigned_to ?? null
+  const hasOwnerProfileId = payload.owner_profile_id !== undefined
+  const hasAssignedTo = payload.assigned_to !== undefined
+
+  const ownerFromOwnerProfileId = hasOwnerProfileId ? normalizeTextOrNull(payload.owner_profile_id) : undefined
+  const ownerFromAssignedTo = hasAssignedTo ? normalizeTextOrNull(payload.assigned_to) : undefined
 
   if (
-    payload.owner_profile_id !== undefined &&
-    payload.assigned_to !== undefined &&
-    payload.owner_profile_id !== payload.assigned_to
+    hasOwnerProfileId &&
+    hasAssignedTo &&
+    ownerFromOwnerProfileId !== ownerFromAssignedTo
   ) {
     throw new Error('Valores conflitantes para responsável.')
   }
 
-  if (
-    nextOwnerProfileId !== null &&
-    nextOwnerProfileId !== undefined &&
-    profile.role !== 'admin' &&
-    profile.role !== 'gestor'
-  ) {
-    throw new Error('Você não tem permissão para alterar o responsável.')
-  }
+  const nextOwnerProfileId =
+    ownerFromOwnerProfileId !== undefined
+      ? ownerFromOwnerProfileId
+      : ownerFromAssignedTo !== undefined
+        ? ownerFromAssignedTo
+        : undefined
 
   const supabase = await createClient()
+
+  const { data: person, error: personError } = await supabase
+    .from('people')
+    .select('id, owner_profile_id')
+    .eq('id', personId)
+    .maybeSingle()
+
+  if (personError || !person) throw new Error('Pessoa inválida.')
+
+  const currentOwnerProfileId = normalizeTextOrNull(person.owner_profile_id)
+  const ownerChanged = nextOwnerProfileId !== undefined && nextOwnerProfileId !== currentOwnerProfileId
+
+  if (ownerChanged && profile.role !== 'admin' && profile.role !== 'gestor') {
+    throw new Error('Você não tem permissão para alterar o responsável.')
+  }
 
   const updateData: Record<string, unknown> = {
     updated_at: nowIso()
@@ -113,7 +129,7 @@ export async function updatePersonBasics(personId: string, payload: UpdatePerson
   if (payload.notes !== undefined) updateData.notes = payload.notes
 
   // importante: undefined = não altera; null/string = altera
-  if (payload.owner_profile_id !== undefined || payload.assigned_to !== undefined) {
+  if (nextOwnerProfileId !== undefined && ownerChanged) {
     updateData.owner_profile_id = nextOwnerProfileId
   }
 
@@ -123,7 +139,6 @@ export async function updatePersonBasics(personId: string, payload: UpdatePerson
 
   revalidatePath(`/pessoas/${personId}`)
 }
-
 /**
  * Atualiza o "perfil/tipo" da pessoa (kind_tags) no people.
  * (Útil pra editar Roles dentro do card de dados básicos.)

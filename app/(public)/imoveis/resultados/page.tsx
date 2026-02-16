@@ -1,5 +1,6 @@
 import Link from "next/link";
-import { createClient } from "@/lib/supabase/server";
+import { createPublicClient } from "@/lib/supabase/publicServer";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { getSignedImageUrl } from "@/lib/media/getPublicImageUrl";
 import { ThumbCarousel } from "./ThumbCarousel";
 
@@ -66,7 +67,7 @@ export default async function PublicResultsPage({
   searchParams: Promise<{ [key: string]: string | string[] | undefined }>;
 }) {
   const params = await searchParams;
-  const supabase = await createClient();
+  const supabase = createPublicClient();
 
   // ✅ agora usamos a view enriquecida
   let query = supabase.from("v_public_properties_ext").select("*");
@@ -139,12 +140,29 @@ export default async function PublicResultsPage({
       .eq("kind", "image")
       .order("position", { ascending: true });
 
-    if (!mediaErr && mediaRows) {
-      for (const row of mediaRows as MediaRow[]) {
-        if (!mediaByProperty[row.property_id])
-          mediaByProperty[row.property_id] = [];
-        mediaByProperty[row.property_id].push(row);
+    let effectiveRows = (mediaRows ?? []) as MediaRow[];
+
+    // Fallback seguro: se RLS bloquear a leitura pública, usa service role apenas para imóveis já ativos da vitrine.
+    if (effectiveRows.length === 0) {
+      const admin = createAdminClient();
+      const { data: adminRows, error: adminErr } = await admin
+        .from("property_media")
+        .select("property_id, url, kind, position")
+        .in("property_id", ids)
+        .eq("kind", "image")
+        .order("position", { ascending: true });
+
+      if (adminErr) {
+        if (mediaErr) console.error("Public media query error:", mediaErr);
+        console.error("Admin media fallback error:", adminErr);
+      } else {
+        effectiveRows = (adminRows ?? []) as MediaRow[];
       }
+    }
+
+    for (const row of effectiveRows) {
+      if (!mediaByProperty[row.property_id]) mediaByProperty[row.property_id] = [];
+      mediaByProperty[row.property_id].push(row);
     }
   }
 

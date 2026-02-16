@@ -3,13 +3,15 @@ import { ensureUserProfile } from '@/lib/auth'
 import { LoginClient } from './LoginClient'
 
 interface LoginPageProps {
-  searchParams?: {
+  searchParams?: Promise<{
     next?: string | string[]
-  }
+  }>
 }
 
 export default async function LoginPage({ searchParams }: LoginPageProps) {
-  const nextParam = typeof searchParams?.next === 'string' ? searchParams.next : undefined
+  const resolvedSearchParams = await searchParams
+  const nextParam =
+    typeof resolvedSearchParams?.next === 'string' ? resolvedSearchParams.next : undefined
 
   const profile = await ensureUserProfile()
 

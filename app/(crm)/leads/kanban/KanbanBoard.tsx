@@ -197,7 +197,7 @@ function DroppableColumn({
     <div
       ref={setNodeRef}
       className={`
-        min-w-[280px] max-w-[320px] rounded-[var(--radius-lg)] p-4
+        w-full min-w-0 rounded-[var(--radius-lg)] p-4
         ${active 
           ? 'bg-[var(--primary)]/5 border-2 border-[var(--primary)]' 
           : 'bg-[var(--muted)]/50 border border-[var(--border)]'
@@ -342,7 +342,7 @@ export function KanbanBoard({ pipelines, stages, leads, defaultPipelineId, taskS
       </div>
 
       <DndContext collisionDetection={closestCenter} onDragStart={onDragStart} onDragEnd={onDragEnd}>
-        <div className="flex gap-4 overflow-x-auto pb-4">
+        <div className="grid grid-cols-1 gap-4 pb-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5">
           {columns.map((col) => {
             const items = (leadsByStage.get(col.id) ?? []).sort((a, b) => (b.created_at ?? '').localeCompare(a.created_at ?? ''))
             return (

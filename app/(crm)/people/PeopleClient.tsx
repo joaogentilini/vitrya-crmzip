@@ -297,6 +297,7 @@ function CreatePersonModal({
         email: email.trim() || null,
         phone_e164: phone.trim() || null,
         owner_profile_id: assignedTo || currentUserId,
+        created_by_profile_id: currentUserId,
       }
 
       const { error: insertError } = await supabase

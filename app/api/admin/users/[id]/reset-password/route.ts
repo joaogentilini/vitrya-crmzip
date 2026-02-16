@@ -1,33 +1,31 @@
-import { createClient } from '@/lib/supabaseServer'
-import { createClient as createAdminClient } from '@supabase/supabase-js'
 import { NextRequest, NextResponse } from 'next/server'
+import { createClient } from '@/lib/supabaseServer'
+import { createAdminClient } from '@/lib/supabase/admin'
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
-const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!
-
-async function getAdminSupabase() {
-  return createAdminClient(supabaseUrl, supabaseServiceKey, {
-    auth: {
-      autoRefreshToken: false,
-      persistSession: false
-    }
-  })
+type ActorProfile = {
+  id: string
+  role: 'admin' | 'gestor' | 'corretor'
+  is_active: boolean
 }
 
-async function validateAdminOrGestor(supabase: Awaited<ReturnType<typeof createClient>>) {
-  const { data: { user } } = await supabase.auth.getUser()
+async function validateAdminOrGestor() {
+  const supabase = await createClient()
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
   if (!user) return null
 
   const { data: profile } = await supabase
     .from('profiles')
     .select('id, role, is_active')
     .eq('id', user.id)
-    .single()
+    .maybeSingle()
 
-  if (!profile || !profile.is_active) return null
-  if (profile.role !== 'admin' && profile.role !== 'gestor') return null
+  const actorProfile = profile as ActorProfile | null
+  if (!actorProfile || actorProfile.is_active === false) return null
+  if (actorProfile.role !== 'admin' && actorProfile.role !== 'gestor') return null
 
-  return { user, profile }
+  return { user, profile: actorProfile }
 }
 
 export async function POST(
@@ -35,48 +33,55 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const { id } = await params
-    const supabase = await createClient()
-    const authResult = await validateAdminOrGestor(supabase)
-    
-    if (!authResult) {
+    const auth = await validateAdminOrGestor()
+    if (!auth) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    const adminSupabase = await getAdminSupabase()
+    const { id } = await params
+    const body = await request.json().catch(() => ({}))
+    const newPassword = typeof body?.newPassword === 'string' ? body.newPassword.trim() : ''
 
-    const { data: targetProfile } = await adminSupabase
+    if (newPassword.length < 6) {
+      return NextResponse.json(
+        { error: 'A nova senha deve ter pelo menos 6 caracteres.' },
+        { status: 422 }
+      )
+    }
+
+    const admin = createAdminClient()
+
+    const { data: targetProfile } = await admin
       .from('profiles')
-      .select('email')
+      .select('id, email')
       .eq('id', id)
-      .single()
+      .maybeSingle()
 
-    if (!targetProfile?.email) {
+    if (!targetProfile) {
       return NextResponse.json({ error: 'User not found' }, { status: 404 })
     }
 
-    const { error } = await adminSupabase.auth.admin.generateLink({
-      type: 'recovery',
-      email: targetProfile.email
+    const { error: updateAuthError } = await admin.auth.admin.updateUserById(id, {
+      password: newPassword,
     })
 
-    if (error) {
-      console.error('[POST /api/admin/users/[id]/reset-password] Error:', error)
-      return NextResponse.json({ error: 'Failed to generate reset link' }, { status: 500 })
+    if (updateAuthError) {
+      return NextResponse.json(
+        { error: updateAuthError.message || 'Falha ao atualizar senha.' },
+        { status: 400 }
+      )
     }
 
-    await adminSupabase
-      .from('user_audit_logs')
-      .insert({
-        actor_id: authResult.user.id,
-        target_user_id: id,
-        action: 'password_reset_requested',
-        details: { email: targetProfile.email }
-      })
+    await admin.from('user_audit_logs').insert({
+      actor_id: auth.user.id,
+      target_user_id: id,
+      action: 'password_reset_in_app',
+      details: { target_email: targetProfile.email || null },
+    })
 
-    return NextResponse.json({ 
-      success: true, 
-      message: 'Password reset email sent'
+    return NextResponse.json({
+      success: true,
+      message: 'Senha atualizada com sucesso.',
     })
   } catch (err) {
     console.error('[POST /api/admin/users/[id]/reset-password] Error:', err)

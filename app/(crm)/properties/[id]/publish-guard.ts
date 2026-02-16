@@ -110,3 +110,103 @@ export async function hasValidatedAuthorizationDoc(propertyId: string): Promise<
 
   return false
 }
+
+function isContractLikeType(docType: unknown): boolean {
+  const v = String(docType ?? '').toLowerCase()
+  if (!v) return false
+  return v.includes('contract') || v.includes('contrato')
+}
+
+function isContractLikeTitle(title: unknown): boolean {
+  const v = String(title ?? '').toLowerCase()
+  if (!v) return false
+  return v.includes('contrat')
+}
+
+export async function hasSignedContractDoc(propertyId: string): Promise<boolean> {
+  const supabase = await createClient()
+
+  // 1) Legacy: property_documents with optional status
+  try {
+    const { data: withStatus, error: withStatusError } = await supabase
+      .from('property_documents')
+      .select('id, status, doc_type, title')
+      .eq('property_id', propertyId)
+      .limit(50)
+
+    if (!withStatusError) {
+      const rows = (withStatus ?? []) as Array<{
+        id: string
+        status?: string | null
+        doc_type?: string | null
+        title?: string | null
+      }>
+      const candidates = rows.filter((r) => isContractLikeType(r.doc_type) || isContractLikeTitle(r.title))
+      if (candidates.length > 0) {
+        const hasAnyStatusField = candidates.some((r) => r.status !== undefined)
+        if (hasAnyStatusField) {
+          return candidates.some((r) => VALID_STATUSES.has(String(r.status ?? '').toLowerCase()))
+        }
+        return true
+      }
+    }
+  } catch {
+    // noop
+  }
+
+  // 2) Legacy fallback: schema sem status no property_documents
+  try {
+    const { data: legacyRows, error: legacyErr } = await supabase
+      .from('property_documents')
+      .select('id, doc_type, title')
+      .eq('property_id', propertyId)
+      .limit(50)
+
+    if (!legacyErr) {
+      const candidates = (legacyRows ?? []).filter(
+        (r: any) => isContractLikeType(r?.doc_type) || isContractLikeTitle(r?.title)
+      )
+      if (candidates.length > 0) return true
+    }
+  } catch {
+    // noop
+  }
+
+  // 3) Novo schema: document_links -> documents
+  try {
+    const { data: links, error: linksErr } = await supabase
+      .from('document_links')
+      .select('document_id')
+      .eq('entity_type', 'property')
+      .eq('entity_id', propertyId)
+      .limit(50)
+
+    if (linksErr) return false
+
+    const documentIds = (links ?? []).map((x: any) => x?.document_id).filter(Boolean)
+    if (documentIds.length === 0) return false
+
+    const { data: docs, error: docsErr } = await supabase
+      .from('documents')
+      .select('id, doc_type, title, status')
+      .in('id', documentIds)
+      .limit(50)
+
+    if (!docsErr) {
+      const candidates = (docs ?? []).filter(
+        (r: any) => isContractLikeType(r?.doc_type) || isContractLikeTitle(r?.title)
+      )
+      if (candidates.length > 0) {
+        const hasAnyStatusField = candidates.some((r: any) => r?.status !== undefined)
+        if (hasAnyStatusField) {
+          return candidates.some((r: any) => VALID_STATUSES.has(String(r?.status ?? '').toLowerCase()))
+        }
+        return true
+      }
+    }
+  } catch {
+    // noop
+  }
+
+  return false
+}

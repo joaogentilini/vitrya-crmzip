@@ -15,10 +15,23 @@ export async function upsertCrmTheme(vars: Record<string, string>) {
     }
   }
 
-  const { error } = await supabase.from('ui_theme_settings').upsert(
-    { tenant_id: null, scope: 'crm', vars: clean },
-    { onConflict: 'tenant_id,scope' }
-  )
+  const { data: existingRows, error: fetchError } = await supabase
+    .from('ui_theme_settings')
+    .select('id')
+    .is('tenant_id', null)
+    .eq('scope', 'crm')
+
+  if (fetchError) throw new Error(fetchError.message)
+
+  const hasRows = (existingRows?.length ?? 0) > 0
+
+  const { error } = hasRows
+    ? await supabase
+        .from('ui_theme_settings')
+        .update({ vars: clean })
+        .is('tenant_id', null)
+        .eq('scope', 'crm')
+    : await supabase.from('ui_theme_settings').insert({ tenant_id: null, scope: 'crm', vars: clean })
 
   if (error) throw new Error(error.message)
 

@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useTransition } from 'react'
+import { useEffect, useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import { SettingsAppShell } from '@/components/SettingsAppShell'
 import { Button } from '@/components/ui/Button'
@@ -11,6 +11,16 @@ import { useToast } from '@/components/ui/Toast'
 
 type UserRole = 'admin' | 'gestor' | 'corretor'
 
+interface GoogleCalendarSummary {
+  connected: boolean
+  google_email: string | null
+  sync_enabled: boolean
+  auto_create_from_tasks: boolean
+  connected_at: string | null
+  updated_at: string | null
+  last_error: string | null
+}
+
 interface UserProfile {
   id: string
   full_name: string
@@ -20,6 +30,7 @@ interface UserProfile {
   is_active: boolean
   created_at: string
   updated_at: string
+  google_calendar: GoogleCalendarSummary
 }
 
 interface UsersClientProps {
@@ -27,6 +38,7 @@ interface UsersClientProps {
   users: UserProfile[]
   currentUserId: string
   currentUserRole: UserRole
+  googleStatus?: string | null
 }
 
 const roleLabels: Record<UserRole, string> = {
@@ -41,15 +53,42 @@ const roleColors: Record<UserRole, string> = {
   corretor: 'bg-[var(--muted)] text-[var(--muted-foreground)]'
 }
 
-export function UsersClient({ userEmail, users, currentUserId, currentUserRole }: UsersClientProps) {
+function formatDateTime(value?: string | null) {
+  if (!value) return '-'
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return '-'
+  return date.toLocaleString('pt-BR')
+}
+
+export function UsersClient({
+  userEmail,
+  users,
+  currentUserId,
+  currentUserRole,
+  googleStatus,
+}: UsersClientProps) {
   const router = useRouter()
   const { success, error: showError } = useToast()
   const [isPending, startTransition] = useTransition()
   const [showCreateModal, setShowCreateModal] = useState(false)
   const [editingUser, setEditingUser] = useState<UserProfile | null>(null)
+  const [googleUser, setGoogleUser] = useState<UserProfile | null>(null)
+  const [resetPasswordUser, setResetPasswordUser] = useState<UserProfile | null>(null)
   const [filterRole, setFilterRole] = useState<string>('')
   const [filterActive, setFilterActive] = useState<string>('')
   const [search, setSearch] = useState('')
+
+  useEffect(() => {
+    if (!googleStatus) return
+
+    if (googleStatus === 'connected') {
+      success('Google Agenda conectada com sucesso.')
+    } else if (googleStatus === 'error') {
+      showError('Falha ao conectar Google Agenda.')
+    }
+
+    router.replace('/settings/users')
+  }, [googleStatus, success, showError, router])
 
   const filteredUsers = users.filter(user => {
     if (filterRole && user.role !== filterRole) return false
@@ -120,30 +159,6 @@ export function UsersClient({ userEmail, users, currentUserId, currentUserRole }
     })
   }
 
-  const handleResetPassword = async (userId: string, email: string) => {
-    if (!confirm(`Enviar email de redefinição de senha para ${email}?`)) return
-    
-    startTransition(async () => {
-      try {
-        const resp = await fetch(`/api/admin/users/${userId}/reset-password`, {
-          method: 'POST'
-        })
-        
-        if (!resp.ok) {
-          const data = await resp.json().catch(() => ({}))
-          const requestId = data.error?.requestId || data.requestId
-          const baseMsg = typeof data.error === 'string' ? data.error : (data.error?.message || 'Erro ao enviar email')
-          const errorMsg = requestId ? `${baseMsg} (ID: ${requestId})` : baseMsg
-          throw new Error(errorMsg)
-        }
-        
-        success('Email de redefinição enviado')
-      } catch (err) {
-        showError(err instanceof Error ? err.message : 'Erro ao enviar email')
-      }
-    })
-  }
-
   return (
     <SettingsAppShell userEmail={userEmail} pageTitle="Usuários">
       <div className="space-y-6">
@@ -204,6 +219,7 @@ export function UsersClient({ userEmail, users, currentUserId, currentUserRole }
                     <th className="text-left px-4 py-3 text-sm font-medium text-[var(--muted-foreground)]">Usuário</th>
                     <th className="text-left px-4 py-3 text-sm font-medium text-[var(--muted-foreground)]">Role</th>
                     <th className="text-left px-4 py-3 text-sm font-medium text-[var(--muted-foreground)]">Status</th>
+                    <th className="text-left px-4 py-3 text-sm font-medium text-[var(--muted-foreground)]">Google Agenda</th>
                     <th className="text-left px-4 py-3 text-sm font-medium text-[var(--muted-foreground)]">Criado em</th>
                     <th className="text-right px-4 py-3 text-sm font-medium text-[var(--muted-foreground)]">Ações</th>
                   </tr>
@@ -245,12 +261,31 @@ export function UsersClient({ userEmail, users, currentUserId, currentUserRole }
                         </span>
                       </td>
                       <td className="px-4 py-3">
+                        <span
+                          className={`inline-flex px-2 py-1 text-xs font-medium rounded-full ${
+                            user.google_calendar.connected
+                              ? 'bg-emerald-100 text-emerald-700'
+                              : 'bg-[var(--muted)] text-[var(--muted-foreground)]'
+                          }`}
+                        >
+                          {user.google_calendar.connected ? 'Conectada' : 'Nao conectada'}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3">
                         <span className="text-sm text-[var(--muted-foreground)]">
                           {new Date(user.created_at).toLocaleDateString('pt-BR')}
                         </span>
                       </td>
                       <td className="px-4 py-3">
                         <div className="flex items-center justify-end gap-2">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => setGoogleUser(user)}
+                            disabled={isPending}
+                          >
+                            Google
+                          </Button>
                           {user.id !== currentUserId && (
                             <>
                               <Button
@@ -272,15 +307,15 @@ export function UsersClient({ userEmail, users, currentUserId, currentUserRole }
                               <Button
                                 variant="ghost"
                                 size="sm"
-                                onClick={() => user.email && handleResetPassword(user.id, user.email)}
-                                disabled={isPending || !user.email}
+                                onClick={() => setResetPasswordUser(user)}
+                                disabled={isPending}
                               >
-                                Reset Senha
+                                Nova Senha
                               </Button>
                             </>
                           )}
                           {user.id === currentUserId && (
-                            <span className="text-xs text-[var(--muted-foreground)]">(você)</span>
+                            <span className="text-xs text-[var(--muted-foreground)]">(voce)</span>
                           )}
                         </div>
                       </td>
@@ -288,8 +323,8 @@ export function UsersClient({ userEmail, users, currentUserId, currentUserRole }
                   ))}
                   {filteredUsers.length === 0 && (
                     <tr>
-                      <td colSpan={5} className="px-4 py-8 text-center text-[var(--muted-foreground)]">
-                        Nenhum usuário encontrado
+                      <td colSpan={6} className="px-4 py-8 text-center text-[var(--muted-foreground)]">
+                        Nenhum usuario encontrado
                       </td>
                     </tr>
                   )}
@@ -319,6 +354,28 @@ export function UsersClient({ userEmail, users, currentUserId, currentUserRole }
               setTimeout(() => setEditingUser(null), 100)
             }}
             currentUserRole={currentUserRole}
+          />
+        )}
+
+        {googleUser && (
+          <UserGoogleIntegrationModal
+            user={googleUser}
+            onClose={() => setGoogleUser(null)}
+            onSuccess={() => {
+              router.refresh()
+              setTimeout(() => setGoogleUser(null), 100)
+            }}
+          />
+        )}
+
+        {resetPasswordUser && (
+          <ResetPasswordModal
+            user={resetPasswordUser}
+            onClose={() => setResetPasswordUser(null)}
+            onSuccess={() => {
+              router.refresh()
+              setTimeout(() => setResetPasswordUser(null), 100)
+            }}
           />
         )}
       </div>
@@ -584,6 +641,263 @@ function EditUserModal({ user, onClose, onSuccess, currentUserRole }: EditUserMo
               </Button>
               <Button type="submit" disabled={isPending} className="flex-1">
                 {isPending ? 'Salvando...' : 'Salvar'}
+              </Button>
+            </div>
+          </form>
+        </CardContent>
+      </Card>
+    </div>
+  )
+}
+
+interface UserGoogleIntegrationModalProps {
+  user: UserProfile
+  onClose: () => void
+  onSuccess: () => void
+}
+
+function UserGoogleIntegrationModal({ user, onClose, onSuccess }: UserGoogleIntegrationModalProps) {
+  const { success, error: showError } = useToast()
+  const [isPending, startTransition] = useTransition()
+  const [syncEnabled, setSyncEnabled] = useState(user.google_calendar.sync_enabled)
+  const [autoCreateFromTasks, setAutoCreateFromTasks] = useState(
+    user.google_calendar.auto_create_from_tasks
+  )
+
+  const handleSavePreferences = () => {
+    if (!user.google_calendar.connected) {
+      showError('Conecte a Google Agenda antes de salvar preferencias.')
+      return
+    }
+
+    startTransition(async () => {
+      try {
+        const resp = await fetch(`/api/admin/users/${user.id}/google-calendar`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            sync_enabled: syncEnabled,
+            auto_create_from_tasks: autoCreateFromTasks,
+          }),
+        })
+
+        const data = await resp.json().catch(() => ({}))
+        if (!resp.ok) {
+          const baseMsg =
+            typeof data.error === 'string'
+              ? data.error
+              : data.error?.message || 'Falha ao atualizar integracao Google.'
+          throw new Error(baseMsg)
+        }
+
+        success('Preferencias da integracao Google atualizadas.')
+        onSuccess()
+      } catch (err) {
+        showError(err instanceof Error ? err.message : 'Falha ao atualizar integracao Google.')
+      }
+    })
+  }
+
+  const handleDisconnect = () => {
+    if (!confirm(`Desconectar Google Agenda de ${user.full_name}?`)) return
+
+    startTransition(async () => {
+      try {
+        const resp = await fetch(`/api/admin/users/${user.id}/google-calendar`, {
+          method: 'DELETE',
+        })
+        const data = await resp.json().catch(() => ({}))
+        if (!resp.ok) {
+          const baseMsg =
+            typeof data.error === 'string'
+              ? data.error
+              : data.error?.message || 'Falha ao desconectar Google Agenda.'
+          throw new Error(baseMsg)
+        }
+
+        success('Google Agenda desconectada.')
+        onSuccess()
+      } catch (err) {
+        showError(err instanceof Error ? err.message : 'Falha ao desconectar Google Agenda.')
+      }
+    })
+  }
+
+  const handleConnect = () => {
+    const returnTo = encodeURIComponent('/settings/users')
+    const targetUserId = encodeURIComponent(user.id)
+    window.location.href = `/api/integrations/google/connect?targetUserId=${targetUserId}&returnTo=${returnTo}`
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center">
+      <div className="absolute inset-0 bg-black/50" onClick={onClose} />
+      <Card className="relative z-10 w-full max-w-xl mx-4">
+        <CardHeader>
+          <CardTitle>Google Agenda - {user.full_name}</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="rounded-[var(--radius)] border border-[var(--border)] p-3 text-sm text-[var(--foreground)]">
+            <p>
+              Status:{' '}
+              <span className="font-medium">
+                {user.google_calendar.connected ? 'Conectada' : 'Nao conectada'}
+              </span>
+            </p>
+            <p>
+              Conta Google:{' '}
+              <span className="font-medium">{user.google_calendar.google_email || '-'}</span>
+            </p>
+            <p className="text-xs text-[var(--muted-foreground)] mt-1">
+              Conectada em: {formatDateTime(user.google_calendar.connected_at)}
+            </p>
+            <p className="text-xs text-[var(--muted-foreground)]">
+              Ultima atualizacao: {formatDateTime(user.google_calendar.updated_at)}
+            </p>
+            {user.google_calendar.last_error ? (
+              <p className="text-xs text-[var(--destructive)] mt-1">
+                Ultimo erro: {user.google_calendar.last_error}
+              </p>
+            ) : null}
+          </div>
+
+          <div className="space-y-3">
+            <label className="flex items-center justify-between rounded-[var(--radius)] border border-[var(--border)] p-3">
+              <span className="text-sm text-[var(--foreground)]">Sincronizacao ativa</span>
+              <input
+                type="checkbox"
+                checked={syncEnabled}
+                onChange={(e) => setSyncEnabled(e.target.checked)}
+                disabled={isPending}
+              />
+            </label>
+            <label className="flex items-center justify-between rounded-[var(--radius)] border border-[var(--border)] p-3">
+              <span className="text-sm text-[var(--foreground)]">Criar eventos automaticamente das tarefas</span>
+              <input
+                type="checkbox"
+                checked={autoCreateFromTasks}
+                onChange={(e) => setAutoCreateFromTasks(e.target.checked)}
+                disabled={isPending}
+              />
+            </label>
+          </div>
+
+          <div className="flex flex-wrap gap-2 pt-1">
+            <Button type="button" variant="outline" onClick={handleConnect} disabled={isPending}>
+              {user.google_calendar.connected ? 'Reconectar Google' : 'Conectar Google'}
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={handleSavePreferences}
+              disabled={isPending || !user.google_calendar.connected}
+            >
+              Salvar Preferencias
+            </Button>
+            {user.google_calendar.connected ? (
+              <Button type="button" variant="destructive" onClick={handleDisconnect} disabled={isPending}>
+                Desconectar
+              </Button>
+            ) : null}
+          </div>
+
+          <div className="flex justify-end pt-2">
+            <Button type="button" variant="ghost" onClick={onClose}>
+              Fechar
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+    </div>
+  )
+}
+
+interface ResetPasswordModalProps {
+  user: UserProfile
+  onClose: () => void
+  onSuccess: () => void
+}
+
+function ResetPasswordModal({ user, onClose, onSuccess }: ResetPasswordModalProps) {
+  const { success, error: showError } = useToast()
+  const [isPending, startTransition] = useTransition()
+  const [newPassword, setNewPassword] = useState('')
+  const [confirmPassword, setConfirmPassword] = useState('')
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault()
+
+    if (newPassword.length < 6) {
+      showError('A senha deve ter no minimo 6 caracteres.')
+      return
+    }
+
+    if (newPassword !== confirmPassword) {
+      showError('As senhas nao conferem.')
+      return
+    }
+
+    startTransition(async () => {
+      try {
+        const resp = await fetch(`/api/admin/users/${user.id}/reset-password`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ newPassword }),
+        })
+        const data = await resp.json().catch(() => ({}))
+        if (!resp.ok) {
+          const baseMsg =
+            typeof data.error === 'string'
+              ? data.error
+              : data.error?.message || 'Falha ao redefinir senha.'
+          throw new Error(baseMsg)
+        }
+
+        success('Senha atualizada no app com sucesso.')
+        onSuccess()
+      } catch (err) {
+        showError(err instanceof Error ? err.message : 'Falha ao redefinir senha.')
+      }
+    })
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center">
+      <div className="absolute inset-0 bg-black/50" onClick={onClose} />
+      <Card className="relative z-10 w-full max-w-md mx-4">
+        <CardHeader>
+          <CardTitle>Nova Senha - {user.full_name}</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <form onSubmit={handleSubmit} className="space-y-4">
+            <div>
+              <Label htmlFor="new_password">Nova senha</Label>
+              <Input
+                id="new_password"
+                type="password"
+                value={newPassword}
+                onChange={(e) => setNewPassword(e.target.value)}
+                minLength={6}
+                required
+              />
+            </div>
+            <div>
+              <Label htmlFor="confirm_password">Confirmar nova senha</Label>
+              <Input
+                id="confirm_password"
+                type="password"
+                value={confirmPassword}
+                onChange={(e) => setConfirmPassword(e.target.value)}
+                minLength={6}
+                required
+              />
+            </div>
+            <div className="flex gap-2 pt-2">
+              <Button type="button" variant="outline" onClick={onClose} className="flex-1">
+                Cancelar
+              </Button>
+              <Button type="submit" disabled={isPending} className="flex-1">
+                {isPending ? 'Salvando...' : 'Atualizar Senha'}
               </Button>
             </div>
           </form>

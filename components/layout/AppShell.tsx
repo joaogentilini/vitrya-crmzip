@@ -24,41 +24,41 @@ interface AppShellProps {
   onNewLead?: () => void
 }
 
-/** =========================
- *  THEME EDITOR (local)
- *  ========================= */
-type ThemeVarSpec = {
-  label: string
-  cssVar: string // ex: '--sidebar-bg'
-  kind: 'bg' | 'text' | 'border' | 'button' | 'other'
-  /** quando true, deixa o alpha controlável (rgba). */
-  allowAlpha?: boolean
-  /** dica curta que aparece embaixo */
-  hint?: string
+type AppNotification = {
+  id: string
+  kind: 'proposal_pending' | 'proposal_draft' | 'lead_new' | 'lead_followup'
+  title: string
+  message: string
+  href: string
+  created_at: string
+  priority: 'high' | 'medium' | 'low'
+  channels?: Array<'app' | 'whatsapp_planned'>
 }
 
 const THEME_STORAGE_KEY = 'vitrya_theme_overrides_v1'
+const READ_NOTIFICATIONS_STORAGE_PREFIX = 'vitrya_notifications_read_v1'
+const LAYOUT_V2_RAIL_COLLAPSED_STORAGE_KEY = 'vitrya_layout_v2_rail_collapsed_v1'
 
 const THEME_DEFAULTS: Record<string, string> = {
-  '--background': '#f7f7f8',
+  '--background': '#FAFAFA',
   '--foreground': '#171A21',
 
-  '--card': 'rgba(255,255,255,0.88)',
-  '--border': 'rgba(23,26,33,0.10)',
-  '--accent': 'rgba(23,26,33,0.06)',
-  '--ring': 'rgba(23,190,187,0.55)',
+  '--card': '#ffffff',
+  '--border': '#e2e8f0',
+  '--accent': '#f1f5f9',
+  '--ring': '#FF681F',
 
-  '--secondary': 'rgba(23,26,33,0.10)',
-  '--secondary-foreground': '#171A21',
-  '--muted-foreground': 'rgba(23,26,33,0.65)',
+  '--secondary': '#294487',
+  '--secondary-foreground': '#ffffff',
+  '--muted-foreground': '#64748b',
 
   // Sidebar
-  '--sidebar-bg': 'rgba(10,12,16,0.70)',
-  '--sidebar-muted': 'rgba(255,255,255,0.80)',
+  '--sidebar-bg': '#171A21',
+  '--sidebar-muted': 'rgba(255,255,255,0.5)',
   '--sidebar-hover': 'rgba(255,255,255,0.10)',
 
-  // Ativo (CRM padrão)
-  '--sidebar-active': 'rgba(255,104,31,0.85)',
+  // Ativo (CRM padrao)
+  '--sidebar-active': '#FF681F',
 
   // Ativo (ERP cobalt) + "current" (não sobrescreve tema salvo)
   '--sidebar-active-erp': 'rgba(59,130,246,0.85)',
@@ -66,73 +66,6 @@ const THEME_DEFAULTS: Record<string, string> = {
 
   // Topbar (CRM)
   '--topbar-bg': 'rgba(255,255,255,0.82)',
-}
-
-const THEME_SPECS: ThemeVarSpec[] = [
-  { label: 'Fundo geral do CRM', cssVar: '--background', kind: 'bg' },
-  { label: 'Texto padrão', cssVar: '--foreground', kind: 'text' },
-  { label: 'Cards (fundo)', cssVar: '--card', kind: 'bg', allowAlpha: true },
-  { label: 'Bordas (geral)', cssVar: '--border', kind: 'border', allowAlpha: true },
-  { label: 'Hover/Accent (geral)', cssVar: '--accent', kind: 'bg', allowAlpha: true },
-  { label: 'Ring/Focus', cssVar: '--ring', kind: 'other', allowAlpha: true },
-  { label: 'Texto “muted”', cssVar: '--muted-foreground', kind: 'text', allowAlpha: true },
-
-  { label: 'Sidebar: Fundo', cssVar: '--sidebar-bg', kind: 'bg', allowAlpha: true, hint: 'Painel lateral (menu).' },
-  { label: 'Sidebar: Texto (labels)', cssVar: '--sidebar-muted', kind: 'text', allowAlpha: true, hint: 'Se sumir texto, ajuste aqui.' },
-  { label: 'Sidebar: Hover', cssVar: '--sidebar-hover', kind: 'bg', allowAlpha: true },
-
-  // Mantém o padrão já existente; o "current" alterna automaticamente (CRM x ERP).
-  { label: 'Sidebar: Ativo (CRM)', cssVar: '--sidebar-active', kind: 'button', allowAlpha: true, hint: 'Item ativo no CRM.' },
-  { label: 'Sidebar: Ativo (ERP cobalt)', cssVar: '--sidebar-active-erp', kind: 'button', allowAlpha: true, hint: 'Item ativo no ERP.' },
-
-  { label: 'Topbar do CRM (fundo)', cssVar: '--topbar-bg', kind: 'bg', allowAlpha: true },
-]
-
-function clamp(n: number, min: number, max: number) {
-  return Math.max(min, Math.min(max, n))
-}
-
-function hexToRgb(hex: string): { r: number; g: number; b: number } | null {
-  const v = hex.replace('#', '').trim()
-  if (v.length === 3) {
-    const r = parseInt(v[0] + v[0], 16)
-    const g = parseInt(v[1] + v[1], 16)
-    const b = parseInt(v[2] + v[2], 16)
-    return { r, g, b }
-  }
-  if (v.length === 6) {
-    const r = parseInt(v.slice(0, 2), 16)
-    const g = parseInt(v.slice(2, 4), 16)
-    const b = parseInt(v.slice(4, 6), 16)
-    return { r, g, b }
-  }
-  return null
-}
-
-function parseCssColorToHexAndAlpha(input: string): { hex: string; alpha: number } {
-  const s = (input || '').trim()
-
-  // rgba(r,g,b,a)
-  const rgba = s.match(/rgba?\(\s*(\d+)[,\s]+(\d+)[,\s]+(\d+)(?:[,\s/]+([\d.]+))?\s*\)/i)
-  if (rgba) {
-    const r = clamp(Number(rgba[1]), 0, 255)
-    const g = clamp(Number(rgba[2]), 0, 255)
-    const b = clamp(Number(rgba[3]), 0, 255)
-    const a = rgba[4] !== undefined ? clamp(Number(rgba[4]), 0, 1) : 1
-    const hex =
-      '#' +
-      [r, g, b]
-        .map((x) => x.toString(16).padStart(2, '0'))
-        .join('')
-        .toUpperCase()
-    return { hex, alpha: a }
-  }
-
-  // #RRGGBB or #RGB
-  if (s.startsWith('#')) return { hex: s.toUpperCase(), alpha: 1 }
-
-  // fallback
-  return { hex: '#FFFFFF', alpha: 1 }
 }
 
 function applyCssVar(cssVar: string, value: string) {
@@ -145,182 +78,23 @@ function getCssVar(cssVar: string) {
   return getComputedStyle(document.documentElement).getPropertyValue(cssVar).trim()
 }
 
-function loadThemeOverrides(): Record<string, string> {
-  if (typeof window === 'undefined') return {}
-  try {
-    const raw = window.localStorage.getItem(THEME_STORAGE_KEY)
-    if (!raw) return {}
-    const parsed = JSON.parse(raw)
-    if (!parsed || typeof parsed !== 'object') return {}
-    return parsed
-  } catch {
-    return {}
-  }
-}
-
-function saveThemeOverrides(overrides: Record<string, string>) {
-  if (typeof window === 'undefined') return
-  window.localStorage.setItem(THEME_STORAGE_KEY, JSON.stringify(overrides))
-}
-
 function resetThemeOverrides() {
   if (typeof window === 'undefined') return
   window.localStorage.removeItem(THEME_STORAGE_KEY)
 }
 
-function ThemeEditorPanel({
-  open,
-  onClose,
-}: {
-  open: boolean
-  onClose: () => void
-}) {
-  const [overrides, setOverrides] = useState<Record<string, string>>({})
+function formatRelativeTime(iso: string) {
+  const ts = Date.parse(iso)
+  if (!Number.isFinite(ts)) return 'agora'
 
-  // carregar overrides + aplicar
-  useEffect(() => {
-    const o = loadThemeOverrides()
-    setOverrides(o)
-    for (const [k, v] of Object.entries(o)) applyCssVar(k, v)
-  }, [])
-
-  const updateVar = useCallback(
-    (cssVar: string, nextValue: string) => {
-      const next = { ...overrides, [cssVar]: nextValue }
-      setOverrides(next)
-      saveThemeOverrides(next)
-      applyCssVar(cssVar, nextValue)
-    },
-    [overrides]
-  )
-
-  const handleReset = useCallback(() => {
-    resetThemeOverrides()
-    setOverrides({})
-    // reaplica defaults seguros
-    for (const [k, v] of Object.entries(THEME_DEFAULTS)) applyCssVar(k, v)
-  }, [])
-
-  if (!open) return null
-
-  return (
-    <>
-      <div className="fixed inset-0 z-[60] bg-black/40" onClick={onClose} aria-hidden="true" />
-      <div
-        className="fixed right-4 top-16 z-[61] w-[360px] max-w-[92vw] rounded-2xl border border-white/15 bg-black/60 text-white shadow-2xl backdrop-blur-xl"
-        role="dialog"
-        aria-label="Editor de Tema"
-      >
-        <div className="px-4 py-3 border-b border-white/10 flex items-center justify-between">
-          <div className="flex flex-col">
-            <span className="text-sm font-semibold">
-              <span>Editor de Cores (Tema)</span>
-            </span>
-            <span className="text-xs text-white/70">
-              <span>Ajuste ao vivo • Salva no navegador</span>
-            </span>
-          </div>
-
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={handleReset}
-              className="px-3 py-1.5 text-xs font-semibold rounded-full bg-white/10 hover:bg-white/15 border border-white/10"
-            >
-              <span>Reset</span>
-            </button>
-            <button
-              type="button"
-              onClick={onClose}
-              className="w-8 h-8 grid place-items-center rounded-full bg-white/10 hover:bg-white/15 border border-white/10"
-              aria-label="Fechar"
-            >
-              <span>✕</span>
-            </button>
-          </div>
-        </div>
-
-        <div className="max-h-[68vh] overflow-auto p-3 space-y-2">
-          {THEME_SPECS.map((spec) => {
-            const current = overrides[spec.cssVar] ?? getCssVar(spec.cssVar) ?? THEME_DEFAULTS[spec.cssVar] ?? ''
-            const parsed = parseCssColorToHexAndAlpha(current)
-            const alphaPct = Math.round(parsed.alpha * 100)
-
-            return (
-              <div key={spec.cssVar} className="rounded-xl border border-white/10 bg-white/5 p-3">
-                <div className="flex items-start justify-between gap-3">
-                  <div className="min-w-0">
-                    <div className="text-sm font-semibold">
-                      <span>{spec.label}</span>
-                    </div>
-                    <div className="text-[11px] text-white/70 mt-0.5">
-                      <span className="font-mono">{spec.cssVar}</span>
-                      {spec.hint ? <span className="text-white/60"> • {spec.hint}</span> : null}
-                    </div>
-                  </div>
-
-                  <div className="flex items-center gap-2">
-                    <input
-                      type="color"
-                      value={parsed.hex}
-                      onChange={(e) => {
-                        const hex = e.target.value
-                        const rgb = hexToRgb(hex)
-                        if (!rgb) return updateVar(spec.cssVar, hex)
-                        if (spec.allowAlpha) {
-                          updateVar(spec.cssVar, `rgba(${rgb.r},${rgb.g},${rgb.b},${parsed.alpha})`)
-                        } else {
-                          updateVar(spec.cssVar, hex)
-                        }
-                      }}
-                      className="w-10 h-10 rounded-lg overflow-hidden bg-transparent border border-white/10"
-                      aria-label={`Selecionar cor: ${spec.label}`}
-                    />
-                  </div>
-                </div>
-
-                {spec.allowAlpha ? (
-                  <div className="mt-3">
-                    <div className="flex items-center justify-between text-xs text-white/70">
-                      <span>Translucidez</span>
-                      <span className="font-mono">{alphaPct}%</span>
-                    </div>
-                    <input
-                      type="range"
-                      min={0}
-                      max={100}
-                      value={alphaPct}
-                      onChange={(e) => {
-                        const pct = clamp(Number(e.target.value), 0, 100)
-                        const a = pct / 100
-                        const rgb = hexToRgb(parsed.hex)
-                        if (!rgb) return
-                        updateVar(spec.cssVar, `rgba(${rgb.r},${rgb.g},${rgb.b},${a})`)
-                      }}
-                      className="w-full mt-1"
-                      aria-label={`Translucidez: ${spec.label}`}
-                    />
-                  </div>
-                ) : null}
-
-                <div className="mt-2 text-[11px] text-white/70">
-                  <span>
-                    Atual: <span className="font-mono text-white/85">{current || '(vazio)'}</span>
-                  </span>
-                </div>
-              </div>
-            )
-          })}
-        </div>
-
-        <div className="px-4 py-3 border-t border-white/10 text-xs text-white/70">
-          <span>
-            Dica: se “sumirem letras” na sidebar, ajuste <span className="font-mono text-white/85">--sidebar-muted</span>.
-          </span>
-        </div>
-      </div>
-    </>
-  )
+  const deltaMs = Date.now() - ts
+  const mins = Math.floor(deltaMs / (1000 * 60))
+  if (mins < 1) return 'agora'
+  if (mins < 60) return `${mins}m atrás`
+  const hours = Math.floor(mins / 60)
+  if (hours < 24) return `${hours}h atrás`
+  const days = Math.floor(hours / 24)
+  return `${days}d atrás`
 }
 
 export function AppShell({
@@ -335,47 +109,138 @@ export function AppShell({
 }: AppShellProps) {
   const pathname = usePathname()
   const router = useRouter()
+  const layoutV2Enabled = process.env.NEXT_PUBLIC_LAYOUT_V2 !== '0'
 
   const [sidebarOpen, setSidebarOpen] = useState(false)
+  const [railCollapsed, setRailCollapsed] = useState(false)
   const [userMenuOpen, setUserMenuOpen] = useState(false)
-  const [themeOpen, setThemeOpen] = useState(false)
+  const [notificationsOpen, setNotificationsOpen] = useState(false)
+  const [notificationsLoading, setNotificationsLoading] = useState(false)
+  const [notificationsError, setNotificationsError] = useState<string | null>(null)
+  const [notifications, setNotifications] = useState<AppNotification[]>([])
+  const [readNotificationIds, setReadNotificationIds] = useState<string[]>([])
 
   const isManager = useMemo(() => userRole === 'admin' || userRole === 'gestor', [userRole])
   const isBroker = useMemo(() => userRole === 'corretor', [userRole])
+  const canAccessErp = useMemo(() => isManager || isBroker, [isManager, isBroker])
   const isErpMode = useMemo(() => (pathname ? pathname === '/erp' || pathname.startsWith('/erp/') : false), [pathname])
+  const isRailCollapsed = layoutV2Enabled && railCollapsed
+  const sidebarDesktopWidthClass = isRailCollapsed ? 'lg:w-20' : layoutV2Enabled ? 'lg:w-72' : 'lg:w-64'
+  const sidebarMobileWidthClass = layoutV2Enabled ? 'w-72' : 'w-64'
 
-  /** Defaults seguros + aplicar overrides salvos */
+  /** Defaults seguros e limpeza de overrides antigos do editor de tema */
   useEffect(() => {
     if (typeof document === 'undefined') return
 
-    // garante defaults (evita vars vazias quebrando cor)
-    const style = getComputedStyle(document.documentElement)
+    // força o tema base em toda sessão para evitar restos de customização antiga.
     for (const [k, v] of Object.entries(THEME_DEFAULTS)) {
-      const cur = style.getPropertyValue(k).trim()
-      if (!cur) document.documentElement.style.setProperty(k, v)
+      document.documentElement.style.setProperty(k, v)
     }
 
-    // aplica overrides locais
-    const overrides = loadThemeOverrides()
-    for (const [k, v] of Object.entries(overrides)) applyCssVar(k, v)
+    // editor removido: limpa overrides locais legados para manter o tema padrao.
+    resetThemeOverrides()
   }, [])
 
-  /**
-   * Modo ERP (cobalt): alterna apenas o "active current" sem sobrescrever customizações.
-   * - CRM usa --sidebar-active
-   * - ERP usa --sidebar-active-erp
-   */
+  // Mantem visual unico entre CRM e ERP: item ativo usa sempre a cor padrao do CRM.
   useEffect(() => {
     if (typeof document === 'undefined') return
 
-    const overrides = loadThemeOverrides()
+    const crmActive = getCssVar('--sidebar-active') || THEME_DEFAULTS['--sidebar-active']
+    applyCssVar('--sidebar-active-current', crmActive)
+  }, [])
 
-    const crmActive = overrides['--sidebar-active'] ?? getCssVar('--sidebar-active') ?? THEME_DEFAULTS['--sidebar-active']
-    const erpActive =
-      overrides['--sidebar-active-erp'] ?? getCssVar('--sidebar-active-erp') ?? THEME_DEFAULTS['--sidebar-active-erp']
+  useEffect(() => {
+    if (!layoutV2Enabled || typeof window === 'undefined') return
+    const persisted = window.localStorage.getItem(LAYOUT_V2_RAIL_COLLAPSED_STORAGE_KEY)
+    setRailCollapsed(persisted === '1')
+  }, [layoutV2Enabled])
 
-    applyCssVar('--sidebar-active-current', isErpMode ? erpActive : crmActive)
-  }, [isErpMode])
+  const loadNotifications = useCallback(
+    async (silent = false) => {
+      if (!userEmail) return
+      if (!silent) setNotificationsLoading(true)
+      setNotificationsError(null)
+
+      try {
+        const res = await fetch('/api/notifications?limit=25', {
+          method: 'GET',
+          cache: 'no-store',
+          headers: { Accept: 'application/json' },
+        })
+
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({}))
+          throw new Error(err?.error || 'Falha ao carregar notificações.')
+        }
+
+        const json = (await res.json()) as { items?: AppNotification[] }
+        setNotifications(Array.isArray(json.items) ? json.items : [])
+      } catch (err: any) {
+        setNotificationsError(err?.message || 'Erro ao carregar notificações.')
+      } finally {
+        if (!silent) setNotificationsLoading(false)
+      }
+    },
+    [userEmail]
+  )
+
+  useEffect(() => {
+    if (!userEmail) {
+      setNotifications([])
+      return
+    }
+
+    void loadNotifications()
+    const timer = window.setInterval(() => {
+      void loadNotifications(true)
+    }, 30000)
+
+    return () => window.clearInterval(timer)
+  }, [userEmail, loadNotifications])
+
+  useEffect(() => {
+    if (!userEmail || typeof window === 'undefined') {
+      setReadNotificationIds([])
+      return
+    }
+
+    const storageKey = `${READ_NOTIFICATIONS_STORAGE_PREFIX}:${userEmail}`
+    try {
+      const raw = window.localStorage.getItem(storageKey)
+      if (!raw) {
+        setReadNotificationIds([])
+        return
+      }
+      const parsed = JSON.parse(raw)
+      if (!Array.isArray(parsed)) {
+        setReadNotificationIds([])
+        return
+      }
+      setReadNotificationIds(parsed.filter((item) => typeof item === 'string'))
+    } catch {
+      setReadNotificationIds([])
+    }
+  }, [userEmail])
+
+  const markNotificationAsRead = useCallback(
+    (notificationId: string) => {
+      if (!notificationId) return
+      setReadNotificationIds((prev) => {
+        if (prev.includes(notificationId)) return prev
+        const next = [notificationId, ...prev].slice(0, 600)
+        if (typeof window !== 'undefined' && userEmail) {
+          const storageKey = `${READ_NOTIFICATIONS_STORAGE_PREFIX}:${userEmail}`
+          try {
+            window.localStorage.setItem(storageKey, JSON.stringify(next))
+          } catch {
+            // ignore quota errors
+          }
+        }
+        return next
+      })
+    },
+    [userEmail]
+  )
 
   const navItems: NavItem[] = useMemo(() => {
     const items: NavItem[] = [
@@ -573,8 +438,8 @@ export function AppShell({
         ],
       },
 
-      // ERP (somente admin/gestor)
-      ...(isManager
+      // ERP
+      ...(canAccessErp
         ? [
             {
               href: '/erp',
@@ -589,6 +454,53 @@ export function AppShell({
                   />
                 </svg>
               ),
+              children: [
+                {
+                  href: '/erp',
+                  label: 'Visão geral',
+                  icon: (
+                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 12l2-2 7-7 7 7 2 2M5 10v10h14V10" />
+                    </svg>
+                  ),
+                },
+                {
+                  href: '/erp/negociacoes',
+                  label: 'Negociações',
+                  icon: (
+                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7h8M8 12h8M8 17h5M5 4h14a2 2 0 012 2v12a2 2 0 01-2 2H5a2 2 0 01-2-2V6a2 2 0 012-2z" />
+                    </svg>
+                  ),
+                },
+                {
+                  href: '/erp/contratos',
+                  label: 'Contratos/Vendas',
+                  icon: (
+                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4M7 4h10a2 2 0 012 2v12a2 2 0 01-2 2H7a2 2 0 01-2-2V6a2 2 0 012-2z" />
+                    </svg>
+                  ),
+                },
+                {
+                  href: '/erp/financeiro',
+                  label: isManager ? 'Financeiro' : 'Financeiro (minha carteira)',
+                  icon: (
+                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-9V7m0 10v1m8-6a8 8 0 11-16 0 8 8 0 0116 0z" />
+                    </svg>
+                  ),
+                },
+                {
+                  href: '/erp/relatorios',
+                  label: 'Relatórios',
+                  icon: (
+                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 17v-6m3 6V7m3 10v-3m4 6H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v12a2 2 0 01-2 2z" />
+                    </svg>
+                  ),
+                },
+              ],
             },
           ]
         : []),
@@ -666,40 +578,64 @@ export function AppShell({
     ]
 
     return items
-  }, [isManager, isBroker])
+  }, [canAccessErp, isBroker, isManager])
 
   const [settingsOpen, setSettingsOpen] = useState(() => pathname?.startsWith('/settings') || false)
   const [leadsOpen, setLeadsOpen] = useState(() => pathname?.startsWith('/leads') || false)
   const [propertiesOpen, setPropertiesOpen] = useState(
     () => pathname?.startsWith('/properties') || pathname?.startsWith('/campaigns') || false
   )
+  const [erpOpen, setErpOpen] = useState(() => pathname?.startsWith('/erp') || false)
 
   const closeSidebar = useCallback(() => setSidebarOpen(false), [])
   const closeUserMenu = useCallback(() => setUserMenuOpen(false), [])
+  const closeNotifications = useCallback(() => setNotificationsOpen(false), [])
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
         closeSidebar()
         closeUserMenu()
-        setThemeOpen(false)
+        closeNotifications()
       }
     }
     document.addEventListener('keydown', handleKeyDown)
     return () => document.removeEventListener('keydown', handleKeyDown)
-  }, [closeSidebar, closeUserMenu])
+  }, [closeSidebar, closeUserMenu, closeNotifications])
 
   const handleNewLead = useCallback(() => {
     if (onNewLead) onNewLead()
     else router.push('/leads#new')
   }, [onNewLead, router])
 
+  const handleToggleRail = useCallback(() => {
+    if (!layoutV2Enabled) return
+    setRailCollapsed((prev) => {
+      const next = !prev
+      if (typeof window !== 'undefined') {
+        try {
+          window.localStorage.setItem(LAYOUT_V2_RAIL_COLLAPSED_STORAGE_KEY, next ? '1' : '0')
+        } catch {
+          // ignore storage errors
+        }
+      }
+      return next
+    })
+  }, [layoutV2Enabled])
+
   const topCenterLabel = useMemo(() => {
     if (pageTitle) return pageTitle
     return isErpMode ? 'ERP' : 'CRM'
   }, [pageTitle, isErpMode])
-
-  const topCenterClass = 'text-xl font-semibold tracking-wide text-[var(--foreground)]'
+  const topbarLogoBaseHeightPx = 14
+  const topbarLogoScale = 6
+  const unreadNotifications = useMemo(
+    () => notifications.filter((item) => !readNotificationIds.includes(item.id)),
+    [notifications, readNotificationIds]
+  )
+  const notificationCount = unreadNotifications.length
+  const hasHighPriorityNotification = unreadNotifications.some((item) => item.priority === 'high')
+  const showRailLabels = !isRailCollapsed
 
   return (
     <>
@@ -707,9 +643,9 @@ export function AppShell({
       <div className="min-h-screen flex bg-[var(--background)] overflow-x-hidden">
         <aside
           className={`
-          fixed inset-y-0 left-0 z-30 w-64
+          fixed inset-y-0 left-0 z-30 ${sidebarMobileWidthClass} ${sidebarDesktopWidthClass}
           bg-[var(--sidebar-bg)]
-          transform transition-transform duration-200 ease-in-out
+          transform transition-[transform,width] duration-200 ease-in-out
           lg:translate-x-0 lg:static lg:inset-auto
           ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'}
           flex flex-col
@@ -722,17 +658,24 @@ export function AppShell({
           role="navigation"
           aria-label="Menu principal"
         >
-          <div className="h-14 flex items-center px-4 border-b border-white/10">
+          <div className="h-14 flex items-center justify-center border-b border-white/10">
             <Link
               href="/dashboard"
-              className="flex items-center gap-3 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)] rounded-[var(--radius)]"
+              className="inline-flex h-full w-full items-center justify-center focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)] rounded-[var(--radius)]"
               onClick={closeSidebar}
+              title={isRailCollapsed ? 'Dashboard' : undefined}
             >
-              <img src="/brand/logo_oficial.png" alt="Vitrya" className="h-10 w-auto object-contain" loading="eager" />
+              <span
+                className={`uppercase leading-none text-white ${
+                  isRailCollapsed ? 'text-sm font-semibold tracking-[0.16em]' : 'text-2xl font-bold tracking-[0.28em]'
+                }`}
+              >
+                CRM
+              </span>
             </Link>
           </div>
 
-          <nav className="flex-1 p-3 space-y-1 overflow-y-auto">
+          <nav className={`flex-1 space-y-1 overflow-y-auto ${isRailCollapsed ? 'p-2' : 'p-3'}`}>
             {navItems.map((item) => {
               const isActive = pathname === item.href || pathname?.startsWith(item.href + '/')
               const hasChildren = !!item.children?.length
@@ -748,9 +691,54 @@ export function AppShell({
                 const isSettings = item.href === '/settings'
                 const isProperties = item.href === '/properties'
                 const isLeads = item.href === '/leads'
+                const isErp = item.href === '/erp'
 
-                const isOpen = isSettings ? settingsOpen : isProperties ? propertiesOpen : isLeads ? leadsOpen : false
-                const setOpen = isSettings ? setSettingsOpen : isProperties ? setPropertiesOpen : isLeads ? setLeadsOpen : () => {}
+                const isOpen = isSettings
+                  ? settingsOpen
+                  : isProperties
+                    ? propertiesOpen
+                    : isLeads
+                      ? leadsOpen
+                      : isErp
+                        ? erpOpen
+                        : false
+                const setOpen = isSettings
+                  ? setSettingsOpen
+                  : isProperties
+                    ? setPropertiesOpen
+                    : isLeads
+                      ? setLeadsOpen
+                      : isErp
+                        ? setErpOpen
+                        : () => {}
+
+                if (isRailCollapsed) {
+                  return (
+                    <Link
+                      key={item.href}
+                      href={item.href}
+                      onClick={closeSidebar}
+                      aria-current={isParentActive ? 'page' : undefined}
+                      title={item.label}
+                      className={`
+                      flex items-center justify-center px-3 py-2.5 rounded-[var(--radius)] text-sm font-medium
+                      transition-all duration-150
+                      focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)]
+                      ${
+                        isParentActive
+                          ? 'bg-[var(--sidebar-active-current)] text-white shadow-sm'
+                          : 'text-[var(--sidebar-muted)] hover:bg-[var(--sidebar-hover)] hover:text-white'
+                      }
+                    `}
+                      style={{
+                        color: isParentActive ? 'white' : 'var(--sidebar-muted, rgba(255,255,255,0.80))',
+                      }}
+                    >
+                      {item.icon}
+                      <span className="sr-only">{item.label}</span>
+                    </Link>
+                  )
+                }
 
                 return (
                   <div key={item.href}>
@@ -834,8 +822,9 @@ export function AppShell({
                   href={item.href}
                   onClick={closeSidebar}
                   aria-current={isActive ? 'page' : undefined}
+                  title={!showRailLabels ? item.label : undefined}
                   className={`
-                  flex items-center gap-3 px-3 py-2.5 rounded-[var(--radius)] text-sm font-medium
+                  flex items-center ${showRailLabels ? 'gap-3' : 'justify-center'} px-3 py-2.5 rounded-[var(--radius)] text-sm font-medium
                   transition-all duration-150
                   focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)]
                   ${
@@ -851,31 +840,25 @@ export function AppShell({
                   }}
                 >
                   {item.icon}
-                  <span>{item.label}</span>
+                  {showRailLabels ? <span>{item.label}</span> : <span className="sr-only">{item.label}</span>}
                 </Link>
               )
             })}
           </nav>
 
-          <div className="p-3 border-t border-white/10 space-y-2">
+          <div className={`border-t border-white/10 space-y-2 ${showRailLabels ? 'p-3' : 'p-2'}`}>
             {showNewLeadButton && (
-              <Button size="sm" onClick={handleNewLead} className="w-full">
-                <svg className="w-4 h-4 mr-1.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
+              <Button
+                size="sm"
+                onClick={handleNewLead}
+                className={showRailLabels ? 'w-full' : 'w-full justify-center px-0'}
+                title={!showRailLabels ? 'Novo Lead' : undefined}
+              >
+                <svg className={`w-4 h-4 ${showRailLabels ? 'mr-1.5' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
                 </svg>
-                <span>Novo Lead</span>
+                {showRailLabels ? <span>Novo Lead</span> : <span className="sr-only">Novo Lead</span>}
               </Button>
-            )}
-
-            {/* Botão do Theme Editor (só admin/gestor) */}
-            {isManager && (
-              <button
-                type="button"
-                onClick={() => setThemeOpen(true)}
-                className="w-full px-3 py-2 text-sm font-semibold rounded-xl bg-white/10 hover:bg-white/15 border border-white/10 text-white"
-              >
-                <span>🎨 Ajustar Cores (Tema)</span>
-              </button>
             )}
           </div>
         </aside>
@@ -884,7 +867,7 @@ export function AppShell({
 
         <div className="flex-1 flex flex-col min-w-0 overflow-x-hidden">
           <header
-            className="sticky top-0 z-40 h-14 border-b border-[var(--border)] flex items-center px-4 gap-4 relative"
+            className="sticky top-0 z-40 h-16 border-b border-[var(--border)] flex items-center px-4 gap-4 relative"
             style={{
               background: 'var(--topbar-bg, var(--card, rgba(255,255,255,0.88)))',
               backdropFilter: 'blur(12px)',
@@ -903,22 +886,37 @@ export function AppShell({
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
                 </svg>
               </button>
-
-              {/* Atalho rápido do tema no topo (opcional) */}
-              {isManager && (
+              {layoutV2Enabled && (
                 <button
                   type="button"
-                  onClick={() => setThemeOpen(true)}
-                  className="hidden sm:inline-flex items-center gap-2 px-3 py-1.5 text-sm font-semibold rounded-full border border-[var(--border)] hover:bg-[var(--accent)]"
-                  aria-label="Abrir editor de tema"
+                  onClick={handleToggleRail}
+                  className="hidden lg:inline-flex p-2 rounded-[var(--radius)] hover:bg-[var(--accent)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)]"
+                  aria-label={isRailCollapsed ? 'Expandir menu lateral' : 'Recolher menu lateral'}
+                  title={isRailCollapsed ? 'Expandir menu lateral' : 'Recolher menu lateral'}
                 >
-                  <span>🎨 Tema</span>
+                  <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
+                    {isRailCollapsed ? (
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                    ) : (
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 5l-7 7 7 7" />
+                    )}
+                  </svg>
                 </button>
               )}
             </div>
 
-            <div className="absolute left-1/2 -translate-x-1/2 pointer-events-none">
-              <span className={topCenterClass}>{topCenterLabel}</span>
+            <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 pointer-events-none flex items-center justify-center">
+              <img
+                src="/brand/logo_oficial.png"
+                alt={topCenterLabel}
+                className="w-auto object-contain"
+                style={{
+                  height: topbarLogoBaseHeightPx,
+                  transform: `scale(${topbarLogoScale})`,
+                  transformOrigin: 'center center',
+                }}
+                loading="eager"
+              />
             </div>
 
             <div className="flex-1" />
@@ -933,20 +931,120 @@ export function AppShell({
               <span>Vitrine</span>
             </Link>
 
-            {showNewLeadButton && (
-              <Button size="sm" onClick={handleNewLead} className="hidden sm:inline-flex">
-                <svg className="w-4 h-4 mr-1.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-                </svg>
-                <span>Novo Lead</span>
-              </Button>
+            {userEmail && (
+              <div className="relative">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setNotificationsOpen((prev) => !prev)
+                    setUserMenuOpen(false)
+                    if (!notifications.length) void loadNotifications()
+                  }}
+                  className={`relative flex items-center justify-center h-9 w-9 rounded-[var(--radius)] border ${
+                    hasHighPriorityNotification ? 'border-amber-400/70' : 'border-[var(--border)]'
+                  } bg-[var(--card)] hover:bg-[var(--accent)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)]`}
+                  aria-label="Abrir central de notificações"
+                  aria-expanded={notificationsOpen}
+                >
+                  <svg className="w-5 h-5 text-[var(--foreground)]" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M15 17h5l-1.4-1.4A2 2 0 0118 14.17V11a6 6 0 10-12 0v3.17c0 .53-.21 1.04-.59 1.41L4 17h5m6 0a3 3 0 11-6 0m6 0H9"
+                    />
+                  </svg>
+                  {notificationCount > 0 ? (
+                    <span className="absolute -right-1 -top-1 min-w-[1.1rem] h-[1.1rem] px-1 rounded-full bg-[var(--primary)] text-white text-[10px] font-bold leading-[1.1rem] text-center">
+                      {notificationCount > 99 ? '99+' : notificationCount}
+                    </span>
+                  ) : null}
+                </button>
+
+                {notificationsOpen && (
+                  <>
+                    <div className="fixed inset-0 z-40" onClick={closeNotifications} />
+                    <div className="absolute right-0 top-full mt-2 w-[min(92vw,25rem)] rounded-[var(--radius-lg)] border border-[var(--border)] bg-[var(--card)] shadow-lg z-50 overflow-hidden">
+                      <div className="p-3 border-b border-[var(--border)] flex items-center justify-between gap-2">
+                        <div>
+                          <p className="text-sm font-semibold text-[var(--foreground)]">Central de notificações</p>
+                          <p className="text-[11px] text-[var(--muted-foreground)]">App ativo - WhatsApp em preparação</p>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => void loadNotifications()}
+                          className="px-2.5 py-1.5 text-xs rounded-[var(--radius)] border border-[var(--border)] hover:bg-[var(--accent)]"
+                        >
+                          Atualizar
+                        </button>
+                      </div>
+
+                      <div className="max-h-[420px] overflow-auto">
+                        {notificationsLoading && notifications.length === 0 ? (
+                          <div className="p-3 text-sm text-[var(--muted-foreground)]">Carregando notificações...</div>
+                        ) : null}
+
+                        {notificationsError ? (
+                          <div className="p-3 text-sm text-[var(--destructive)] border-b border-[var(--border)]">{notificationsError}</div>
+                        ) : null}
+
+                        {!notificationsLoading && notifications.length === 0 ? (
+                          <div className="p-4 text-sm text-[var(--muted-foreground)]">Sem pendências no momento.</div>
+                        ) : null}
+
+                        {notifications.map((item) => {
+                          const isUnread = !readNotificationIds.includes(item.id)
+                          return (
+                            <Link
+                              key={item.id}
+                              href={item.href}
+                              onClick={() => {
+                                markNotificationAsRead(item.id)
+                                closeNotifications()
+                              }}
+                              className="block p-3 border-b border-[var(--border)] last:border-b-0 hover:bg-[var(--accent)]"
+                            >
+                              <div className="flex items-start justify-between gap-2">
+                                <div className="min-w-0">
+                                  <p className="text-sm font-semibold text-[var(--foreground)]">{item.title}</p>
+                                  {isUnread ? (
+                                    <span className="mt-1 inline-flex items-center rounded-full bg-[var(--primary)]/10 text-[10px] font-bold uppercase tracking-wide text-[var(--primary)] px-2 py-0.5">
+                                      Novo
+                                    </span>
+                                  ) : null}
+                                </div>
+                                <span
+                                  className={`shrink-0 text-[10px] font-bold uppercase tracking-wide ${
+                                    item.priority === 'high'
+                                      ? 'text-amber-700'
+                                      : item.priority === 'medium'
+                                      ? 'text-sky-700'
+                                      : 'text-[var(--muted-foreground)]'
+                                  }`}
+                                >
+                                  {item.priority}
+                                </span>
+                              </div>
+                              <p className="mt-1 text-xs text-[var(--muted-foreground)]">{item.message}</p>
+                              <p className="mt-1 text-[11px] text-[var(--muted-foreground)]">{formatRelativeTime(item.created_at)}</p>
+                            </Link>
+                          )
+                        })}
+                      </div>
+                    </div>
+                  </>
+                )}
+              </div>
             )}
 
             {userEmail && (
               <div className="relative">
                 <button
                   type="button"
-                  onClick={() => setUserMenuOpen(!userMenuOpen)}
+                  onClick={() => {
+                    setUserMenuOpen(!userMenuOpen)
+                    setNotificationsOpen(false)
+                  }}
                   className="flex items-center gap-2 p-1.5 rounded-[var(--radius)] hover:bg-[var(--accent)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)]"
                   aria-label="Menu do usuário"
                   aria-expanded={userMenuOpen}
@@ -975,6 +1073,36 @@ export function AppShell({
                         </p>
                       </div>
                       <div className="p-1">
+                        <Link
+                          href="/perfil"
+                          onClick={() => setUserMenuOpen(false)}
+                          className="w-full flex items-center gap-2 px-3 py-2 text-sm text-[var(--foreground)] hover:bg-[var(--accent)] rounded-[var(--radius)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)]"
+                        >
+                          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
+                            <path
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                              strokeWidth={2}
+                              d="M5.121 17.804A9 9 0 1118.88 17.8M15 11a3 3 0 11-6 0 3 3 0 016 0z"
+                            />
+                          </svg>
+                          <span>Minha conta</span>
+                        </Link>
+                        <Link
+                          href="/profile"
+                          onClick={() => setUserMenuOpen(false)}
+                          className="w-full flex items-center gap-2 px-3 py-2 text-sm text-[var(--foreground)] hover:bg-[var(--accent)] rounded-[var(--radius)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)]"
+                        >
+                          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
+                            <path
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                              strokeWidth={2}
+                              d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z"
+                            />
+                          </svg>
+                          <span>Perfil publico</span>
+                        </Link>
                         {onSignOut && (
                           <button
                             type="button"
@@ -1008,9 +1136,8 @@ export function AppShell({
           </main>
         </div>
 
-        {/* Theme Editor */}
-        {isManager && <ThemeEditorPanel open={themeOpen} onClose={() => setThemeOpen(false)} />}
       </div>
     </>
   )
 }
+

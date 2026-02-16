@@ -1,11 +1,15 @@
-import PropertyNegotiationsTabClient from "./PropertyNegotiationsTabClient";
-import { createCommission } from "./actions/createCommission";
+import PropertyNegotiationsTabClient from './PropertyNegotiationsTabClient'
 
-export default function PropertyNegotiationsTab(props: { propertyId: string }) {
+export default function PropertyNegotiationsTab(props: {
+  propertyId: string
+  initialNegotiationId?: string | null
+  initialProposalId?: string | null
+}) {
   return (
     <PropertyNegotiationsTabClient
       propertyId={props.propertyId}
-      createCommissionAction={createCommission}
+      initialNegotiationId={props.initialNegotiationId ?? null}
+      initialProposalId={props.initialProposalId ?? null}
     />
-  );
+  )
 }

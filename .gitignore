@@ -49,5 +49,4 @@ supabase/.temp/
 .vscode/
 supabase/.temp/
 
-# módulos em desenvolvimento
-app/(erp)/
+# modulos em desenvolvimento

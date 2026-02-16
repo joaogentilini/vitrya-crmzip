@@ -1,7 +1,7 @@
 'use client'
 
 import { useRouter } from 'next/navigation'
-import { useCallback, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabaseClient'
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/Card'
 import { Badge } from '@/components/ui/Badge'
@@ -24,9 +24,33 @@ interface ProfileClientProps {
   initialPhone?: string | null
   role: 'admin' | 'gestor' | 'corretor'
   createdAt?: string | null
+  googleStatus?: string | null
+  googleCalendar: {
+    connected: boolean
+    googleEmail: string | null
+    syncEnabled: boolean
+    autoCreateFromTasks: boolean
+    connectedAt: string | null
+    updatedAt: string | null
+  }
 }
 
-export function PerfilClient({ userId, userEmail, initialFullName, initialPhone, role, createdAt }: ProfileClientProps) {
+function formatDateTime(value?: string | null) {
+  if (!value) return '-'
+  const date = new Date(value)
+  return Number.isNaN(date.getTime()) ? '-' : date.toLocaleString('pt-BR')
+}
+
+export function PerfilClient({
+  userId,
+  userEmail,
+  initialFullName,
+  initialPhone,
+  role,
+  createdAt,
+  googleStatus,
+  googleCalendar,
+}: ProfileClientProps) {
   const profile: Profile = {
     id: userId,
     full_name: initialFullName,
@@ -36,10 +60,23 @@ export function PerfilClient({ userId, userEmail, initialFullName, initialPhone,
   }
   const isAdmin = role === 'admin' || role === 'gestor'
   const router = useRouter()
-  const { success } = useToast()
+  const { success, error } = useToast()
   const [isEditing, setIsEditing] = useState(false)
   const [fullName, setFullName] = useState(profile.full_name || '')
   const [isLoading, setIsLoading] = useState(false)
+  const [isGoogleLoading, setIsGoogleLoading] = useState(false)
+
+  useEffect(() => {
+    if (!googleStatus) return
+
+    if (googleStatus === 'connected') {
+      success('Google Agenda conectada com sucesso.')
+    } else if (googleStatus === 'error') {
+      error('Falha ao conectar Google Agenda. Tente novamente.')
+    }
+
+    router.replace('/perfil')
+  }, [googleStatus, success, error, router])
 
   const handleSignOut = useCallback(async () => {
     await supabase.auth.signOut()
@@ -71,6 +108,31 @@ export function PerfilClient({ userId, userEmail, initialFullName, initialPhone,
   const handleCancel = () => {
     setFullName(profile.full_name || '')
     setIsEditing(false)
+  }
+
+  const handleConnectGoogle = () => {
+    window.location.href = '/api/integrations/google/connect?returnTo=/perfil'
+  }
+
+  const handleDisconnectGoogle = async () => {
+    setIsGoogleLoading(true)
+    try {
+      const response = await fetch('/api/integrations/google/disconnect', {
+        method: 'POST',
+      })
+      const payload = await response.json().catch(() => null)
+      if (!response.ok) {
+        throw new Error(payload?.error || 'Falha ao desconectar Google Agenda.')
+      }
+
+      success('Google Agenda desconectada.')
+      router.refresh()
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Falha ao desconectar Google Agenda.'
+      error(message)
+    } finally {
+      setIsGoogleLoading(false)
+    }
   }
 
   return (
@@ -129,7 +191,7 @@ export function PerfilClient({ userId, userEmail, initialFullName, initialPhone,
             </label>
             <Badge variant="outline" className="capitalize">
               {profile.role === 'admin' ? 'Administrador' : 
-               profile.role === 'manager' ? 'Gerente' : 'Corretor'}
+               profile.role === 'gestor' ? 'Gerente' : 'Corretor'}
             </Badge>
           </div>
 
@@ -143,6 +205,61 @@ export function PerfilClient({ userId, userEmail, initialFullName, initialPhone,
           </div>
         </CardContent>
       </Card>
+
+      {isAdmin && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Integracoes</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <p className="text-sm font-semibold text-[var(--foreground)]">Google Agenda</p>
+                <p className="text-xs text-[var(--muted-foreground)]">
+                  Ao criar/reagendar tarefa para o usuario responsavel, a plataforma sincroniza na agenda Google dele.
+                </p>
+              </div>
+              <Badge variant={googleCalendar.connected ? 'default' : 'secondary'}>
+                {googleCalendar.connected ? 'Conectada' : 'Nao conectada'}
+              </Badge>
+            </div>
+
+            {googleCalendar.connected ? (
+              <div className="rounded-[var(--radius)] border border-[var(--border)] p-3 text-sm text-[var(--foreground)]">
+                <p>
+                  Conta Google: <span className="font-medium">{googleCalendar.googleEmail || '-'}</span>
+                </p>
+                <p className="text-xs text-[var(--muted-foreground)] mt-1">
+                  Conectada em: {formatDateTime(googleCalendar.connectedAt)}
+                </p>
+                <p className="text-xs text-[var(--muted-foreground)]">
+                  Ultima atualizacao: {formatDateTime(googleCalendar.updatedAt)}
+                </p>
+                <p className="text-xs text-[var(--muted-foreground)] mt-1">
+                  Sync ativo: {googleCalendar.syncEnabled ? 'Sim' : 'Nao'} | Auto tarefa: {googleCalendar.autoCreateFromTasks ? 'Sim' : 'Nao'}
+                </p>
+              </div>
+            ) : null}
+
+            <div className="flex flex-wrap gap-2">
+              {!googleCalendar.connected ? (
+                <Button onClick={handleConnectGoogle} disabled={isGoogleLoading}>
+                  Conectar Google Agenda
+                </Button>
+              ) : (
+                <>
+                  <Button variant="outline" onClick={handleConnectGoogle} disabled={isGoogleLoading}>
+                    Reconectar
+                  </Button>
+                  <Button variant="destructive" onClick={handleDisconnectGoogle} loading={isGoogleLoading}>
+                    Desconectar
+                  </Button>
+                </>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {isAdmin && (
         <Card>

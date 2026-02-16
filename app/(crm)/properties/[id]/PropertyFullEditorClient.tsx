@@ -26,9 +26,42 @@ type PersonSearchResult = {
   kind_tags?: string[] | null
 }
 
+const DB_FIELD_LABELS: Record<string, string> = {
+  owner_user_id: 'Responsável (ID de usuário)',
+  owner_profile_id: 'Responsável (perfil)',
+  owner_client_id: 'Proprietário (pessoa)',
+  created_by: 'Criado por',
+  created_by_profile_id: 'Criado por (perfil)',
+  updated_at: 'Atualizado em',
+  created_at: 'Criado em',
+  property_id: 'Imóvel (ID)',
+  person_id: 'Pessoa (ID)',
+  lead_id: 'Lead (ID)',
+  property_category_id: 'Categoria do imóvel (ID)',
+  property_negotiations: 'Negociações do imóvel',
+  property_proposals: 'Propostas do imóvel',
+  profiles: 'Perfis',
+  properties: 'Imóveis',
+  people: 'Pessoas',
+  accepts_financing: 'Aceita financiamento',
+  accepts_trade: 'Aceita permuta',
+  property_standard: 'Padrão do imóvel',
+  artesian_well: 'Poço artesiano'
+}
+
+function formatDbFieldLabel(key: string) {
+  const mapped = DB_FIELD_LABELS[key]
+  if (mapped) return mapped
+
+  return key
+    .replace(/_/g, ' ')
+    .replace(/\bid\b/g, 'ID')
+    .replace(/\b\w/g, (char) => char.toUpperCase())
+}
+
 function formatValue(value: unknown, key?: string) {
-  if (value === null || value === undefined || value === '') return '—'
-  if (Array.isArray(value)) return value.length > 0 ? value.join(', ') : '—'
+  if (value === null || value === undefined || value === '') return '-'
+  if (Array.isArray(value)) return value.length > 0 ? value.join(', ') : '-'
   if (typeof value === 'boolean') return value ? 'Sim' : 'Não'
   if (typeof value === 'number') return value.toString()
   if (typeof value === 'string') {
@@ -53,6 +86,14 @@ function parseNumberOrNull(value: string) {
   return Number.isNaN(numberValue) ? null : numberValue
 }
 
+function parseDecimalOrNull(value: string) {
+  const trimmed = value.trim()
+  if (!trimmed) return null
+  const normalized = trimmed.replace(',', '.')
+  const numberValue = Number(normalized)
+  return Number.isNaN(numberValue) ? null : numberValue
+}
+
 function formatBRL(value?: number | null) {
   if (value === null || value === undefined || Number.isNaN(value)) return ''
   return new Intl.NumberFormat('pt-BR', {
@@ -70,6 +111,15 @@ function parseBRL(value: string) {
     .replace(',', '.')
   const numberValue = Number(normalized)
   return Number.isNaN(numberValue) ? null : numberValue
+}
+
+function getDaysSince(value?: string | null) {
+  if (!value) return null
+  const start = new Date(value)
+  if (Number.isNaN(start.getTime())) return null
+  const diff = Date.now() - start.getTime()
+  if (diff <= 0) return 0
+  return Math.floor(diff / (1000 * 60 * 60 * 24))
 }
 
 function MoneyInput({
@@ -147,7 +197,7 @@ function KeyValueList({
   return (
     <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
       {entries.map(([key, value]) => {
-        const label = labelMap?.[key] ?? key
+        const label = labelMap?.[key] ?? formatDbFieldLabel(key)
         const resolvedValue =
           valueMap && Object.prototype.hasOwnProperty.call(valueMap, key)
             ? valueMap[key]
@@ -197,6 +247,17 @@ export default function PropertyFullEditorClient({
     appraisal_value: formatBRL(property.appraisal_value as number | null),
     down_payment_value: formatBRL(property.down_payment_value as number | null),
     condo_fee: formatBRL(property.condo_fee as number | null),
+    sale_commission_percent: String((property as any).sale_commission_percent ?? (property as any).commission_percent ?? 5),
+    sale_broker_split_percent: String((property as any).sale_broker_split_percent ?? 50),
+    sale_partner_split_percent: String((property as any).sale_partner_split_percent ?? 0),
+    rent_initial_commission_percent: String((property as any).rent_initial_commission_percent ?? 10),
+    rent_recurring_commission_percent: String((property as any).rent_recurring_commission_percent ?? 8),
+    rent_broker_split_percent: String((property as any).rent_broker_split_percent ?? 50),
+    rent_partner_split_percent: String((property as any).rent_partner_split_percent ?? 0),
+    accepts_financing: Boolean((property as any).accepts_financing ?? false),
+    accepts_trade: Boolean((property as any).accepts_trade ?? false),
+    property_standard: String((property as any).property_standard ?? ''),
+    artesian_well: Boolean((property as any).artesian_well ?? false),
     usage: String(property.usage ?? ''),
     condition: String(property.condition ?? ''),
     area_m2: String(property.area_m2 ?? ''),
@@ -229,17 +290,23 @@ export default function PropertyFullEditorClient({
   const createdByProfile = property.created_by_profile as
     | { full_name?: string | null; email?: string | null }
     | null
+  const canViewLegalData = (property as any).can_view_legal_data !== false
+  const canEditOverviewData =
+    (property as any).can_edit_overview_data === true || canViewLegalData
+  const canEditCommissionPercent =
+    (property as any).can_edit_commission_percent === true || canEditOverviewData
+  const legalDataRestricted = !canViewLegalData
+  const ownerPersonRestricted = Boolean((property as any).owner_person_restricted)
   const ownerPerson = property.owner_person as
-    | { full_name?: string | null; email?: string | null }
+    | { full_name?: string | null; email?: string | null; phone_e164?: string | null; document_id?: string | null }
     | null
 
   const ownerDisplay = ownerProfile?.full_name || ownerProfile?.email || form.owner_user_id
   const createdByDisplay = createdByProfile?.full_name || createdByProfile?.email || form.created_by
 
-  const ownerPersonLabel =
-    ownerPerson?.full_name ||
-    selectedOwner?.full_name ||
-    (form.owner_client_id ? 'Proprietário selecionado' : '')
+  const ownerPersonLabel = ownerPersonRestricted
+    ? 'Cliente oculto para este perfil'
+    : ownerPerson?.full_name || selectedOwner?.full_name || (form.owner_client_id ? 'Proprietário selecionado' : '')
 
   const [ownerPickerOpen, setOwnerPickerOpen] = useState(false)
   const [ownerPickerQuery, setOwnerPickerQuery] = useState('')
@@ -247,10 +314,9 @@ export default function PropertyFullEditorClient({
   const [isLoadingOwnerPicker, setIsLoadingOwnerPicker] = useState(false)
   const [ownerPickerError, setOwnerPickerError] = useState<string | null>(null)
 
-  const selectedOwnerLabel =
-    ownerPerson?.full_name ||
-    selectedOwner?.full_name ||
-    (form.owner_client_id ? 'Proprietário selecionado' : 'Nenhum')
+  const selectedOwnerLabel = ownerPersonRestricted
+    ? 'Cliente oculto para este perfil'
+    : ownerPerson?.full_name || selectedOwner?.full_name || (form.owner_client_id ? 'Proprietário selecionado' : 'Nenhum')
 
   const statusOptions = useMemo(() => {
     if (form.status && !STATUS_OPTIONS.some((option) => option.value === form.status)) {
@@ -266,6 +332,13 @@ export default function PropertyFullEditorClient({
     return PURPOSE_OPTIONS
   }, [form.purpose])
 
+  const publicationDays = useMemo(() => getDaysSince(form.created_at), [form.created_at])
+  const publicationLabel = useMemo(() => {
+    if (form.status !== 'active') return 'Imovel nao publicado'
+    if (publicationDays === null) return 'Tempo de publicacao sem data'
+    return `${publicationDays} dia${publicationDays === 1 ? '' : 's'} de publicacao`
+  }, [form.status, publicationDays])
+
   const categoryOptions = useMemo(() => {
     const options = propertyCategories.map((category) => ({
       value: category.id,
@@ -280,7 +353,44 @@ export default function PropertyFullEditorClient({
     return options
   }, [propertyCategories, form.property_category_id, property])
 
+  const saleCommissionPercent = useMemo(
+    () => parseDecimalOrNull(form.sale_commission_percent) ?? 0,
+    [form.sale_commission_percent]
+  )
+  const rentInitialCommissionPercent = useMemo(
+    () => parseDecimalOrNull(form.rent_initial_commission_percent) ?? 0,
+    [form.rent_initial_commission_percent]
+  )
+  const rentRecurringCommissionPercent = useMemo(
+    () => parseDecimalOrNull(form.rent_recurring_commission_percent) ?? 0,
+    [form.rent_recurring_commission_percent]
+  )
+
+  const saleReferenceValue = useMemo(
+    () => parseBRL(form.price) ?? parseBRL(form.sale_value) ?? 0,
+    [form.price, form.sale_value]
+  )
+  const rentReferenceValue = useMemo(() => parseBRL(form.rent_price) ?? 0, [form.rent_price])
+
+  const saleCommissionValue = useMemo(
+    () => (saleReferenceValue * saleCommissionPercent) / 100,
+    [saleReferenceValue, saleCommissionPercent]
+  )
+  const saleOwnerNetValue = useMemo(
+    () => saleReferenceValue - saleCommissionValue,
+    [saleReferenceValue, saleCommissionValue]
+  )
+  const rentInitialCommissionValue = useMemo(
+    () => (rentReferenceValue * rentInitialCommissionPercent) / 100,
+    [rentReferenceValue, rentInitialCommissionPercent]
+  )
+  const rentRecurringCommissionValue = useMemo(
+    () => (rentReferenceValue * rentRecurringCommissionPercent) / 100,
+    [rentReferenceValue, rentRecurringCommissionPercent]
+  )
+
   const loadOwnerPicker = async (query: string) => {
+    if (ownerPersonRestricted) return
     setOwnerPickerError(null)
     setIsLoadingOwnerPicker(true)
     try {
@@ -288,7 +398,7 @@ export default function PropertyFullEditorClient({
 
       if (!res.ok) {
         setOwnerPickerResults([])
-        setOwnerPickerError(res.error || 'Erro ao buscar proprietários.')
+        setOwnerPickerError(res.error || 'Erro ao buscar proprietarios.')
         return
       }
 
@@ -306,6 +416,7 @@ export default function PropertyFullEditorClient({
   }
 
   const handleSelectOwner = (person: PersonSearchResult) => {
+    if (ownerPersonRestricted) return
     setForm((prev) => ({ ...prev, owner_client_id: person.id }))
     setSelectedOwner(person)
     setOwnerPickerOpen(false)
@@ -314,12 +425,14 @@ export default function PropertyFullEditorClient({
   }
 
   const handleClearOwner = () => {
+    if (ownerPersonRestricted) return
     setForm((prev) => ({ ...prev, owner_client_id: '' }))
     setSelectedOwner(null)
     setOwnerPickerError(null)
   }
 
   const handleOpenOwnerPicker = async () => {
+    if (ownerPersonRestricted) return
     setOwnerPickerOpen(true)
     setOwnerPickerQuery('')
     await loadOwnerPicker('')
@@ -348,6 +461,17 @@ export default function PropertyFullEditorClient({
         'rent_price',
         'appraisal_value',
         'condo_fee',
+        'sale_commission_percent',
+        'sale_broker_split_percent',
+        'sale_partner_split_percent',
+        'rent_initial_commission_percent',
+        'rent_recurring_commission_percent',
+        'rent_broker_split_percent',
+        'rent_partner_split_percent',
+        'accepts_financing',
+        'accepts_trade',
+        'property_standard',
+        'artesian_well',
         'usage',
         'condition',
         'area_m2',
@@ -365,6 +489,12 @@ export default function PropertyFullEditorClient({
         'iptu_value',
         'iptu_year',
         'iptu_is_paid',
+        'can_view_legal_data',
+        'can_edit_overview_data',
+        'can_edit_commission_percent',
+        'property_commission_settings',
+        'owner_person',
+        'owner_person_restricted',
         'owner_client_id',
         'owner_user_id',
         'created_by',
@@ -405,17 +535,22 @@ export default function PropertyFullEditorClient({
 
   const debugValueMap = useMemo(
     () => ({
-      owner_client_id: ownerPersonLabel || form.owner_client_id,
+      owner_client_id: ownerPersonRestricted ? 'Oculto para este perfil' : ownerPersonLabel || form.owner_client_id,
       owner_user_id: ownerDisplay || form.owner_user_id,
       created_by: createdByDisplay || form.created_by
     }),
-    [ownerPersonLabel, ownerDisplay, createdByDisplay, form.owner_client_id, form.owner_user_id, form.created_by]
+    [ownerPersonRestricted, ownerPersonLabel, ownerDisplay, createdByDisplay, form.owner_client_id, form.owner_user_id, form.created_by]
   )
 
   const handleSave = () => {
+    if (!canEditOverviewData) {
+      showError('Sem permissão: apenas responsável/admin/gestor pode editar.')
+      return
+    }
+
     startTransition(async () => {
       try {
-        await updatePropertyBasics(String(property.id), {
+        const payload: Record<string, unknown> = {
           status: form.status || null,
           purpose: form.purpose || null,
           title: form.title || null,
@@ -436,6 +571,10 @@ export default function PropertyFullEditorClient({
           rent_price: parseBRL(form.rent_price),
           appraisal_value: parseBRL(form.appraisal_value),
           condo_fee: parseBRL(form.condo_fee),
+          accepts_financing: form.accepts_financing,
+          accepts_trade: form.accepts_trade,
+          property_standard: form.property_standard || null,
+          artesian_well: form.artesian_well,
           usage: form.usage || null,
           condition: form.condition || null,
           area_m2: parseNumberOrNull(form.area_m2),
@@ -448,13 +587,28 @@ export default function PropertyFullEditorClient({
           year_built: parseNumberOrNull(form.year_built),
           is_renovated: form.is_renovated,
           renovated_at: form.renovated_at || null,
-          registry_number: form.registry_number || null,
-          registry_office: form.registry_office || null,
           iptu_value: parseBRL(form.iptu_value),
           iptu_year: parseNumberOrNull(form.iptu_year),
           iptu_is_paid: form.iptu_is_paid,
           owner_client_id: form.owner_client_id || null
-        })
+        }
+
+        if (canEditCommissionPercent) {
+          payload.sale_commission_percent = parseDecimalOrNull(form.sale_commission_percent)
+          payload.sale_broker_split_percent = parseDecimalOrNull(form.sale_broker_split_percent)
+          payload.sale_partner_split_percent = parseDecimalOrNull(form.sale_partner_split_percent)
+          payload.rent_initial_commission_percent = parseDecimalOrNull(form.rent_initial_commission_percent)
+          payload.rent_recurring_commission_percent = parseDecimalOrNull(form.rent_recurring_commission_percent)
+          payload.rent_broker_split_percent = parseDecimalOrNull(form.rent_broker_split_percent)
+          payload.rent_partner_split_percent = parseDecimalOrNull(form.rent_partner_split_percent)
+        }
+
+        if (canViewLegalData) {
+          payload.registry_number = form.registry_number || null
+          payload.registry_office = form.registry_office || null
+        }
+
+        await updatePropertyBasics(String(property.id), payload as any)
 
         const updatedProperty = {
           ...property,
@@ -478,6 +632,10 @@ export default function PropertyFullEditorClient({
           rent_price: parseBRL(form.rent_price),
           appraisal_value: parseBRL(form.appraisal_value),
           condo_fee: parseBRL(form.condo_fee),
+          accepts_financing: form.accepts_financing,
+          accepts_trade: form.accepts_trade,
+          property_standard: form.property_standard || null,
+          artesian_well: form.artesian_well,
           usage: form.usage || null,
           condition: form.condition || null,
           area_m2: parseNumberOrNull(form.area_m2),
@@ -490,12 +648,36 @@ export default function PropertyFullEditorClient({
           year_built: parseNumberOrNull(form.year_built),
           is_renovated: form.is_renovated,
           renovated_at: form.renovated_at || null,
-          registry_number: form.registry_number || null,
-          registry_office: form.registry_office || null,
+          registry_number: canViewLegalData ? form.registry_number || null : (property as any).registry_number ?? null,
+          registry_office: canViewLegalData ? form.registry_office || null : (property as any).registry_office ?? null,
           iptu_value: parseBRL(form.iptu_value),
           iptu_year: parseNumberOrNull(form.iptu_year),
           iptu_is_paid: form.iptu_is_paid,
-          owner_client_id: form.owner_client_id || null
+          owner_client_id: form.owner_client_id || null,
+          sale_commission_percent: canEditCommissionPercent
+            ? parseDecimalOrNull(form.sale_commission_percent)
+            : (property as any).sale_commission_percent ?? (property as any).commission_percent ?? null,
+          sale_broker_split_percent: canEditCommissionPercent
+            ? parseDecimalOrNull(form.sale_broker_split_percent)
+            : (property as any).sale_broker_split_percent ?? null,
+          sale_partner_split_percent: canEditCommissionPercent
+            ? parseDecimalOrNull(form.sale_partner_split_percent)
+            : (property as any).sale_partner_split_percent ?? null,
+          rent_initial_commission_percent: canEditCommissionPercent
+            ? parseDecimalOrNull(form.rent_initial_commission_percent)
+            : (property as any).rent_initial_commission_percent ?? null,
+          rent_recurring_commission_percent: canEditCommissionPercent
+            ? parseDecimalOrNull(form.rent_recurring_commission_percent)
+            : (property as any).rent_recurring_commission_percent ?? null,
+          rent_broker_split_percent: canEditCommissionPercent
+            ? parseDecimalOrNull(form.rent_broker_split_percent)
+            : (property as any).rent_broker_split_percent ?? null,
+          rent_partner_split_percent: canEditCommissionPercent
+            ? parseDecimalOrNull(form.rent_partner_split_percent)
+            : (property as any).rent_partner_split_percent ?? null,
+          commission_percent: canEditCommissionPercent
+            ? parseDecimalOrNull(form.sale_commission_percent)
+            : (property as any).commission_percent ?? null
         }
 
         onUpdated(updatedProperty)
@@ -514,13 +696,22 @@ export default function PropertyFullEditorClient({
         <CardHeader className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <CardTitle className="text-base">Dados completos</CardTitle>
           <div className="flex flex-wrap gap-2">
-            <Button variant="outline" onClick={() => setIsEditing(!isEditing)}>
+            <Button
+              variant="outline"
+              disabled={!canEditOverviewData}
+              onClick={() => setIsEditing(!isEditing)}
+            >
               {isEditing ? 'Cancelar' : 'Editar'}
             </Button>
-            {isEditing && (
-              <Button onClick={handleSave} disabled={isSaving}>
+            {isEditing && canEditOverviewData && (
+              <Button onClick={handleSave} disabled={isSaving || !canEditOverviewData}>
                 {isSaving ? 'Salvando...' : 'Salvar'}
               </Button>
+            )}
+            {!canEditOverviewData && (
+              <p className="self-center text-xs text-[var(--muted-foreground)]">
+                Edição liberada para responsável, gestor ou admin.
+              </p>
             )}
           </div>
         </CardHeader>
@@ -552,19 +743,30 @@ export default function PropertyFullEditorClient({
 
           <div className="space-y-3">
             <h3 className="text-sm font-semibold text-[var(--foreground)]">Básico</h3>
+            <div className="rounded-[var(--radius)] border border-[var(--primary)] bg-[var(--primary)]/10 p-3">
+              <p className="text-[11px] font-extrabold uppercase tracking-wide text-[var(--primary)]">Tempo de publicacao</p>
+              <div className="mt-1 flex flex-wrap items-center gap-2">
+                <span className="rounded-full border border-[var(--primary)] bg-[var(--primary)] px-2.5 py-1 text-xs font-extrabold text-white">
+                  {publicationLabel}
+                </span>
+                <span className="text-xs text-[var(--muted-foreground)]">
+                  O indicador aparece tambem na aba de negociacoes e no painel de campanha.
+                </span>
+              </div>
+            </div>
             <div className="grid gap-3 text-sm sm:grid-cols-2 lg:grid-cols-3">
               <div>
                 <p className="text-xs text-[var(--muted-foreground)]">Responsável (Usuário)</p>
-                <p className="font-medium text-[var(--foreground)]">{ownerDisplay || '—'}</p>
+                <p className="font-medium text-[var(--foreground)]">{ownerDisplay || '-'}</p>
               </div>
               <div>
                 <p className="text-xs text-[var(--muted-foreground)]">Criado por</p>
-                <p className="font-medium text-[var(--foreground)]">{createdByDisplay || '—'}</p>
+                <p className="font-medium text-[var(--foreground)]">{createdByDisplay || '-'}</p>
               </div>
               <div>
                 <p className="text-xs text-[var(--muted-foreground)]">Proprietário (Pessoa)</p>
                 <p className="font-medium text-[var(--foreground)]">
-                  {ownerPersonLabel || '—'}
+                  {ownerPersonLabel || '-'}
                 </p>
               </div>
               <div className="sm:col-span-2 lg:col-span-3">
@@ -572,16 +774,20 @@ export default function PropertyFullEditorClient({
                   <p className="text-xs font-medium text-[var(--muted-foreground)]">
                     Proprietário (Pessoa)
                   </p>
-                  <div className="flex gap-2">
-                    <Button type="button" variant="outline" disabled={!isEditing} onClick={handleOpenOwnerPicker}>
-                      Buscar
-                    </Button>
-                    {form.owner_client_id && (
-                      <Button type="button" variant="outline" disabled={!isEditing} onClick={handleClearOwner}>
-                        Limpar
+                  {!ownerPersonRestricted ? (
+                    <div className="flex gap-2">
+                      <Button type="button" variant="outline" disabled={!isEditing} onClick={handleOpenOwnerPicker}>
+                        Buscar
                       </Button>
-                    )}
-                  </div>
+                      {form.owner_client_id && (
+                        <Button type="button" variant="outline" disabled={!isEditing} onClick={handleClearOwner}>
+                          Limpar
+                        </Button>
+                      )}
+                    </div>
+                  ) : (
+                    <p className="text-xs text-[var(--muted-foreground)]">Oculto para este perfil.</p>
+                  )}
                 </div>
                 <div className="mt-2 rounded-[var(--radius)] border border-[var(--border)] p-3">
                   <p className="text-sm font-medium text-[var(--foreground)]">{selectedOwnerLabel}</p>
@@ -760,6 +966,138 @@ export default function PropertyFullEditorClient({
                   }))
                 }
               />
+              <label className="flex items-center gap-2 text-sm text-[var(--foreground)]">
+                <input
+                  type="checkbox"
+                  checked={form.accepts_financing}
+                  disabled={!isEditing}
+                  onChange={(event) =>
+                    setForm((prev) => ({ ...prev, accepts_financing: event.target.checked }))
+                  }
+                />
+                Aceita financiamento
+              </label>
+              <label className="flex items-center gap-2 text-sm text-[var(--foreground)]">
+                <input
+                  type="checkbox"
+                  checked={form.accepts_trade}
+                  disabled={!isEditing}
+                  onChange={(event) =>
+                    setForm((prev) => ({ ...prev, accepts_trade: event.target.checked }))
+                  }
+                />
+                Aceita permuta
+              </label>
+              <Input
+                label="Comissão venda (%)"
+                value={form.sale_commission_percent}
+                type="number"
+                inputMode="decimal"
+                min="0"
+                step="0.01"
+                disabled={!isEditing || !canEditCommissionPercent}
+                onChange={(event) =>
+                  setForm((prev) => ({ ...prev, sale_commission_percent: event.target.value }))
+                }
+              />
+              <Input
+                label="Split corretor venda (%)"
+                value={form.sale_broker_split_percent}
+                type="number"
+                inputMode="decimal"
+                min="0"
+                step="0.01"
+                disabled={!isEditing || !canEditCommissionPercent}
+                onChange={(event) =>
+                  setForm((prev) => ({ ...prev, sale_broker_split_percent: event.target.value }))
+                }
+              />
+              <Input
+                label="Split parceiro venda (%)"
+                value={form.sale_partner_split_percent}
+                type="number"
+                inputMode="decimal"
+                min="0"
+                step="0.01"
+                disabled={!isEditing || !canEditCommissionPercent}
+                onChange={(event) =>
+                  setForm((prev) => ({ ...prev, sale_partner_split_percent: event.target.value }))
+                }
+              />
+              <Input
+                label="Comissão aluguel inicial (%)"
+                value={form.rent_initial_commission_percent}
+                type="number"
+                inputMode="decimal"
+                min="0"
+                step="0.01"
+                disabled={!isEditing || !canEditCommissionPercent}
+                onChange={(event) =>
+                  setForm((prev) => ({ ...prev, rent_initial_commission_percent: event.target.value }))
+                }
+              />
+              <Input
+                label="Comissão aluguel recorrente (%)"
+                value={form.rent_recurring_commission_percent}
+                type="number"
+                inputMode="decimal"
+                min="0"
+                step="0.01"
+                disabled={!isEditing || !canEditCommissionPercent}
+                onChange={(event) =>
+                  setForm((prev) => ({ ...prev, rent_recurring_commission_percent: event.target.value }))
+                }
+              />
+              <Input
+                label="Split corretor aluguel (%)"
+                value={form.rent_broker_split_percent}
+                type="number"
+                inputMode="decimal"
+                min="0"
+                step="0.01"
+                disabled={!isEditing || !canEditCommissionPercent}
+                onChange={(event) =>
+                  setForm((prev) => ({ ...prev, rent_broker_split_percent: event.target.value }))
+                }
+              />
+              <Input
+                label="Split parceiro aluguel (%)"
+                value={form.rent_partner_split_percent}
+                type="number"
+                inputMode="decimal"
+                min="0"
+                step="0.01"
+                disabled={!isEditing || !canEditCommissionPercent}
+                onChange={(event) =>
+                  setForm((prev) => ({ ...prev, rent_partner_split_percent: event.target.value }))
+                }
+              />
+            </div>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <div className="rounded-[var(--radius)] border border-[var(--border)] p-3">
+                <p className="text-xs text-[var(--muted-foreground)]">Resumo venda</p>
+                <p className="mt-1 text-sm font-medium text-[var(--foreground)]">
+                  Base: {saleReferenceValue > 0 ? `R$ ${formatBRL(saleReferenceValue)}` : '-'}
+                </p>
+                <p className="text-sm text-[var(--foreground)]">
+                  Comissão: {saleCommissionValue > 0 ? `R$ ${formatBRL(saleCommissionValue)}` : '-'}
+                </p>
+                <p className="text-sm text-[var(--foreground)]">
+                  Líquido proprietário: {saleOwnerNetValue > 0 ? `R$ ${formatBRL(saleOwnerNetValue)}` : '-'}
+                </p>
+              </div>
+              <div className="rounded-[var(--radius)] border border-[var(--border)] p-3">
+                <p className="text-xs text-[var(--muted-foreground)]">Resumo aluguel</p>
+                <p className="mt-1 text-sm font-medium text-[var(--foreground)]">
+                  Base mensal: {rentReferenceValue > 0 ? `R$ ${formatBRL(rentReferenceValue)}` : '-'}
+                </p>
+                <p className="text-sm text-[var(--foreground)]">
+                  Comissão inicial: {rentInitialCommissionValue > 0 ? `R$ ${formatBRL(rentInitialCommissionValue)}` : '-'}
+                </p>
+                <p className="text-sm text-[var(--foreground)]">
+                  Comissão recorrente: {rentRecurringCommissionValue > 0 ? `R$ ${formatBRL(rentRecurringCommissionValue)}` : '-'}
+                </p>
+              </div>
             </div>
           </div>
 
@@ -767,7 +1105,7 @@ export default function PropertyFullEditorClient({
             <h3 className="text-sm font-semibold text-[var(--foreground)]">Características</h3>
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
               <Input
-                label="Área do terreno (m²)"
+                label="Area do terreno (m2)"
                 value={form.land_area_m2}
                 type="number"
                 inputMode="decimal"
@@ -777,7 +1115,7 @@ export default function PropertyFullEditorClient({
                 }
               />
               <Input
-                label="Área construída (m²)"
+                label="Area construida (m2)"
                 value={form.built_area_m2}
                 type="number"
                 inputMode="decimal"
@@ -786,6 +1124,25 @@ export default function PropertyFullEditorClient({
                   setForm((prev) => ({ ...prev, built_area_m2: event.target.value }))
                 }
               />
+              <Input
+                label="Padrão do imóvel"
+                value={form.property_standard}
+                disabled={!isEditing}
+                onChange={(event) =>
+                  setForm((prev) => ({ ...prev, property_standard: event.target.value }))
+                }
+              />
+              <label className="flex items-center gap-2 text-sm text-[var(--foreground)]">
+                <input
+                  type="checkbox"
+                  checked={form.artesian_well}
+                  disabled={!isEditing}
+                  onChange={(event) =>
+                    setForm((prev) => ({ ...prev, artesian_well: event.target.checked }))
+                  }
+                />
+                Poço artesiano
+              </label>
               <Select
                 label="Quartos"
                 options={NUMBER_OPTIONS}
@@ -814,7 +1171,7 @@ export default function PropertyFullEditorClient({
                 }
               />
               <Select
-                label="Suítes"
+                label="Suites"
                 options={NUMBER_OPTIONS}
                 value={form.suites}
                 disabled={!isEditing}
@@ -874,56 +1231,62 @@ export default function PropertyFullEditorClient({
 
           <div className="space-y-3">
             <h3 className="text-sm font-semibold text-[var(--foreground)]">Jurídico/Registro</h3>
-            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-              <Input
-                label="Matrícula"
-                value={form.registry_number}
-                disabled={!isEditing}
-                onChange={(event) =>
-                  setForm((prev) => ({ ...prev, registry_number: event.target.value }))
-                }
-              />
-              <Input
-                label="Cartório"
-                value={form.registry_office}
-                disabled={!isEditing}
-                onChange={(event) =>
-                  setForm((prev) => ({ ...prev, registry_office: event.target.value }))
-                }
-              />
-              <MoneyInput
-                label="IPTU (valor)"
-                value={form.iptu_value}
-                disabled={!isEditing}
-                onChange={(value) => setForm((prev) => ({ ...prev, iptu_value: value }))}
-                onBlur={() =>
-                  setForm((prev) => ({
-                    ...prev,
-                    iptu_value: formatBRL(parseBRL(prev.iptu_value) ?? null)
-                  }))
-                }
-              />
-              <Input
-                label="IPTU (ano)"
-                value={form.iptu_year}
-                type="number"
-                disabled={!isEditing}
-                onChange={(event) =>
-                  setForm((prev) => ({ ...prev, iptu_year: event.target.value }))
-                }
-              />
-              <label className="flex items-center gap-2 text-sm text-[var(--foreground)]">
-                <input
-                  type="checkbox"
-                  checked={form.iptu_is_paid}
+            {!legalDataRestricted ? (
+              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                <Input
+                  label="Matrícula"
+                  value={form.registry_number}
                   disabled={!isEditing}
                   onChange={(event) =>
-                    setForm((prev) => ({ ...prev, iptu_is_paid: event.target.checked }))
+                    setForm((prev) => ({ ...prev, registry_number: event.target.value }))
                   }
                 />
-                IPTU pago
-              </label>
-            </div>
+                <Input
+                  label="Cartório"
+                  value={form.registry_office}
+                  disabled={!isEditing}
+                  onChange={(event) =>
+                    setForm((prev) => ({ ...prev, registry_office: event.target.value }))
+                  }
+                />
+                <MoneyInput
+                  label="IPTU (valor)"
+                  value={form.iptu_value}
+                  disabled={!isEditing}
+                  onChange={(value) => setForm((prev) => ({ ...prev, iptu_value: value }))}
+                  onBlur={() =>
+                    setForm((prev) => ({
+                      ...prev,
+                      iptu_value: formatBRL(parseBRL(prev.iptu_value) ?? null)
+                    }))
+                  }
+                />
+                <Input
+                  label="IPTU (ano)"
+                  value={form.iptu_year}
+                  type="number"
+                  disabled={!isEditing}
+                  onChange={(event) =>
+                    setForm((prev) => ({ ...prev, iptu_year: event.target.value }))
+                  }
+                />
+                <label className="flex items-center gap-2 text-sm text-[var(--foreground)]">
+                  <input
+                    type="checkbox"
+                    checked={form.iptu_is_paid}
+                    disabled={!isEditing}
+                    onChange={(event) =>
+                      setForm((prev) => ({ ...prev, iptu_is_paid: event.target.checked }))
+                    }
+                  />
+                  IPTU pago
+                </label>
+              </div>
+            ) : (
+              <div className="rounded-[var(--radius)] border border-[var(--border)] p-3 text-sm text-[var(--muted-foreground)]">
+                Matrícula e documentos jurídicos ficam ocultos para corretor que não é responsável por este imóvel.
+              </div>
+            )}
           </div>
 
           <div className="space-y-3">
@@ -952,7 +1315,7 @@ export default function PropertyFullEditorClient({
         </CardContent>
       </Card>
 
-      {ownerPickerOpen && (
+      {ownerPickerOpen && !ownerPersonRestricted && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
           <Card className="w-full max-w-2xl">
             <CardHeader className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -1003,8 +1366,8 @@ export default function PropertyFullEditorClient({
                         </div>
                         <div className="text-xs text-[var(--muted-foreground)]">
                           {person.email || 'Sem e-mail'}
-                          {person.document_id ? ` · ${person.document_id}` : ''}
-                          {person.phone_e164 ? ` · ${person.phone_e164}` : ''}
+                          {person.document_id ? ` ? ${person.document_id}` : ''}
+                          {person.phone_e164 ? ` ? ${person.phone_e164}` : ''}
                         </div>
                       </button>
                     ))}
@@ -1018,3 +1381,5 @@ export default function PropertyFullEditorClient({
     </div>
   )
 }
+
+

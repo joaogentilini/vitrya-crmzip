@@ -2,6 +2,7 @@
 
 import { revalidatePath } from 'next/cache'
 import { createClient } from '@/lib/supabaseServer'
+import { removeTaskFromGoogleCalendar, syncOpenTaskToGoogleCalendar } from '@/lib/integrations/googleCalendarTasks'
 
 export type TaskType = 'call' | 'whatsapp' | 'visit' | 'proposal' | 'email' | 'other'
 export type TaskStatus = 'open' | 'done' | 'canceled'
@@ -101,7 +102,7 @@ export async function createTaskAction(input: CreateTaskInput) {
       created_by: userId,
       status: 'open',
     })
-    .select('id, title, type, due_at, status, assigned_to')
+    .select('id, lead_id, title, type, due_at, status, assigned_to')
     .single()
 
   if (insertError) throw new Error(insertError.message)
@@ -127,9 +128,19 @@ export async function createTaskAction(input: CreateTaskInput) {
     console.error('[TaskAudit] task_create insert failed:', auditError)
   }
 
+  await syncOpenTaskToGoogleCalendar({
+    id: task.id,
+    lead_id: task.lead_id,
+    title: task.title,
+    type: task.type,
+    due_at: task.due_at,
+    assigned_to: task.assigned_to,
+  })
+
   revalidatePath('/leads')
   revalidatePath('/leads/kanban')
   revalidatePath(`/leads/${input.leadId}`)
+  revalidatePath('/agenda')
 
   return task
 }
@@ -173,9 +184,15 @@ export async function completeTaskAction(taskId: string) {
     console.error('[TaskAudit] task_done insert failed:', auditError)
   }
 
+  await removeTaskFromGoogleCalendar({
+    id: task.id,
+    assigned_to: task.assigned_to,
+  })
+
   revalidatePath('/leads')
   revalidatePath('/leads/kanban')
   revalidatePath(`/leads/${task.lead_id}`)
+  revalidatePath('/agenda')
 }
 
 export async function rescheduleTaskAction(input: RescheduleTaskInput) {
@@ -224,9 +241,19 @@ export async function rescheduleTaskAction(input: RescheduleTaskInput) {
     console.error('[TaskAudit] task_reschedule insert failed:', auditError)
   }
 
+  await syncOpenTaskToGoogleCalendar({
+    id: task.id,
+    lead_id: task.lead_id,
+    title: task.title,
+    type: task.type,
+    due_at: input.dueAt,
+    assigned_to: task.assigned_to,
+  })
+
   revalidatePath('/leads')
   revalidatePath('/leads/kanban')
   revalidatePath(`/leads/${task.lead_id}`)
+  revalidatePath('/agenda')
 }
 
 export async function cancelTaskAction(taskId: string) {
@@ -268,7 +295,13 @@ export async function cancelTaskAction(taskId: string) {
     console.error('[TaskAudit] task_cancel insert failed:', auditError)
   }
 
+  await removeTaskFromGoogleCalendar({
+    id: task.id,
+    assigned_to: task.assigned_to,
+  })
+
   revalidatePath('/leads')
   revalidatePath('/leads/kanban')
   revalidatePath(`/leads/${task.lead_id}`)
+  revalidatePath('/agenda')
 }

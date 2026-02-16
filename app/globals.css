@@ -1,6 +1,9 @@
 @import "tailwindcss";
 
 :root {
+  --font-inter: Inter, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-geist-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+
   --mirage: #171A21;
   --cobalt: #294487;
   --off-white: #FAFAFA;

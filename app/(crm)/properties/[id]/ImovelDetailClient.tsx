@@ -34,6 +34,35 @@ interface ImovelDetailClientProps {
 
 type ProfileLike = { full_name?: string | null; email?: string | null } | null
 
+const DB_FIELD_LABELS: Record<string, string> = {
+  owner_user_id: 'Responsável (ID de usuário)',
+  owner_profile_id: 'Responsável (perfil)',
+  owner_client_id: 'Proprietário (pessoa)',
+  created_by: 'Criado por',
+  created_by_profile_id: 'Criado por (perfil)',
+  updated_at: 'Atualizado em',
+  created_at: 'Criado em',
+  property_id: 'Imóvel (ID)',
+  person_id: 'Pessoa (ID)',
+  lead_id: 'Lead (ID)',
+  property_category_id: 'Categoria do imóvel (ID)',
+  property_negotiations: 'Negociações do imóvel',
+  property_proposals: 'Propostas do imóvel',
+  profiles: 'Perfis',
+  properties: 'Imóveis',
+  people: 'Pessoas'
+}
+
+function formatDbFieldLabel(key: string) {
+  const mapped = DB_FIELD_LABELS[key]
+  if (mapped) return mapped
+
+  return key
+    .replace(/_/g, ' ')
+    .replace(/\bid\b/g, 'ID')
+    .replace(/\b\w/g, (char) => char.toUpperCase())
+}
+
 function asProfileLike(value: unknown): ProfileLike {
   if (!value || typeof value !== 'object') return null
   const v = value as Record<string, unknown>
@@ -98,7 +127,7 @@ function KeyValueList({
   return (
     <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
       {entries.map(([key, value]) => {
-        const label = labelMap?.[key] ?? key
+        const label = labelMap?.[key] ?? formatDbFieldLabel(key)
         const resolvedValue =
           valueMap && Object.prototype.hasOwnProperty.call(valueMap, key) ? valueMap[key] : value
         return (

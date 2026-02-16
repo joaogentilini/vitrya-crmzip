@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import PropertyMediaManager from "./media/PropertyMediaManager";
 import PropertyDocumentsManager from "./documents/PropertyDocumentsManager";
@@ -24,7 +24,6 @@ interface Property {
   status: string;
   purpose: string;
 
-  // ✅ categoria/classificação
   property_category_id?: string | null;
   property_category_name?: string | null;
 
@@ -46,6 +45,15 @@ interface Property {
   created_at: string;
 }
 
+function getDaysSince(value?: string | null) {
+  if (!value) return null
+  const start = new Date(value)
+  if (Number.isNaN(start.getTime())) return null
+  const diff = Date.now() - start.getTime()
+  if (diff <= 0) return 0
+  return Math.floor(diff / (1000 * 60 * 60 * 24))
+}
+
 export default function PropertyTabs({
   property,
   propertyCategories,
@@ -54,6 +62,10 @@ export default function PropertyTabs({
   featureAliasesToClear,
   viewerRole,
   viewerIsActive,
+  canViewLegalData,
+  initialTab,
+  initialNegotiationId,
+  initialProposalId,
 }: {
   property: Property;
   propertyCategories: Array<{ id: string; name: string }>;
@@ -84,23 +96,49 @@ export default function PropertyTabs({
   }>;
   viewerRole: string | null;
   viewerIsActive: boolean | null;
+  canViewLegalData: boolean;
+  initialTab?: TabKey | null;
+  initialNegotiationId?: string | null;
+  initialProposalId?: string | null;
 }) {
-  const [tab, setTab] = useState<TabKey>("overview");
-  const [status, setStatus] = useState<string>(property.status);
-  const [currentProperty, setCurrentProperty] = useState<Property>(property);
-
-  const tabs: { key: TabKey; label: string }[] = useMemo(
-    () => [
+  const tabs: { key: TabKey; label: string }[] = useMemo(() => {
+    const base: { key: TabKey; label: string }[] = [
       { key: "overview", label: "Visão" },
       { key: "features", label: "Características" },
       { key: "media", label: "Mídias" },
-      { key: "documents", label: "Documentos" },
       { key: "publish", label: "Publicação" },
       { key: "campaign", label: "Campanha" },
       { key: "negociacoes", label: "Negociações" },
-    ],
-    []
-  );
+    ];
+
+    if (canViewLegalData) {
+      base.splice(3, 0, { key: "documents", label: "Documentos" });
+    }
+
+    return base;
+  }, [canViewLegalData]);
+
+  const safeInitialTab = useMemo<TabKey>(() => {
+    if (initialTab && tabs.some((item) => item.key === initialTab)) return initialTab;
+    return "overview";
+  }, [initialTab, tabs]);
+
+  const [tab, setTab] = useState<TabKey>(safeInitialTab);
+  const [status, setStatus] = useState<string>(property.status);
+  const [currentProperty, setCurrentProperty] = useState<Property>(property);
+  const publicationDays = useMemo(() => getDaysSince(currentProperty.created_at), [currentProperty.created_at])
+  const publicationLabel =
+    status === "active"
+      ? publicationDays === null
+        ? "Tempo sem data"
+        : `Publicado ha ${publicationDays} dia${publicationDays === 1 ? "" : "s"}`
+      : "Nao publicado"
+
+  useEffect(() => {
+    if (!tabs.some((item) => item.key === tab)) {
+      setTab("overview");
+    }
+  }, [tab, tabs]);
 
   return (
     <div>
@@ -123,12 +161,18 @@ export default function PropertyTabs({
           );
         })}
 
-        <div className="ml-auto text-xs text-[var(--muted-foreground)]">
-          <span>
-            Status:{" "}
-            <span className="font-semibold text-[var(--foreground)]">
-              {status}
-            </span>
+        <div className="ml-auto flex flex-wrap items-center gap-2 text-xs">
+          <span className="rounded-full border border-[var(--border)] bg-[var(--card)] px-2 py-0.5 text-[var(--muted-foreground)]">
+            Status: <span className="font-semibold text-[var(--foreground)]">{status}</span>
+          </span>
+          <span
+            className={`rounded-full border px-2 py-0.5 font-semibold ${
+              status === "active"
+                ? "border-[var(--primary)] bg-[var(--primary)]/10 text-[var(--primary)]"
+                : "border-[var(--border)] bg-[var(--muted)] text-[var(--muted-foreground)]"
+            }`}
+          >
+            {publicationLabel}
           </span>
         </div>
       </div>
@@ -157,9 +201,7 @@ export default function PropertyTabs({
 
         {tab === "media" && <PropertyMediaManager propertyId={property.id} />}
 
-        {tab === "documents" && (
-          <PropertyDocumentsManager propertyId={property.id} />
-        )}
+        {tab === "documents" && canViewLegalData && <PropertyDocumentsManager propertyId={property.id} />}
 
         {tab === "publish" && (
           <PublishPanel
@@ -171,10 +213,20 @@ export default function PropertyTabs({
           />
         )}
 
-        {tab === "campaign" && <CampaignTab propertyId={property.id} />}
+        {tab === "campaign" && (
+          <CampaignTab
+            propertyId={property.id}
+            propertyStatus={status}
+            propertyCreatedAt={String(currentProperty.created_at ?? property.created_at ?? "")}
+          />
+        )}
 
         {tab === "negociacoes" && (
-          <PropertyNegotiationsTab propertyId={property.id} />
+          <PropertyNegotiationsTab
+            propertyId={property.id}
+            initialNegotiationId={initialNegotiationId ?? null}
+            initialProposalId={initialProposalId ?? null}
+          />
         )}
       </div>
     </div>

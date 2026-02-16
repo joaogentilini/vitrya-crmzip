@@ -661,6 +661,7 @@ export default function PessoasTabsClient({
     options.unshift({ value: '', label: 'Sem atribuição' })
     return options
   }, [assignedProfile, brokers, person.assigned_to])
+  const canManageOwner = currentUserRole === 'admin' || currentUserRole === 'gestor'
 
   const handleCreateNote = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
@@ -700,13 +701,24 @@ export default function PessoasTabsClient({
           ? normalizePhoneE164FromBR(basicsForm.phone_display)
           : null
 
-        await updatePersonBasics(person.id, {
+        const basicsPayload: {
+          full_name: string | null
+          email: string | null
+          phone_e164: string | null
+          notes: string | null
+          assigned_to?: string | null
+        } = {
           full_name: toNull(basicsForm.full_name),
           email: toNull(basicsForm.email),
           phone_e164: phoneToSave,
-          notes: toNull(basicsForm.notes),
-          assigned_to: toNull(basicsForm.assigned_to)
-        })
+          notes: toNull(basicsForm.notes)
+        }
+
+        if (canManageOwner) {
+          basicsPayload.assigned_to = toNull(basicsForm.assigned_to)
+        }
+
+        await updatePersonBasics(person.id, basicsPayload)
 
         if (personType === 'PF') {
           await upsertFinancingProfile(person.id, {
@@ -1140,17 +1152,31 @@ export default function PessoasTabsClient({
                     </>
                   )}
 
-                  <Select
-                    label="Responsável Atual"
-                    options={assignedOptions}
-                    value={basicsForm.assigned_to}
-                    onChange={(event) =>
-                      setBasicsForm((prev) => ({
-                        ...prev,
-                        assigned_to: (event.target as HTMLSelectElement).value
-                      }))
-                    }
-                  />
+                  {canManageOwner ? (
+                    <Select
+                      label="Responsável Atual"
+                      options={assignedOptions}
+                      value={basicsForm.assigned_to}
+                      onChange={(event) =>
+                        setBasicsForm((prev) => ({
+                          ...prev,
+                          assigned_to: (event.target as HTMLSelectElement).value
+                        }))
+                      }
+                    />
+                  ) : (
+                    <Input
+                      label="Responsável Atual"
+                      value={
+                        assignedProfile?.full_name ||
+                        assignedProfile?.email ||
+                        basicsForm.assigned_to ||
+                        'Sem atribuição'
+                      }
+                      disabled
+                      hint="Somente admin/gestor pode alterar o responsável."
+                    />
+                  )}
 
                   <div className="sm:col-span-2 lg:col-span-3">
                     <Textarea

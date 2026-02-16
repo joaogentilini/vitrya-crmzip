@@ -2,8 +2,8 @@ import type { Metadata } from "next";
 import { headers } from "next/headers";
 import { notFound } from "next/navigation";
 
-import { createClient } from "@/lib/supabase/server";
 import { createPublicClient } from "@/lib/supabase/publicServer";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { getSignedImageUrl } from "@/lib/media/getPublicImageUrl";
 
 import HeroBackgroundGalleryClient from "./HeroBackgroundGalleryClient";
@@ -293,7 +293,7 @@ export default async function PublicPropertyPage({
 }: {
   params: { id: string } | Promise<{ id: string }>;
 }) {
-  const supabase = await createClient();
+  const supabase = createPublicClient();
 
   const resolvedParams = await Promise.resolve(params);
   const propertyId = resolvedParams?.id;
@@ -321,6 +321,9 @@ export default async function PublicPropertyPage({
     broker_phone_e164,
     broker_email,
     broker_avatar_url,
+    broker_avatar_focus_x,
+    broker_avatar_focus_y,
+    broker_avatar_zoom,
     broker_tagline,
     broker_bio,
     broker_instagram_url,
@@ -408,10 +411,25 @@ export default async function PublicPropertyPage({
     .eq("property_id", propertyId)
     .order("position", { ascending: true });
 
-  if (mediaError) console.error(mediaError);
+  let effectiveMediaRows = mediaRows ?? [];
+  if (!effectiveMediaRows.length) {
+    const admin = createAdminClient();
+    const { data: adminRows, error: adminErr } = await admin
+      .from("property_media")
+      .select("id, url, kind, position")
+      .eq("property_id", propertyId)
+      .order("position", { ascending: true });
+
+    if (adminErr) {
+      if (mediaError) console.error(mediaError);
+      console.error("Admin media fallback error:", adminErr);
+    } else {
+      effectiveMediaRows = adminRows ?? [];
+    }
+  }
 
   const rawMediaItems =
-    (mediaRows ?? []).map((m: any) => ({
+    effectiveMediaRows.map((m: any) => ({
       id: String(m.id),
       url: m?.url ? String(m.url) : null,
       kind: m.kind,
@@ -442,7 +460,6 @@ export default async function PublicPropertyPage({
       .from("property_features")
       .select("id,key,label_pt,group,type,options,position")
       .eq("is_active", true)
-      .order("group", { ascending: true })
       .order("position", { ascending: true }),
     supabase
       .from("property_feature_values")
@@ -553,7 +570,6 @@ export default async function PublicPropertyPage({
       {canonicalUrl ? (
         <script
           type="application/ld+json"
-          // eslint-disable-next-line react/no-danger
           dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
         />
       ) : null}
@@ -789,6 +805,9 @@ export default async function PublicPropertyPage({
                   name={brokerName}
                   initials={initials}
                   avatarUrl={property?.broker_avatar_url}
+                  avatarFocusX={property?.broker_avatar_focus_x}
+                  avatarFocusY={property?.broker_avatar_focus_y}
+                  avatarZoom={property?.broker_avatar_zoom}
                   creci={property?.broker_creci}
                   tagline={property?.broker_tagline}
                   bio={property?.broker_bio}
