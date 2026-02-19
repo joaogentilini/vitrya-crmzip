@@ -129,12 +129,25 @@ img, video, iframe{max-width:100%; height:auto;}
   .pv-header-inner{
     min-height: 54px;
     padding: 8px 12px;
+    gap: 8px;
+    flex-wrap: wrap;
   }
   .pv-brand{ height: 36px; }
   .pv-mark{
     width: 200px;
     height: 74px;
     max-width: 64vw;
+  }
+  .pv-nav{
+    order: 3;
+    flex-basis: 100%;
+    justify-content: flex-start;
+  }
+  .pv-nav-row{ justify-content: flex-start; }
+  .pv-nav-panel{
+    left: 0;
+    right: auto;
+    max-width: 94vw;
   }
 }
 @media (max-width: 420px){
@@ -143,6 +156,11 @@ img, video, iframe{max-width:100%; height:auto;}
     height: 78px;
     max-width: 60vw;
   }
+  .pv-nav-link{
+    padding: 6px 10px;
+    font-size: 11px;
+  }
+  .pv-nav-panel{ grid-template-columns: 1fr; }
 }
 
 /* =========================================================
@@ -152,6 +170,93 @@ img, video, iframe{max-width:100%; height:auto;}
   display:flex;
   gap: 8px;
   align-items:center;
+}
+
+.pv-nav{
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  justify-content: center;
+}
+
+.pv-nav-row{
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+.pv-nav-link{
+  display: inline-flex;
+  align-items: center;
+  min-height: 34px;
+  padding: 7px 12px;
+  border-radius: 999px;
+  border: 1px solid rgba(255,255,255,.18);
+  background: rgba(0,0,0,.25);
+  color: rgba(255,255,255,.92);
+  text-decoration: none;
+  font-size: 12px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.pv-nav-link:hover{ background: rgba(255,255,255,.22); }
+
+.pv-nav-dropdown{ position: relative; }
+.pv-nav-trigger{ cursor: default; }
+
+.pv-nav-panel{
+  position: absolute;
+  top: calc(100% + 10px);
+  left: 0;
+  min-width: 280px;
+  max-width: min(92vw, 520px);
+  border: 1px solid rgba(255,255,255,.22);
+  border-radius: 14px;
+  background: rgba(23,26,33,.92);
+  box-shadow: 0 18px 50px rgba(0,0,0,.24);
+  padding: 12px;
+  display: none;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  z-index: 20;
+}
+
+.pv-nav-dropdown:hover .pv-nav-panel,
+.pv-nav-dropdown:focus-within .pv-nav-panel{ display: grid; }
+
+.pv-nav-group{
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.pv-nav-title{
+  margin: 0 0 2px;
+  font-size: 10px;
+  font-weight: 900;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  color: rgba(255,255,255,.62);
+}
+
+.pv-nav-group a{
+  text-decoration: none;
+  color: rgba(255,255,255,.92);
+  font-size: 12px;
+  line-height: 1.2;
+  border-radius: 8px;
+  padding: 5px 6px;
+}
+
+.pv-nav-group a:hover{ background: rgba(255,255,255,.12); }
+
+.pv-nav-empty{
+  color: rgba(255,255,255,.64);
+  font-size: 12px;
+  padding: 4px 6px;
 }
 
 .pv-btn{

@@ -525,17 +525,17 @@ export async function updatePropertyBasics(propertyId: string, payload: UpdatePr
     .maybeSingle()
 
   if (propertyError) {
-    throw new Error(propertyError.message || 'Erro ao validar permissao de edicao.')
+    throw new Error(propertyError.message || 'Erro ao validar permissão de edicao.')
   }
 
   if (!propertyOwner) {
-    throw new Error('Imovel nao encontrado.')
+    throw new Error('Imóvel não encontrado.')
   }
 
   const isManager = actorProfile.role === 'admin' || actorProfile.role === 'gestor'
   const isOwner = propertyOwner.owner_user_id === actorProfile.id
   if (!isManager && !isOwner) {
-    throw new Error('Sem permissao: apenas responsavel/admin/gestor.')
+    throw new Error('Sem permissão: apenas responsável/admin/gestor.')
   }
 
   const parsePercentField = (value: unknown, label: string): number | undefined => {
@@ -550,18 +550,18 @@ export async function updatePropertyBasics(propertyId: string, payload: UpdatePr
       if (!trimmed) return undefined
       parsed = Number(trimmed.replace(',', '.'))
     } else {
-      throw new Error(`${label} invalido.`)
+      throw new Error(`${label} inválido.`)
     }
 
     if (!Number.isFinite(parsed) || parsed < 0 || parsed > 100) {
-      throw new Error(`${label} invalido.`)
+      throw new Error(`${label} inválido.`)
     }
 
     return parsed
   }
 
   const commissionSettingsUpdate: Record<string, number | string> = {}
-  const saleCommissionPercent = parsePercentField(payload.sale_commission_percent, 'Comissao de venda (%)')
+  const saleCommissionPercent = parsePercentField(payload.sale_commission_percent, 'Comissão de venda (%)')
   if (typeof saleCommissionPercent === 'number') {
     commissionSettingsUpdate.sale_commission_percent = saleCommissionPercent
     // Mantem coluna legada sincronizada.
@@ -580,7 +580,7 @@ export async function updatePropertyBasics(propertyId: string, payload: UpdatePr
 
   const rentInitialCommissionPercent = parsePercentField(
     payload.rent_initial_commission_percent,
-    'Comissao inicial aluguel (%)'
+    'Comissão inicial aluguel (%)'
   )
   if (typeof rentInitialCommissionPercent === 'number') {
     commissionSettingsUpdate.rent_initial_commission_percent = rentInitialCommissionPercent
@@ -588,7 +588,7 @@ export async function updatePropertyBasics(propertyId: string, payload: UpdatePr
 
   const rentRecurringCommissionPercent = parsePercentField(
     payload.rent_recurring_commission_percent,
-    'Comissao recorrente aluguel (%)'
+    'Comissão recorrente aluguel (%)'
   )
   if (typeof rentRecurringCommissionPercent === 'number') {
     commissionSettingsUpdate.rent_recurring_commission_percent = rentRecurringCommissionPercent
@@ -609,7 +609,7 @@ export async function updatePropertyBasics(propertyId: string, payload: UpdatePr
     typeof salePartnerSplitPercent === 'number' &&
     saleBrokerSplitPercent + salePartnerSplitPercent > 100
   ) {
-    throw new Error('A soma dos splits de venda nao pode ultrapassar 100%.')
+    throw new Error('A soma dos splits de venda não pode ultrapassar 100%.')
   }
 
   if (
@@ -617,7 +617,7 @@ export async function updatePropertyBasics(propertyId: string, payload: UpdatePr
     typeof rentPartnerSplitPercent === 'number' &&
     rentBrokerSplitPercent + rentPartnerSplitPercent > 100
   ) {
-    throw new Error('A soma dos splits de aluguel nao pode ultrapassar 100%.')
+    throw new Error('A soma dos splits de aluguel não pode ultrapassar 100%.')
   }
 
   if (payload.owner_client_id === '') {
@@ -632,7 +632,7 @@ export async function updatePropertyBasics(propertyId: string, payload: UpdatePr
   if (payload.commission_percent !== null && typeof payload.commission_percent !== 'undefined') {
     const commissionPercent = Number(payload.commission_percent)
     if (!Number.isFinite(commissionPercent) || commissionPercent < 0 || commissionPercent > 100) {
-      throw new Error('Percentual de comissao invalido.')
+      throw new Error('Percentual de comissão inválido.')
     }
     payload.commission_percent = commissionPercent
   }
@@ -651,7 +651,7 @@ export async function updatePropertyBasics(propertyId: string, payload: UpdatePr
     if (commissionSettingsError) {
       throw new Error(
         commissionSettingsError.message ||
-          'Erro ao salvar configuracao de comissao. Verifique a migration 202602141030.'
+          'Erro ao salvar configuração de comissão. Verifique a migration 202602141030.'
       )
     }
   }
@@ -708,6 +708,798 @@ export async function updatePropertyBasics(propertyId: string, payload: UpdatePr
 
   revalidatePath(`/properties/${propertyId}`)
   revalidatePath('/properties')
+}
+
+export interface GeneratePropertyMarketingCopyInput {
+  propertyId: string
+  context?: {
+    portal_profile?: 'general' | 'olx' | 'zap' | 'vivareal' | string | null
+    purpose?: string | null
+    title?: string | null
+    description?: string | null
+    city?: string | null
+    neighborhood?: string | null
+    address?: string | null
+    price?: number | null
+    rent_price?: number | null
+    area_m2?: number | null
+    land_area_m2?: number | null
+    built_area_m2?: number | null
+    bedrooms?: number | null
+    bathrooms?: number | null
+    parking?: number | null
+    suites?: number | null
+    condo_fee?: number | null
+    usage?: string | null
+    condition?: string | null
+    property_standard?: string | null
+  }
+}
+
+export interface GeneratePropertyMarketingCopyResult {
+  success: boolean
+  title: string
+  description: string
+  used_ai: boolean
+  error?: string
+}
+
+interface PropertyMarketingAgentPayload {
+  task: 'property_marketing_copy'
+  locale: 'pt-BR'
+  property_id: string
+  data_paths: {
+    property_table: string
+    category_table: string
+    media_table: string
+    media_bucket: string
+    request_context: string
+  }
+  data: {
+    property: Record<string, unknown>
+    category: { name: string | null }
+    portal_profile: 'general' | 'olx' | 'zap' | 'vivareal'
+    selected_features: string[]
+    broker_base_description: string | null
+  }
+}
+
+function pickGeneratedCopy(raw: any): { title: string; description: string } | null {
+  const candidates = [raw, raw?.data, raw?.result, raw?.output]
+
+  for (const item of candidates) {
+    const title = typeof item?.title === 'string' ? item.title.trim() : ''
+    const description = typeof item?.description === 'string' ? item.description.trim() : ''
+    if (title && description) {
+      return { title, description }
+    }
+  }
+
+  return null
+}
+
+type PropertyFeatureLite = {
+  id: string
+  label_pt: string | null
+  group: string | null
+}
+
+type PropertyFeatureValueLite = {
+  feature_id: string
+  value_boolean: boolean | null
+  value_number: number | null
+  value_text: string | null
+  value_json: unknown | null
+}
+
+function formatSelectedFeatures(
+  values: PropertyFeatureValueLite[],
+  catalog: PropertyFeatureLite[]
+): string[] {
+  const byId = new Map(catalog.map((item) => [String(item.id), item]))
+  const lines: string[] = []
+
+  for (const row of values) {
+    const feature = byId.get(String(row.feature_id))
+    if (!feature) continue
+
+    const label = (feature.label_pt || '').trim()
+    if (!label) continue
+
+    const group = (feature.group || '').trim()
+    const prefix = group ? `${group}: ` : ''
+
+    if (row.value_boolean === true) {
+      lines.push(`${prefix}${label}`)
+      continue
+    }
+
+    if (typeof row.value_number === 'number' && Number.isFinite(row.value_number)) {
+      lines.push(`${prefix}${label} (${row.value_number})`)
+      continue
+    }
+
+    if (typeof row.value_text === 'string' && row.value_text.trim()) {
+      lines.push(`${prefix}${label} (${row.value_text.trim()})`)
+      continue
+    }
+
+    if (Array.isArray(row.value_json) && row.value_json.length > 0) {
+      const valuesText = row.value_json
+        .map((item) => String(item ?? '').trim())
+        .filter(Boolean)
+        .join(', ')
+      if (valuesText) {
+        lines.push(`${prefix}${label} (${valuesText})`)
+      }
+    }
+  }
+
+  return Array.from(new Set(lines)).slice(0, 40)
+}
+
+function normalizeBrokerBaseDescription(value: string | null | undefined): string {
+  return String(value || '')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, 1200)
+}
+
+type PortalProfile = 'general' | 'olx' | 'zap' | 'vivareal'
+
+function normalizePortalProfile(value: unknown): PortalProfile {
+  const normalized = String(value || '')
+    .trim()
+    .toLowerCase()
+  if (normalized === 'olx' || normalized === 'zap' || normalized === 'vivareal') {
+    return normalized
+  }
+  return 'general'
+}
+
+function getPortalCopyRules(portalProfile: PortalProfile): string[] {
+  if (portalProfile === 'olx') {
+    return [
+      'Texto objetivo, direto e de alta escaneabilidade.',
+      'Frases curtas, foco em benefícios práticos e diferenciais imediatos.',
+      'Evitar linguagem excessivamente rebuscada.',
+    ]
+  }
+  if (portalProfile === 'zap') {
+    return [
+      'Tom premium e confiável, com foco em valor percebido.',
+      'Estruture com abertura forte + diferenciais + fechamento comercial.',
+      'Priorize clareza de posicionamento do imóvel.',
+    ]
+  }
+  if (portalProfile === 'vivareal') {
+    return [
+      'Tom aspiracional equilibrado, destacando estilo de vida e localização.',
+      'Conectar características com experiência de moradia.',
+      'Manter linguagem elegante e objetiva.',
+    ]
+  }
+  return [
+    'Tom comercial premium, profissional e claro.',
+    'Descrição otimizada para múltiplos portais imobiliários.',
+    'Foco em conversão sem exageros.',
+  ]
+}
+
+function hasPositiveNumber(value: unknown): boolean {
+  return typeof value === 'number' && Number.isFinite(value) && value > 0
+}
+
+function removeSentencesByPatterns(text: string, patterns: RegExp[]): string {
+  const source = String(text || '')
+    .replace(/\s+/g, ' ')
+    .trim()
+  if (!source || patterns.length === 0) {
+    return source
+  }
+
+  const chunks = source
+    .split(/(?<=[.!?])\s+/)
+    .map((item) => item.trim())
+    .filter(Boolean)
+  const filtered = chunks.filter((sentence) => !patterns.some((pattern) => pattern.test(sentence)))
+  return filtered.join(' ').replace(/\s+/g, ' ').trim()
+}
+
+function applyCriticalFactsGuard(input: {
+  title: string
+  description: string
+  fallbackTitle: string
+  fallbackDescription: string
+  purpose?: string | null
+  price?: number | null
+  rent_price?: number | null
+  condo_fee?: number | null
+  area_m2?: number | null
+  built_area_m2?: number | null
+  land_area_m2?: number | null
+}) {
+  const pricePattern =
+    /\b(r\$\s?\d|preço|preço|valor(?:\s+de)?(?:\s+venda|\s+locação|\s+locacao|\s+aluguel)?|entrada|parcel(?:a|amento))/i
+  const condoPattern = /\bcondom[ií]nio|taxa\s+condominial\b/i
+  const areaPattern = /\b\d+[.,]?\d*\s?(m²|m2)\b|\bárea\b|\barea\b|\bmetragem\b/i
+
+  const missingPrice =
+    input.purpose === 'rent'
+      ? !hasPositiveNumber(input.rent_price)
+      : input.purpose === 'sale'
+      ? !hasPositiveNumber(input.price)
+      : !hasPositiveNumber(input.price) && !hasPositiveNumber(input.rent_price)
+  const missingCondo = !hasPositiveNumber(input.condo_fee)
+  const missingArea =
+    !hasPositiveNumber(input.area_m2) &&
+    !hasPositiveNumber(input.built_area_m2) &&
+    !hasPositiveNumber(input.land_area_m2)
+
+  const sentencePatterns: RegExp[] = []
+  const titlePatterns: RegExp[] = []
+  if (missingPrice) {
+    sentencePatterns.push(pricePattern)
+    titlePatterns.push(pricePattern)
+  }
+  if (missingCondo) {
+    sentencePatterns.push(condoPattern)
+    titlePatterns.push(condoPattern)
+  }
+  if (missingArea) {
+    sentencePatterns.push(areaPattern)
+    titlePatterns.push(areaPattern)
+  }
+
+  const cleanDescription = removeSentencesByPatterns(input.description, sentencePatterns)
+  const guardedDescription = cleanDescription || removeSentencesByPatterns(input.fallbackDescription, sentencePatterns)
+  const shouldReplaceTitle = titlePatterns.some((pattern) => pattern.test(input.title))
+  const guardedTitle = shouldReplaceTitle ? input.fallbackTitle : input.title
+  const safeDescription =
+    guardedDescription || 'Descrição comercial disponível mediante atualização completa do cadastro.'
+
+  return {
+    title: String(guardedTitle || '').trim().slice(0, 110),
+    description: String(safeDescription).trim().slice(0, 2400),
+  }
+}
+
+function buildFallbackMarketingCopy(data: {
+  purpose?: string | null
+  title?: string | null
+  description?: string | null
+  categoryName?: string | null
+  city?: string | null
+  neighborhood?: string | null
+  address?: string | null
+  area_m2?: number | null
+  built_area_m2?: number | null
+  land_area_m2?: number | null
+  bedrooms?: number | null
+  bathrooms?: number | null
+  suites?: number | null
+  parking?: number | null
+  price?: number | null
+  rent_price?: number | null
+  condo_fee?: number | null
+  condition?: string | null
+  usage?: string | null
+  selectedFeatures?: string[]
+  brokerBaseDescription?: string | null
+}) {
+  const purposeLabel =
+    data.purpose === 'rent' ? 'Aluguel' : data.purpose === 'sale' ? 'Venda' : 'Oportunidade'
+  const location = [data.neighborhood, data.city].filter(Boolean).join(', ')
+  const baseTitle = (data.title || '').trim()
+  const autoTitle = [purposeLabel, data.categoryName || 'Imóvel', location].filter(Boolean).join(' | ')
+  const title = baseTitle || autoTitle || 'Imóvel premium'
+
+  const details: string[] = []
+  if (data.bedrooms) details.push(`${data.bedrooms} quarto(s)`)
+  if (data.suites) details.push(`${data.suites} suíte(s)`)
+  if (data.bathrooms) details.push(`${data.bathrooms} banheiro(s)`)
+  if (data.parking) details.push(`${data.parking} vaga(s)`)
+  if (data.area_m2) details.push(`${data.area_m2} m² privativos`)
+  else if (data.built_area_m2) details.push(`${data.built_area_m2} m² construídos`)
+  if (!data.area_m2 && data.land_area_m2) details.push(`${data.land_area_m2} m² de terreno`)
+
+  const valueSentence =
+    data.purpose === 'rent'
+      ? data.rent_price
+        ? `Valor de locação: R$ ${Number(data.rent_price).toLocaleString('pt-BR')}.`
+        : ''
+      : data.price
+      ? `Valor de venda: R$ ${Number(data.price).toLocaleString('pt-BR')}.`
+      : ''
+
+  const condoSentence = data.condo_fee
+    ? `Condomínio: R$ ${Number(data.condo_fee).toLocaleString('pt-BR')}.`
+    : ''
+
+  const featuresSentence =
+    Array.isArray(data.selectedFeatures) && data.selectedFeatures.length > 0
+      ? `Características de destaque: ${data.selectedFeatures.slice(0, 8).join(', ')}.`
+      : ''
+
+  const brokerBase = normalizeBrokerBaseDescription(data.brokerBaseDescription || data.description || null)
+  const brokerBaseSentence = brokerBase ? `Base do corretor: ${brokerBase}.` : ''
+
+  const description = [
+    `${purposeLabel} de ${data.categoryName || 'imóvel'}${location ? ` em ${location}` : ''}.`,
+    details.length ? `Destaques: ${details.join(', ')}.` : '',
+    data.address ? `Endereço: ${data.address}.` : '',
+    valueSentence,
+    condoSentence,
+    featuresSentence,
+    brokerBaseSentence,
+    data.condition ? `Condição do imóvel: ${data.condition}.` : '',
+    data.usage ? `Uso: ${data.usage}.` : '',
+    'Descrição baseada no cadastro do imóvel e nas características selecionadas.',
+  ]
+    .filter(Boolean)
+    .join(' ')
+    .trim()
+
+  return {
+    title: title.slice(0, 110),
+    description: description.slice(0, 2400),
+  }
+}
+
+export async function generatePropertyMarketingCopy(
+  input: GeneratePropertyMarketingCopyInput
+): Promise<GeneratePropertyMarketingCopyResult> {
+  try {
+    const actor = await requireActiveUser()
+    const propertyId = String(input?.propertyId || '').trim()
+    if (!propertyId) {
+      return {
+        success: false,
+        title: '',
+        description: '',
+        used_ai: false,
+        error: 'Imóvel inválido.',
+      }
+    }
+
+    const supabase = await createClient()
+
+    const { data: propertyRow, error: propertyErr } = await supabase
+      .from('properties')
+      .select(
+        'id, owner_user_id, purpose, title, description, city, neighborhood, address, price, rent_price, area_m2, land_area_m2, built_area_m2, bedrooms, bathrooms, suites, parking, condo_fee, property_category_id, condition, usage, property_standard'
+      )
+      .eq('id', propertyId)
+      .maybeSingle()
+
+    if (propertyErr || !propertyRow) {
+      return {
+        success: false,
+        title: '',
+        description: '',
+        used_ai: false,
+        error: propertyErr?.message || 'Imóvel não encontrado.',
+      }
+    }
+
+    const isManager = actor.role === 'admin' || actor.role === 'gestor'
+    const isOwner = propertyRow.owner_user_id === actor.id
+    if (!isManager && !isOwner) {
+      return {
+        success: false,
+        title: '',
+        description: '',
+        used_ai: false,
+        error: 'Sem permissão para gerar texto deste imóvel.',
+      }
+    }
+
+    const portalProfile = normalizePortalProfile(input?.context?.portal_profile)
+    const openAiModel = 'gpt-4.1-mini'
+    const startedAt = Date.now()
+    const writeGenerationLog = async (entry: {
+      provider: 'openai' | 'webhook' | 'fallback'
+      model?: string | null
+      status: 'success' | 'fallback' | 'error'
+      used_ai: boolean
+      prompt_tokens?: number | null
+      completion_tokens?: number | null
+      total_tokens?: number | null
+      error_message?: string | null
+    }) => {
+      try {
+        await supabase.from('property_ai_generation_logs').insert({
+          property_id: propertyId,
+          actor_id: actor.id,
+          provider: entry.provider,
+          model: entry.model ?? null,
+          portal_profile: portalProfile,
+          status: entry.status,
+          used_ai: entry.used_ai,
+          prompt_tokens: entry.prompt_tokens ?? null,
+          completion_tokens: entry.completion_tokens ?? null,
+          total_tokens: entry.total_tokens ?? null,
+          latency_ms: Date.now() - startedAt,
+          error_message: entry.error_message ?? null,
+        })
+      } catch (logError) {
+        console.warn('[generatePropertyMarketingCopy] ai log insert failed', logError)
+      }
+    }
+    const [{ data: categoryRow }, { data: featureValues }] = await Promise.all([
+      propertyRow.property_category_id
+        ? supabase
+            .from('property_categories')
+            .select('name')
+            .eq('id', propertyRow.property_category_id)
+            .maybeSingle()
+        : Promise.resolve({ data: null, error: null } as any),
+      supabase
+        .from('property_feature_values')
+        .select('feature_id,value_boolean,value_number,value_text,value_json')
+        .eq('property_id', propertyId)
+        .limit(200),
+    ])
+
+    const selectedFeatureIds = Array.from(
+      new Set((featureValues ?? []).map((item: any) => String(item.feature_id || '')).filter(Boolean))
+    )
+
+    let featureCatalog: PropertyFeatureLite[] = []
+    if (selectedFeatureIds.length > 0) {
+      const { data: featureRows } = await supabase
+        .from('property_features')
+        .select('id,label_pt,group')
+        .in('id', selectedFeatureIds)
+      featureCatalog = ((featureRows ?? []) as PropertyFeatureLite[]).filter(Boolean)
+    }
+
+    const selectedFeatures = formatSelectedFeatures(
+      (featureValues ?? []) as PropertyFeatureValueLite[],
+      featureCatalog
+    )
+    const brokerBaseDescription = normalizeBrokerBaseDescription(input?.context?.description ?? null)
+
+    const merged = {
+      ...propertyRow,
+      ...(input.context || {}),
+      categoryName: categoryRow?.name ?? null,
+      selectedFeatures,
+      brokerBaseDescription,
+    }
+
+    const fallback = buildFallbackMarketingCopy({
+      purpose: merged.purpose ?? null,
+      title: merged.title ?? null,
+      description: merged.description ?? null,
+      categoryName: merged.categoryName ?? null,
+      city: merged.city ?? null,
+      neighborhood: merged.neighborhood ?? null,
+      address: merged.address ?? null,
+      area_m2: merged.area_m2 ?? null,
+      built_area_m2: merged.built_area_m2 ?? null,
+      land_area_m2: merged.land_area_m2 ?? null,
+      bedrooms: merged.bedrooms ?? null,
+      bathrooms: merged.bathrooms ?? null,
+      suites: merged.suites ?? null,
+      parking: merged.parking ?? null,
+      price: merged.price ?? null,
+      rent_price: merged.rent_price ?? null,
+      condo_fee: merged.condo_fee ?? null,
+      condition: merged.condition ?? null,
+      usage: merged.usage ?? null,
+      selectedFeatures: merged.selectedFeatures ?? [],
+      brokerBaseDescription: merged.brokerBaseDescription ?? null,
+    })
+    const guardedFallback = applyCriticalFactsGuard({
+      title: fallback.title,
+      description: fallback.description,
+      fallbackTitle: fallback.title,
+      fallbackDescription: fallback.description,
+      purpose: merged.purpose ?? null,
+      price: merged.price ?? null,
+      rent_price: merged.rent_price ?? null,
+      condo_fee: merged.condo_fee ?? null,
+      area_m2: merged.area_m2 ?? null,
+      built_area_m2: merged.built_area_m2 ?? null,
+      land_area_m2: merged.land_area_m2 ?? null,
+    })
+
+    const externalAgentUrl = (process.env.PROPERTY_COPY_AGENT_URL || '').trim()
+    if (externalAgentUrl) {
+      try {
+        const payload: PropertyMarketingAgentPayload = {
+          task: 'property_marketing_copy',
+          locale: 'pt-BR',
+          property_id: propertyId,
+          data_paths: {
+            property_table: 'public.properties',
+            category_table: 'public.property_categories',
+            media_table: 'disabled_for_now',
+            media_bucket: 'disabled_for_now',
+            request_context: 'input.context',
+          },
+          data: {
+            property: {
+              purpose: merged.purpose ?? null,
+              title: merged.title ?? null,
+              city: merged.city ?? null,
+              neighborhood: merged.neighborhood ?? null,
+              address: merged.address ?? null,
+              area_m2: merged.area_m2 ?? null,
+              land_area_m2: merged.land_area_m2 ?? null,
+              built_area_m2: merged.built_area_m2 ?? null,
+              bedrooms: merged.bedrooms ?? null,
+              bathrooms: merged.bathrooms ?? null,
+              suites: merged.suites ?? null,
+              parking: merged.parking ?? null,
+              price: merged.price ?? null,
+              rent_price: merged.rent_price ?? null,
+              condo_fee: merged.condo_fee ?? null,
+              condition: merged.condition ?? null,
+              usage: merged.usage ?? null,
+              property_standard: merged.property_standard ?? null,
+            },
+            category: {
+              name: merged.categoryName ?? null,
+            },
+            portal_profile: portalProfile,
+            selected_features: merged.selectedFeatures ?? [],
+            broker_base_description: merged.brokerBaseDescription ?? null,
+          },
+        }
+
+        const externalHeaders: Record<string, string> = {
+          'Content-Type': 'application/json',
+        }
+        const externalToken = (process.env.PROPERTY_COPY_AGENT_TOKEN || '').trim()
+        if (externalToken) {
+          externalHeaders.Authorization = `Bearer ${externalToken}`
+        }
+
+        const externalRes = await fetch(externalAgentUrl, {
+          method: 'POST',
+          headers: externalHeaders,
+          body: JSON.stringify(payload),
+        })
+
+        if (externalRes.ok) {
+          const externalJson = await externalRes.json().catch(() => null as any)
+          const externalCopy = pickGeneratedCopy(externalJson)
+          if (externalCopy) {
+            const guardedExternal = applyCriticalFactsGuard({
+              title: externalCopy.title,
+              description: externalCopy.description,
+              fallbackTitle: guardedFallback.title,
+              fallbackDescription: guardedFallback.description,
+              purpose: merged.purpose ?? null,
+              price: merged.price ?? null,
+              rent_price: merged.rent_price ?? null,
+              condo_fee: merged.condo_fee ?? null,
+              area_m2: merged.area_m2 ?? null,
+              built_area_m2: merged.built_area_m2 ?? null,
+              land_area_m2: merged.land_area_m2 ?? null,
+            })
+            await writeGenerationLog({
+              provider: 'webhook',
+              model: 'external-agent',
+              status: 'success',
+              used_ai: true,
+            })
+            return {
+              success: true,
+              title: guardedExternal.title,
+              description: guardedExternal.description,
+              used_ai: true,
+            }
+          }
+        }
+      } catch {
+        // fallback para OpenAI local ou assistente interno
+      }
+    }
+
+    const openAiApiKey = process.env.OPENAI_API_KEY
+    if (!openAiApiKey) {
+      await writeGenerationLog({
+        provider: 'fallback',
+        model: null,
+        status: 'fallback',
+        used_ai: false,
+        error_message: 'OPENAI_API_KEY ausente',
+      })
+      return {
+        success: true,
+        title: guardedFallback.title,
+        description: guardedFallback.description,
+        used_ai: false,
+      }
+    }
+
+    const factualContext = Object.fromEntries(
+      Object.entries({
+        purpose: merged.purpose ?? null,
+        category: merged.categoryName ?? null,
+        title_hint: merged.title ?? null,
+        city: merged.city ?? null,
+        neighborhood: merged.neighborhood ?? null,
+        address: merged.address ?? null,
+        area_m2: merged.area_m2 ?? null,
+        land_area_m2: merged.land_area_m2 ?? null,
+        built_area_m2: merged.built_area_m2 ?? null,
+        bedrooms: merged.bedrooms ?? null,
+        bathrooms: merged.bathrooms ?? null,
+        suites: merged.suites ?? null,
+        parking: merged.parking ?? null,
+        price: merged.price ?? null,
+        rent_price: merged.rent_price ?? null,
+        condo_fee: merged.condo_fee ?? null,
+        condition: merged.condition ?? null,
+        usage: merged.usage ?? null,
+        property_standard: merged.property_standard ?? null,
+      }).filter(([, value]) => value !== null && value !== undefined && value !== '')
+    )
+    const featuresForPrompt = (merged.selectedFeatures ?? []).slice(0, 30)
+    const brokerBaseForPrompt = normalizeBrokerBaseDescription(
+      merged.brokerBaseDescription ?? merged.description ?? null
+    )
+    const portalRules = getPortalCopyRules(portalProfile)
+
+    const userPrompt = [
+      'Objetivo: melhorar a descrição para venda em portais imobiliários no Brasil.',
+      'Regras obrigatorias:',
+      '- Não inventar informações; usar somente os dados enviados.',
+      '- Se faltar dado essencial, não inventar; manter texto elegante sem o dado.',
+      '- Linguagem comercial premium, clara, objetiva e profissional.',
+      '- Sem emojis, sem caixa alta excessiva e sem promessas indevidas.',
+      '- Responder estritamente no schema JSON solicitado.',
+      `- Perfil de portal alvo: ${portalProfile}.`,
+      '',
+      'Diretrizes especificas do portal:',
+      ...portalRules.map((rule) => `- ${rule}`),
+      '',
+      `Dados do imóvel (fatos): ${JSON.stringify(factualContext)}`,
+      `Características selecionadas: ${featuresForPrompt.length ? featuresForPrompt.join(' | ') : 'Nenhuma informada'}`,
+      `Descrição base do corretor: ${brokerBaseForPrompt || 'Não informada'}`,
+    ].join('\n')
+
+    const abortController = new AbortController()
+    const timeout = setTimeout(() => abortController.abort(), 20_000)
+    const completionRes = await fetch('https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${openAiApiKey}`,
+      },
+      signal: abortController.signal,
+      body: JSON.stringify({
+        model: openAiModel,
+        temperature: 0.3,
+        max_completion_tokens: 700,
+        response_format: {
+          type: 'json_schema',
+          json_schema: {
+            name: 'property_marketing_copy',
+            strict: true,
+            schema: {
+              type: 'object',
+              additionalProperties: false,
+              properties: {
+                data: {
+                  type: 'object',
+                  additionalProperties: false,
+                  properties: {
+                    title: { type: 'string' },
+                    description: { type: 'string' },
+                  },
+                  required: ['title', 'description'],
+                },
+              },
+              required: ['data'],
+            },
+          },
+        },
+        messages: [
+          {
+            role: 'system',
+            content:
+              'Você escreve anúncios imobiliários premium para conversão em portais. Não invente dados. Responda estritamente no schema JSON solicitado.',
+          },
+          {
+            role: 'user',
+            content: userPrompt,
+          },
+        ],
+      }),
+    }).finally(() => clearTimeout(timeout))
+
+    if (!completionRes.ok) {
+      await writeGenerationLog({
+        provider: 'openai',
+        model: openAiModel,
+        status: 'fallback',
+        used_ai: false,
+        error_message: `OpenAI HTTP ${completionRes.status}`,
+      })
+      return {
+        success: true,
+        title: guardedFallback.title,
+        description: guardedFallback.description,
+        used_ai: false,
+      }
+    }
+
+    const completionJson = await completionRes.json().catch(() => null as any)
+    const rawContent = completionJson?.choices?.[0]?.message?.content
+    const usage = completionJson?.usage ?? null
+    const promptTokens =
+      typeof usage?.prompt_tokens === 'number'
+        ? usage.prompt_tokens
+        : typeof usage?.input_tokens === 'number'
+        ? usage.input_tokens
+        : null
+    const completionTokens =
+      typeof usage?.completion_tokens === 'number'
+        ? usage.completion_tokens
+        : typeof usage?.output_tokens === 'number'
+        ? usage.output_tokens
+        : null
+    const totalTokens = typeof usage?.total_tokens === 'number' ? usage.total_tokens : null
+
+    let parsed: any = null
+    try {
+      parsed =
+        typeof rawContent === 'string'
+          ? JSON.parse(rawContent)
+          : Array.isArray(rawContent)
+          ? JSON.parse(rawContent.map((part: any) => String(part?.text || '')).join(''))
+          : null
+    } catch {
+      parsed = null
+    }
+
+    const parsedCopy = pickGeneratedCopy(parsed)
+    const guarded = applyCriticalFactsGuard({
+      title: parsedCopy?.title || guardedFallback.title,
+      description: parsedCopy?.description || guardedFallback.description,
+      fallbackTitle: guardedFallback.title,
+      fallbackDescription: guardedFallback.description,
+      purpose: merged.purpose ?? null,
+      price: merged.price ?? null,
+      rent_price: merged.rent_price ?? null,
+      condo_fee: merged.condo_fee ?? null,
+      area_m2: merged.area_m2 ?? null,
+      built_area_m2: merged.built_area_m2 ?? null,
+      land_area_m2: merged.land_area_m2 ?? null,
+    })
+    const usedAi = Boolean(parsedCopy)
+    await writeGenerationLog({
+      provider: 'openai',
+      model: openAiModel,
+      status: usedAi ? 'success' : 'fallback',
+      used_ai: usedAi,
+      prompt_tokens: promptTokens,
+      completion_tokens: completionTokens,
+      total_tokens: totalTokens,
+      error_message: usedAi ? null : 'Resposta OpenAI sem conteúdo válido para o schema.',
+    })
+
+    return {
+      success: true,
+      title: guarded.title,
+      description: guarded.description,
+      used_ai: usedAi,
+    }
+  } catch (error) {
+    console.error('[generatePropertyMarketingCopy] unexpected error', error)
+    return {
+      success: false,
+      title: '',
+      description: '',
+      used_ai: false,
+      error: 'Falha ao gerar texto com IA.',
+    }
+  }
 }
 
 /** ✅ Resultado padronizado para o modal (sem throw) */
@@ -1226,6 +2018,7 @@ export type PropertyNegotiationRow = {
     full_name: string | null
     email: string | null
     phone_e164: string | null
+    kind_tags?: string[] | null
   } | null
 }
 
@@ -1260,6 +2053,7 @@ export async function getPropertyNegotiations(propertyId: string): Promise<Prope
         full_name,
         email,
         phone_e164,
+        kind_tags,
         owner_profile_id
       )
     `
@@ -1435,6 +2229,7 @@ export async function getPropertyNegotiations(propertyId: string): Promise<Prope
             full_name: isRestrictedPerson ? null : person.full_name ?? null,
             email: isRestrictedPerson ? null : person.email ?? null,
             phone_e164: isRestrictedPerson ? null : person.phone_e164 ?? null,
+            kind_tags: isRestrictedPerson ? null : (Array.isArray(person.kind_tags) ? person.kind_tags : []),
           }
         : null,
     } satisfies PropertyNegotiationRow
@@ -1462,6 +2257,7 @@ type ProposalRow = {
   partner_commission_value: number | null
   company_commission_value: number | null
   commission_modality: string | null
+  commission_partner_type: string | null
   broker_seller_profile_id: string | null
   broker_buyer_profile_id: string | null
   title: string | null
@@ -1591,6 +2387,7 @@ export type SaveProposalDraftBundleInput = {
   partner_commission_value?: number | null
   company_commission_value?: number | null
   commission_modality?: string | null
+  commission_partner_type?: 'none' | 'internal' | 'external' | string | null
   payments: Array<{
     method: string
     amount: number
@@ -1692,6 +2489,17 @@ export async function saveProposalDraftBundle(input: SaveProposalDraftBundleInpu
       ? input.company_commission_value
       : null
   const commissionModality = typeof input.commission_modality === 'string' ? input.commission_modality.trim() || null : null
+  const commissionPartnerType =
+    typeof input.commission_partner_type === 'string' ? input.commission_partner_type.trim().toLowerCase() : null
+  const normalizedCommissionPartnerType: 'none' | 'internal' | 'external' =
+    commissionPartnerType === 'external' ? 'external' : commissionPartnerType === 'internal' ? 'internal' : 'none'
+
+  if (normalizedCommissionPartnerType === 'external' && !(negotiation as any).person_id) {
+    return {
+      success: false as const,
+      error: 'Parceria externa exige pessoa interessada vinculada na negociacao.',
+    }
+  }
 
   let proposalId = existingProposal?.id as string | undefined
 
@@ -1700,32 +2508,53 @@ export async function saveProposalDraftBundle(input: SaveProposalDraftBundleInpu
       return { success: false as const, error: 'Sem permissão para criar proposta nesta negociação.' }
     }
 
-    const { data: createdProposal, error: createErr } = await supabase
+    const createPayload: Record<string, unknown> = {
+      negotiation_id: input.negotiationId,
+      property_id: (negotiation as any).property_id ?? null,
+      person_id: (negotiation as any).person_id ?? null,
+      status: 'draft',
+      broker_seller_profile_id: propertyOwnerUserId,
+      broker_buyer_profile_id: actor,
+      title,
+      description,
+      commission_percent: commissionPercent,
+      commission_value: commissionValue,
+      base_value: baseValue,
+      owner_net_value: ownerNetValue,
+      broker_split_percent: brokerSplitPercent,
+      broker_commission_value: brokerCommissionValue,
+      partner_split_percent: partnerSplitPercent,
+      partner_commission_value: partnerCommissionValue,
+      company_commission_value: companyCommissionValue,
+      commission_modality: commissionModality,
+      commission_partner_type: normalizedCommissionPartnerType,
+      created_by_profile_id: actor,
+      updated_at: now,
+    }
+
+    let { data: createdProposal, error: createErr } = await supabase
       .from('property_proposals')
-      .insert({
-        negotiation_id: input.negotiationId,
-        property_id: (negotiation as any).property_id ?? null,
-        person_id: (negotiation as any).person_id ?? null,
-        status: 'draft',
-        broker_seller_profile_id: propertyOwnerUserId,
-        broker_buyer_profile_id: actor,
-        title,
-        description,
-        commission_percent: commissionPercent,
-        commission_value: commissionValue,
-        base_value: baseValue,
-        owner_net_value: ownerNetValue,
-        broker_split_percent: brokerSplitPercent,
-        broker_commission_value: brokerCommissionValue,
-        partner_split_percent: partnerSplitPercent,
-        partner_commission_value: partnerCommissionValue,
-        company_commission_value: companyCommissionValue,
-        commission_modality: commissionModality,
-        created_by_profile_id: actor,
-        updated_at: now,
-      })
+      .insert(createPayload)
       .select('id')
       .single()
+
+    const createErrText = `${createErr?.message ?? ''} ${createErr?.details ?? ''} ${createErr?.hint ?? ''}`
+    const partnerTypeColumnMissing =
+      !!createErr &&
+      (createErr.code === 'PGRST204' ||
+        createErr.code === '42703' ||
+        /commission_partner_type|column/i.test(createErrText))
+
+    if (createErr && partnerTypeColumnMissing) {
+      delete createPayload.commission_partner_type
+      const retry = await supabase
+        .from('property_proposals')
+        .insert(createPayload)
+        .select('id')
+        .single()
+      createdProposal = retry.data
+      createErr = retry.error
+    }
 
     if (createErr || !createdProposal) {
       return { success: false as const, error: createErr?.message || 'Erro ao criar proposta.' }
@@ -1742,26 +2571,42 @@ export async function saveProposalDraftBundle(input: SaveProposalDraftBundleInpu
       return { success: false as const, error: 'Proposta travada' }
     }
 
-    const { error: updateErr } = await supabase
+    const updatePayload: Record<string, unknown> = {
+      broker_seller_profile_id: existingProposal.broker_seller_profile_id ?? propertyOwnerUserId,
+      broker_buyer_profile_id: existingProposal.broker_buyer_profile_id ?? actor,
+      title,
+      description,
+      commission_percent: commissionPercent,
+      commission_value: commissionValue,
+      base_value: baseValue,
+      owner_net_value: ownerNetValue,
+      broker_split_percent: brokerSplitPercent,
+      broker_commission_value: brokerCommissionValue,
+      partner_split_percent: partnerSplitPercent,
+      partner_commission_value: partnerCommissionValue,
+      company_commission_value: companyCommissionValue,
+      commission_modality: commissionModality,
+      commission_partner_type: normalizedCommissionPartnerType,
+      updated_at: now,
+    }
+
+    let { error: updateErr } = await supabase
       .from('property_proposals')
-      .update({
-        broker_seller_profile_id: existingProposal.broker_seller_profile_id ?? propertyOwnerUserId,
-        broker_buyer_profile_id: existingProposal.broker_buyer_profile_id ?? actor,
-        title,
-        description,
-        commission_percent: commissionPercent,
-        commission_value: commissionValue,
-        base_value: baseValue,
-        owner_net_value: ownerNetValue,
-        broker_split_percent: brokerSplitPercent,
-        broker_commission_value: brokerCommissionValue,
-        partner_split_percent: partnerSplitPercent,
-        partner_commission_value: partnerCommissionValue,
-        company_commission_value: companyCommissionValue,
-        commission_modality: commissionModality,
-        updated_at: now,
-      })
+      .update(updatePayload)
       .eq('id', existingProposal.id)
+
+    const updateErrText = `${updateErr?.message ?? ''} ${updateErr?.details ?? ''} ${updateErr?.hint ?? ''}`
+    const updatePartnerTypeColumnMissing =
+      !!updateErr &&
+      (updateErr.code === 'PGRST204' ||
+        updateErr.code === '42703' ||
+        /commission_partner_type|column/i.test(updateErrText))
+
+    if (updateErr && updatePartnerTypeColumnMissing) {
+      delete updatePayload.commission_partner_type
+      const retry = await supabase.from('property_proposals').update(updatePayload).eq('id', existingProposal.id)
+      updateErr = retry.error
+    }
 
     if (updateErr) {
       return { success: false as const, error: updateErr.message || 'Erro ao atualizar proposta.' }
@@ -2096,4 +2941,6 @@ export async function transitionProposalStatus(input: ProposalTransitionInput) {
 
   return { success: false as const, error: 'Ação inválida.' }
 }
+
+
 

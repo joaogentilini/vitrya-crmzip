@@ -66,9 +66,9 @@ export default async function ProfilePage() {
   if (error || !data) {
     return (
       <div className="p-6">
-        <h1 className="text-2xl font-bold">Perfil publico</h1>
+        <h1 className="text-2xl font-bold">Perfil público</h1>
         <p className="text-sm text-[var(--muted-foreground)] mt-2">
-          Nao foi possivel carregar seu perfil agora. Tente novamente.
+          Não foi possível carregar seu perfil agora. Tente novamente.
         </p>
       </div>
     )

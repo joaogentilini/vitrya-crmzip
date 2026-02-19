@@ -64,7 +64,7 @@ export function BrokerCard({
 
   const creciLabel = useMemo(() => {
     const cleaned = (creci ?? "").trim();
-    return cleaned ? `CRECI ${cleaned}` : "CRECI nao informado";
+    return cleaned ? `CRECI ${cleaned}` : "CRECI não informado";
   }, [creci]);
 
   const phonePretty = useMemo(
@@ -139,7 +139,7 @@ export function BrokerCard({
           marginBottom: 10,
         }}
       >
-        Corretor responsavel
+        Corretor responsável
       </div>
 
       <div

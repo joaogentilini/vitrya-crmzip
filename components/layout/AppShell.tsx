@@ -402,6 +402,20 @@ export function AppShell({
             ),
           },
           {
+            href: '/properties/incorporations',
+            label: 'Incorporacoes',
+            icon: (
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M3 21h18M5 21V7l7-4 7 4v14M9 9h.01M9 13h.01M9 17h.01M15 9h.01M15 13h.01M15 17h.01"
+                />
+              </svg>
+            ),
+          },
+          {
             href: '/properties/my',
             label: 'Meus imóveis',
             icon: (
@@ -558,6 +572,30 @@ export function AppShell({
             ),
           },
 
+          ...(isManager
+            ? [
+                {
+                  href: '/settings/portals',
+                  label: 'Portais',
+                  icon: (
+                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+                      />
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M3.6 9h16.8M3.6 15h16.8M12 3a15 15 0 010 18M12 3a15 15 0 000 18"
+                      />
+                    </svg>
+                  ),
+                },
+              ]
+            : []),
           ...(isManager
             ? [
                 {
@@ -922,7 +960,7 @@ export function AppShell({
             <div className="flex-1" />
 
             <Link
-              href="/imoveis"
+              href="/imóveis"
               className="flex items-center gap-2 px-3 py-1.5 text-sm font-medium text-[var(--foreground)] hover:bg-[var(--accent)] rounded-[var(--radius)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)]"
             >
               <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
@@ -1101,7 +1139,7 @@ export function AppShell({
                               d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z"
                             />
                           </svg>
-                          <span>Perfil publico</span>
+                          <span>Perfil público</span>
                         </Link>
                         {onSignOut && (
                           <button

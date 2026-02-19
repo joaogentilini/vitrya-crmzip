@@ -121,7 +121,7 @@ export default function MyPropertyCard({ property, agg }: Props) {
           </div>
 
           <a
-            href={`${siteBase}/imoveis/${property.id}`}
+            href={`${siteBase}/imóveis/${property.id}`}
             target="_blank"
             rel="noreferrer"
             onClick={(e) => e.stopPropagation()}

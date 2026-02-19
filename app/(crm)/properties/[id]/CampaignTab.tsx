@@ -53,14 +53,14 @@ export default function CampaignTab({
   const publicationLabel =
     propertyStatus === 'active'
       ? publicationDays === null
-        ? 'Tempo de publicacao sem data'
-        : `${publicationDays} dia${publicationDays === 1 ? '' : 's'} de publicacao`
-      : 'Imovel nao publicado'
+        ? 'Tempo de publicação sem data'
+        : `${publicationDays} dia${publicationDays === 1 ? '' : 's'} de publicação`
+      : 'Imóvel não publicado'
 
   return (
     <div className="rounded-3xl border border-black/10 bg-white p-4 shadow-sm">
       <div className="text-sm font-extrabold text-black/90">Campanha</div>
-      <div className="mt-1 text-sm text-black/60">Acompanhe execucao e acesse o Kanban deste imovel.</div>
+      <div className="mt-1 text-sm text-black/60">Acompanhe execução e acesse o Kanban deste imóvel.</div>
 
       <div className="mt-3">
         <span
@@ -70,7 +70,7 @@ export default function CampaignTab({
               : 'border-black/10 bg-black/5 text-black/70'
           }`}
         >
-          Tempo de publicacao: {publicationLabel}
+          Tempo de publicação: {publicationLabel}
         </span>
       </div>
 
@@ -81,7 +81,7 @@ export default function CampaignTab({
       ) : (
         <div className="mt-4 flex flex-wrap gap-2">
           <span className="rounded-full border border-black/10 bg-black/5 px-3 py-1 text-xs text-black/70">
-            Execucao: {executionPercent}% ({metrics?.doneTotal}/{metrics?.tasksTotal})
+            Execução: {executionPercent}% ({metrics?.doneTotal}/{metrics?.tasksTotal})
           </span>
           <span className="rounded-full border border-black/10 bg-black/5 px-3 py-1 text-xs text-black/70">
             Pendentes: {metrics?.pending}

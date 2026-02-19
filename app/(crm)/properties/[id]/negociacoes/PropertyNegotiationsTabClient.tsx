@@ -22,32 +22,9 @@ type PropertyRow = {
   owner_user_id: string | null
   title: string | null
   purpose: string | null
-  status: string | null
-  created_at: string | null
   price: number | null
   rent_price: number | null
-  commission_percent?: number | null
   property_category_id: string | null
-  property_commission_settings?:
-    | {
-        sale_commission_percent?: number | null
-        sale_broker_split_percent?: number | null
-        sale_partner_split_percent?: number | null
-        rent_initial_commission_percent?: number | null
-        rent_recurring_commission_percent?: number | null
-        rent_broker_split_percent?: number | null
-        rent_partner_split_percent?: number | null
-      }
-    | {
-        sale_commission_percent?: number | null
-        sale_broker_split_percent?: number | null
-        sale_partner_split_percent?: number | null
-        rent_initial_commission_percent?: number | null
-        rent_recurring_commission_percent?: number | null
-        rent_broker_split_percent?: number | null
-        rent_partner_split_percent?: number | null
-      }[]
-    | null
   property_categories?: { name: string | null } | { name: string | null }[] | null
   deal_status: 'reserved' | 'sold' | null
   deal_marked_at: string | null
@@ -96,14 +73,6 @@ type ProposalDbRow = {
   description: string | null
   commission_percent: number | null
   commission_value: number | null
-  base_value?: number | null
-  owner_net_value?: number | null
-  broker_split_percent?: number | null
-  broker_commission_value?: number | null
-  partner_split_percent?: number | null
-  partner_commission_value?: number | null
-  company_commission_value?: number | null
-  commission_modality?: string | null
   created_by_profile_id: string | null
   broker_seller_profile_id: string | null
   broker_buyer_profile_id: string | null
@@ -143,8 +112,6 @@ type NegotiationRow = {
     status: string | null
     title: string | null
     description: string | null
-    broker_seller_profile_id: string | null
-    broker_buyer_profile_id: string | null
     sent_at: string | null
     updated_at: string | null
     created_at: string | null
@@ -169,6 +136,7 @@ type Props = {
   propertyId: string
   initialNegotiationId?: string | null
   initialProposalId?: string | null
+  createCommissionAction?: (formData: FormData) => Promise<any>
 }
 
 const draftKey = (propertyId: string, personId: string) => `vitrya:proposal:${propertyId}:${personId}`
@@ -191,55 +159,14 @@ const formatCurrency = (value?: number | null) => {
   return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value)
 }
 
-const getDaysSince = (value?: string | null) => {
-  if (!value) return null
-  const start = new Date(value)
-  if (Number.isNaN(start.getTime())) return null
-  const diff = Date.now() - start.getTime()
-  if (diff <= 0) return 0
-  return Math.floor(diff / (1000 * 60 * 60 * 24))
-}
-
 function formatBRL(value: number) {
   return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value)
-}
-
-function toDateInputValue(date: Date): string {
-  const y = date.getFullYear()
-  const m = String(date.getMonth() + 1).padStart(2, '0')
-  const d = String(date.getDate()).padStart(2, '0')
-  return `${y}-${m}-${d}`
-}
-
-function addMonthsToDateInput(seed: string, months: number): string {
-  const base = /^\d{4}-\d{2}-\d{2}$/.test(seed) ? new Date(`${seed}T00:00:00`) : new Date()
-  const next = new Date(base)
-  next.setMonth(next.getMonth() + months)
-  return toDateInputValue(next)
-}
-
-function buildInstallmentPlan(total: number, count: number, firstDueDate: string) {
-  const safeTotal = Number.isFinite(total) ? Math.max(total, 0) : 0
-  const safeCount = Math.max(1, Math.floor(Number.isFinite(count) ? count : 1))
-  const centsTotal = Math.round(safeTotal * 100)
-  const centsBase = Math.floor(centsTotal / safeCount)
-  const remainder = centsTotal - centsBase * safeCount
-
-  return Array.from({ length: safeCount }, (_, index) => {
-    const cents = centsBase + (index === safeCount - 1 ? remainder : 0)
-    return {
-      installment_no: index + 1,
-      amount: cents / 100,
-      due_date: addMonthsToDateInput(firstDueDate, index),
-      note: null as string | null,
-    }
-  })
 }
 
 function getProposalStatusLabel(status: string | null | undefined): string {
   switch (status) {
     case 'in_review':
-      return 'Em analise'
+      return 'Em análise'
     case 'counterproposal':
       return 'Contraproposta'
     case 'approved':
@@ -250,48 +177,6 @@ function getProposalStatusLabel(status: string | null | undefined): string {
     default:
       return 'Rascunho'
   }
-}
-
-function getProposalStatusTone(status: string | null | undefined): string {
-  switch (status) {
-    case 'in_review':
-      return 'border-amber-300 bg-amber-500 text-white'
-    case 'counterproposal':
-      return 'border-sky-300 bg-sky-500 text-white'
-    case 'approved':
-      return 'border-emerald-300 bg-emerald-500 text-white'
-    case 'rejected':
-      return 'border-rose-300 bg-rose-500 text-white'
-    case 'draft':
-    default:
-      return 'border-zinc-300 bg-zinc-600 text-white'
-  }
-}
-
-type ProposalKanbanKey = 'sem_proposta' | 'draft' | 'in_review' | 'counterproposal' | 'approved' | 'rejected'
-
-const PROPOSAL_KANBAN_COLUMNS: Array<{
-  key: ProposalKanbanKey
-  label: string
-  tone: string
-  collapsible?: boolean
-}> = [
-  { key: 'in_review', label: 'Em analise', tone: 'border-amber-300 bg-amber-500 text-white' },
-  { key: 'counterproposal', label: 'Contraproposta', tone: 'border-sky-300 bg-sky-500 text-white' },
-  { key: 'approved', label: 'Aprovado', tone: 'border-emerald-300 bg-emerald-500 text-white' },
-  { key: 'rejected', label: 'Rejeitado', tone: 'border-rose-300 bg-rose-500 text-white', collapsible: true },
-  { key: 'sem_proposta', label: 'Sem proposta', tone: 'border-zinc-200 bg-zinc-100 text-zinc-700', collapsible: true },
-  { key: 'draft', label: 'Rascunho', tone: 'border-zinc-300 bg-zinc-600 text-white', collapsible: true },
-]
-
-function getProposalKanbanKey(row: NegotiationRow): ProposalKanbanKey {
-  if (!row.proposal) return 'sem_proposta'
-  const status = String(row.proposal.status ?? 'draft')
-  if (status === 'in_review') return 'in_review'
-  if (status === 'counterproposal') return 'counterproposal'
-  if (status === 'approved') return 'approved'
-  if (status === 'rejected') return 'rejected'
-  return 'draft'
 }
 
 function getProposalEventKey(row: NegotiationRow): string | null {
@@ -316,6 +201,7 @@ export default function PropertyNegotiationsTabClient({
   propertyId,
   initialNegotiationId,
   initialProposalId,
+  createCommissionAction,
 }: Props) {
   const [property, setProperty] = useState<PropertyRow | null>(null)
   const [negotiations, setNegotiations] = useState<NegotiationRow[]>([])
@@ -325,7 +211,8 @@ export default function PropertyNegotiationsTabClient({
   const [creatingNegotiation, setCreatingNegotiation] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  // comissao (UI)
+  // comissão (UI)
+  const [commissionGross, setCommissionGross] = useState<number>(0)
   const [commissionPercent, setCommissionPercent] = useState<number>(5)
 
   // auth/profile (permissoes UI)
@@ -361,12 +248,6 @@ export default function PropertyNegotiationsTabClient({
     notes: '',
     installments: [],
   })
-  const [installmentCount, setInstallmentCount] = useState<number>(3)
-  const [installmentFirstDueDate, setInstallmentFirstDueDate] = useState<string>(() => {
-    const d = new Date()
-    d.setDate(d.getDate() + 30)
-    return toDateInputValue(d)
-  })
   const autoOpenedFromNotificationRef = useRef<string | null>(null)
 
   // Modal criar negociacao
@@ -393,48 +274,12 @@ export default function PropertyNegotiationsTabClient({
     return property.price ?? null
   }, [property])
 
-  const commissionSettings = useMemo(() => {
-    const raw = property?.property_commission_settings as any
-    if (!raw) return null
-    if (Array.isArray(raw)) return raw[0] ?? null
-    return raw
-  }, [property?.property_commission_settings])
-
-  const defaultCommissionPercent = useMemo(() => {
-    const isRent =
-      property?.purpose?.toLowerCase().includes('rent') || property?.purpose?.toLowerCase().includes('loca')
-    if (isRent) {
-      return Number(commissionSettings?.rent_initial_commission_percent ?? 10)
-    }
-    return Number(commissionSettings?.sale_commission_percent ?? property?.commission_percent ?? 5)
-  }, [property?.purpose, property?.commission_percent, commissionSettings])
-
-  const brokerSplitPercent = useMemo(() => {
-    const isRent =
-      property?.purpose?.toLowerCase().includes('rent') || property?.purpose?.toLowerCase().includes('loca')
-    return Number(
-      isRent
-        ? commissionSettings?.rent_broker_split_percent ?? 50
-        : commissionSettings?.sale_broker_split_percent ?? 50
-    )
-  }, [property?.purpose, commissionSettings])
-
-  const partnerSplitPercent = useMemo(() => {
-    const isRent =
-      property?.purpose?.toLowerCase().includes('rent') || property?.purpose?.toLowerCase().includes('loca')
-    return Number(
-      isRent
-        ? commissionSettings?.rent_partner_split_percent ?? 0
-        : commissionSettings?.sale_partner_split_percent ?? 0
-    )
-  }, [property?.purpose, commissionSettings])
-
   const dealBadge = useMemo(() => {
-    if (!property) return null
+    if (!property?.deal_status) return null
     if (property.deal_status === 'reserved') return { label: 'Reservado', tone: 'bg-amber-500 text-white' }
     if (property.deal_status === 'sold') return { label: 'Vendido', tone: 'bg-emerald-600 text-white' }
-    return { label: 'Disponivel', tone: 'bg-sky-500 text-white' }
-  }, [property])
+    return null
+  }, [property?.deal_status])
 
   const proposalTotals = useMemo(() => {
     const enabled = proposalDraft.enabled || {}
@@ -452,58 +297,6 @@ export default function PropertyNegotiationsTabClient({
     const diff = target - total
     return { total, target: propertyValue ?? null, diff }
   }, [proposalDraft, propertyValue])
-
-  const installmentsRows = useMemo(() => proposalDraft.installments ?? [], [proposalDraft.installments])
-  const installmentsEnabled = !!proposalDraft.enabled?.installments
-  const installmentsAmount = Number(proposalDraft.amounts?.installments ?? 0)
-  const installmentsTotal = useMemo(
-    () =>
-      installmentsRows.reduce((acc, row) => {
-        const value = Number(row.amount ?? 0)
-        return acc + (Number.isFinite(value) ? value : 0)
-      }, 0),
-    [installmentsRows]
-  )
-  const installmentsRequireDetails = installmentsEnabled && installmentsAmount > 0
-  const hasInstallmentsRows = installmentsRows.length > 0
-  const hasInstallmentsInvalidRow = useMemo(
-    () =>
-      installmentsRows.some((row) => {
-        const amount = Number(row.amount ?? 0)
-        return !row.due_date || !Number.isFinite(amount) || amount <= 0
-      }),
-    [installmentsRows]
-  )
-  const installmentsSummaryMismatch =
-    installmentsRequireDetails && hasInstallmentsRows && Math.abs(installmentsTotal - installmentsAmount) > 0.01
-
-  const commissionBaseValue = useMemo(() => {
-    const fromProposal = Number(proposalTotals.total ?? 0)
-    if (Number.isFinite(fromProposal) && fromProposal > 0) return fromProposal
-    const fromProperty = Number(propertyValue ?? 0)
-    if (Number.isFinite(fromProperty) && fromProperty > 0) return fromProperty
-    return 0
-  }, [proposalTotals.total, propertyValue])
-
-  const commissionValue = useMemo(() => {
-    const percent = Number(commissionPercent ?? 0)
-    if (!Number.isFinite(percent) || percent <= 0) return 0
-    return (commissionBaseValue * percent) / 100
-  }, [commissionBaseValue, commissionPercent])
-
-  const ownerNetValue = useMemo(() => commissionBaseValue - commissionValue, [commissionBaseValue, commissionValue])
-  const brokerCommissionValue = useMemo(
-    () => (commissionValue * (Number.isFinite(brokerSplitPercent) ? brokerSplitPercent : 0)) / 100,
-    [commissionValue, brokerSplitPercent]
-  )
-  const partnerCommissionValue = useMemo(
-    () => (commissionValue * (Number.isFinite(partnerSplitPercent) ? partnerSplitPercent : 0)) / 100,
-    [commissionValue, partnerSplitPercent]
-  )
-  const companyCommissionValue = useMemo(
-    () => commissionValue - brokerCommissionValue - partnerCommissionValue,
-    [commissionValue, brokerCommissionValue, partnerCommissionValue]
-  )
 
   const isProposalDraftEditable = proposalStatus === 'draft'
   const isManager = userRole === 'admin' || userRole === 'gestor'
@@ -533,19 +326,7 @@ export default function PropertyNegotiationsTabClient({
     [proposalDraft]
   )
 
-  const isCommissionPercentValid = Number.isFinite(commissionPercent) && commissionPercent >= 0 && commissionPercent <= 100
-  const splitPercentTotal = (Number.isFinite(brokerSplitPercent) ? brokerSplitPercent : 0) + (Number.isFinite(partnerSplitPercent) ? partnerSplitPercent : 0)
-  const isSplitPercentValid = splitPercentTotal <= 100
-  const areInstallmentsValid = !installmentsRequireDetails || (hasInstallmentsRows && !hasInstallmentsInvalidRow)
-
-  const canSubmitProposal =
-    isProposalDraftEditable &&
-    canManageProposal &&
-    hasEnabledPaymentMethod &&
-    proposalTotals.total > 0 &&
-    isCommissionPercentValid &&
-    isSplitPercentValid &&
-    areInstallmentsValid
+  const canSubmitProposal = isProposalDraftEditable && canManageProposal && hasEnabledPaymentMethod && proposalTotals.total > 0
 
   const proposalDiffSummary = useMemo(() => {
     if (proposalTotals.target === null) return 'Sem valor de referencia do imóvel.'
@@ -554,58 +335,24 @@ export default function PropertyNegotiationsTabClient({
     return `Proposta acima em ${formatCurrency(Math.abs(proposalTotals.diff))}.`
   }, [proposalTotals])
 
-  const propertyPublicationDays = useMemo(() => getDaysSince(property?.created_at), [property?.created_at])
-  const propertyPublicationLabel = useMemo(() => {
-    if (property?.status !== 'active') return 'Nao publicado'
-    if (propertyPublicationDays === null) return 'Tempo sem data'
-    return `Tempo ${propertyPublicationDays} dia${propertyPublicationDays === 1 ? '' : 's'}`
-  }, [property?.status, propertyPublicationDays])
-  const propertyPublicationTone = useMemo(
-    () =>
-      property?.status === 'active'
-        ? 'border-cyan-300 bg-cyan-500 text-white'
-        : 'border-zinc-300 bg-zinc-200 text-zinc-700',
-    [property?.status]
-  )
+ async function loadAll() {
+  setLoading(true)
+  setError(null)
 
-  const kanbanColumns = useMemo(() => {
-    const grouped: Record<ProposalKanbanKey, NegotiationRow[]> = {
-      sem_proposta: [],
-      draft: [],
-      in_review: [],
-      counterproposal: [],
-      approved: [],
-      rejected: [],
+  try {
+    // auth + role
+    const { data: userRes } = await supabase.auth.getUser()
+    const uid = userRes?.user?.id ?? null;
+    setUserId(uid)
+
+    if (uid) {
+      const { data: profile } = await supabase.from('profiles').select('role').eq('id', uid).maybeSingle()
+      setUserRole((profile as any)?.role ?? null)
+    } else {
+      setUserRole(null)
     }
 
-    for (const row of negotiations) {
-      grouped[getProposalKanbanKey(row)].push(row)
-    }
-
-    return PROPOSAL_KANBAN_COLUMNS.map((column) => ({
-      ...column,
-      rows: grouped[column.key],
-    }))
-  }, [negotiations])
-
-  async function loadAll() {
-    setLoading(true)
-    setError(null)
-
-    try {
-      // auth + role
-      const { data: userRes } = await supabase.auth.getUser()
-      const uid = userRes?.user?.id ?? null
-      setUserId(uid)
-
-      if (uid) {
-        const { data: profile } = await supabase.from('profiles').select('role').eq('id', uid).maybeSingle()
-        setUserRole((profile as any)?.role ?? null)
-      } else {
-        setUserRole(null)
-      }
-
-      // property
+    // property
       const { data: prop, error: propErr } = await supabase
         .from('properties')
         .select(
@@ -614,25 +361,13 @@ export default function PropertyNegotiationsTabClient({
           owner_user_id,
           title,
           purpose,
-          status,
-          created_at,
           price,
           rent_price,
-          commission_percent,
           property_category_id,
           deal_status,
           deal_marked_at,
           deal_visible_until,
-          property_categories ( name ),
-          property_commission_settings (
-            sale_commission_percent,
-            sale_broker_split_percent,
-            sale_partner_split_percent,
-            rent_initial_commission_percent,
-            rent_recurring_commission_percent,
-            rent_broker_split_percent,
-            rent_partner_split_percent
-          )
+          property_categories ( name )
         `
         )
         .eq('id', propertyId)
@@ -722,7 +457,6 @@ export default function PropertyNegotiationsTabClient({
       const query = nextParams.toString()
       window.history.replaceState({}, '', `${window.location.pathname}${query ? `?${query}` : ''}`)
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [initialNegotiationId, initialProposalId, loading, negotiations, propertyId])
 
   useEffect(() => {
@@ -875,7 +609,9 @@ export default function PropertyNegotiationsTabClient({
     const localDraft = getDraftFromLocal(personId)
     setProposalDraft(localDraft)
 
-    setCommissionPercent(Number.isFinite(defaultCommissionPercent) ? defaultCommissionPercent : 5)
+    const base = Number(propertyValue ?? 0)
+    setCommissionGross(Number.isFinite(base) ? base : 0)
+    setCommissionPercent(5)
 
     try {
       const bundle = await getProposalBundleByNegotiation(entity.negotiation_id)
@@ -888,13 +624,8 @@ export default function PropertyNegotiationsTabClient({
         setProposalCreatedByProfileId(proposal.created_by_profile_id ?? null)
         setProposalSellerBrokerId(proposal.broker_seller_profile_id ?? null)
         setProposalBuyerBrokerId(proposal.broker_buyer_profile_id ?? null)
-        setCommissionPercent(
-          Number.isFinite(Number(proposal.commission_percent))
-            ? Number(proposal.commission_percent)
-            : Number.isFinite(defaultCommissionPercent)
-            ? defaultCommissionPercent
-            : 5
-        )
+        setCommissionPercent(Number(proposal.commission_percent ?? 0))
+        setCommissionGross(Number(proposal.commission_value ?? propertyValue ?? 0))
       }
 
       let nextDraft = localDraft
@@ -914,11 +645,6 @@ export default function PropertyNegotiationsTabClient({
       }
 
       setProposalDraft(nextDraft)
-      const nextInstallments = nextDraft.installments ?? []
-      setInstallmentCount(nextInstallments.length > 0 ? nextInstallments.length : 3)
-      if (nextInstallments.length > 0 && nextInstallments[0]?.due_date) {
-        setInstallmentFirstDueDate(nextInstallments[0].due_date)
-      }
       saveProposalDraftLocal(personId, nextDraft)
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Erro ao carregar proposta.'
@@ -929,6 +655,15 @@ export default function PropertyNegotiationsTabClient({
   }
 
   function buildProposalPayload() {
+    const payments = (Object.keys(PAYMENT_LABELS) as PaymentKey[])
+      .filter((k) => !!proposalDraft.enabled?.[k])
+      .map((k) => ({
+        method: k,
+        amount: Number(proposalDraft.amounts?.[k] ?? 0),
+        due_date: null as string | null,
+        details: null as string | null,
+      }))
+
     const installments =
       proposalDraft.enabled?.installments && (proposalDraft.installments?.length ?? 0) > 0
         ? (proposalDraft.installments ?? []).map((item) => ({
@@ -940,71 +675,15 @@ export default function PropertyNegotiationsTabClient({
           }))
         : []
 
-    const installmentsPayloadTotal = installments.reduce((acc, item) => {
-      const amount = Number(item.amount ?? 0)
-      return acc + (Number.isFinite(amount) ? amount : 0)
-    }, 0)
-
-    const payments = (Object.keys(PAYMENT_LABELS) as PaymentKey[])
-      .filter((k) => !!proposalDraft.enabled?.[k])
-      .map((k) => {
-        const rawAmount =
-          k === 'installments' && installments.length > 0
-            ? installmentsPayloadTotal
-            : Number(proposalDraft.amounts?.[k] ?? 0)
-
-        return {
-          method: k,
-          amount: Number.isFinite(rawAmount) ? rawAmount : 0,
-          due_date: null as string | null,
-          details: null as string | null,
-        }
-      })
-
     return {
       negotiationId: proposalEntity?.negotiation_id || '',
       title: proposalEntity?.title || 'Proposta',
       description: proposalDraft.notes || '',
       commission_percent: Number.isFinite(commissionPercent) ? commissionPercent : null,
-      commission_value: Number.isFinite(commissionValue) ? commissionValue : null,
-      base_value: Number.isFinite(commissionBaseValue) ? commissionBaseValue : null,
-      owner_net_value: Number.isFinite(ownerNetValue) ? ownerNetValue : null,
-      broker_split_percent: Number.isFinite(brokerSplitPercent) ? brokerSplitPercent : null,
-      broker_commission_value: Number.isFinite(brokerCommissionValue) ? brokerCommissionValue : null,
-      partner_split_percent: Number.isFinite(partnerSplitPercent) ? partnerSplitPercent : null,
-      partner_commission_value: Number.isFinite(partnerCommissionValue) ? partnerCommissionValue : null,
-      company_commission_value: Number.isFinite(companyCommissionValue) ? companyCommissionValue : null,
-      commission_modality:
-        property?.purpose?.toLowerCase().includes('rent') || property?.purpose?.toLowerCase().includes('loca')
-          ? 'rent_initial'
-          : 'sale',
+      commission_value: Number.isFinite(commissionGross) ? commissionGross : null,
       payments,
       installments,
     }
-  }
-
-  function applyInstallmentsDraft(nextInstallments: DraftProposal['installments']) {
-    if (!proposalEntity) return
-
-    const normalized = (nextInstallments ?? []).map((row, index) => ({
-      installment_no: index + 1,
-      amount: Number.isFinite(Number(row.amount)) ? Number(row.amount) : 0,
-      due_date: row.due_date || '',
-      note: row.note ?? null,
-    }))
-    const total = normalized.reduce((acc, row) => acc + Number(row.amount ?? 0), 0)
-
-    const next = {
-      ...proposalDraft,
-      installments: normalized,
-      amounts: {
-        ...(proposalDraft.amounts || {}),
-        installments: total,
-      },
-    }
-
-    setProposalDraft(next)
-    saveProposalDraftLocal(proposalEntity.person_id, next)
   }
 
   async function handleSaveProposalDraft() {
@@ -1045,17 +724,17 @@ export default function PropertyNegotiationsTabClient({
       let nextProposalId = proposalId
       if (!nextProposalId) {
         const saveRes = await saveProposalDraftBundle(buildProposalPayload())
-        if (!saveRes.success) throw new Error(saveRes.error || 'Erro ao salvar rascunho antes da transicao.')
+        if (!saveRes.success) throw new Error(saveRes.error || 'Erro ao salvar rascunho antes da transição.')
         nextProposalId = saveRes.proposalId
       } else if (proposalStatus === 'draft' && action !== 'back_to_draft') {
         const saveRes = await saveProposalDraftBundle(buildProposalPayload())
-        if (!saveRes.success) throw new Error(saveRes.error || 'Erro ao salvar rascunho antes da transicao.')
+        if (!saveRes.success) throw new Error(saveRes.error || 'Erro ao salvar rascunho antes da transição.')
       }
 
-      if (!nextProposalId) throw new Error('Proposta invalida.')
+      if (!nextProposalId) throw new Error('Proposta inválida.')
 
       const transitionRes = await transitionProposalStatus({ proposalId: nextProposalId, action })
-      if (!transitionRes.success) throw new Error(transitionRes.error || 'Falha na transicao da proposta.')
+      if (!transitionRes.success) throw new Error(transitionRes.error || 'Falha na transição da proposta.')
 
       setProposalId(nextProposalId)
       setProposalSellerBrokerId((prev) => prev ?? property?.owner_user_id ?? null)
@@ -1064,7 +743,7 @@ export default function PropertyNegotiationsTabClient({
       if (action === 'submit_counterproposal') setProposalStatus('counterproposal')
       if (action === 'back_to_draft') setProposalStatus('draft')
       if (action === 'submit_review') {
-        setProposalFeedback({ kind: 'success', message: 'Proposta enviada para analise.' })
+        setProposalFeedback({ kind: 'success', message: 'Proposta enviada para análise.' })
       } else if (action === 'submit_counterproposal') {
         setProposalFeedback({ kind: 'success', message: 'Contraproposta enviada.' })
       } else if (action === 'back_to_draft') {
@@ -1134,12 +813,7 @@ export default function PropertyNegotiationsTabClient({
   function buildProposalSummaryText(
     prop: PropertyRow | null,
     entity: ProposalEntity,
-    draft: {
-      enabled?: Partial<Record<PaymentKey, boolean>>
-      amounts?: Partial<Record<PaymentKey, number>>
-      installments?: DraftProposal['installments']
-      notes?: string
-    },
+    draft: { enabled?: any; amounts?: any; notes?: string },
     totals: { total: number; target: number | null; diff: number }
   ) {
     const title = entity.title
@@ -1150,11 +824,6 @@ export default function PropertyNegotiationsTabClient({
     lines.push(`Imóvel: ${propTitle}`)
     lines.push(`Valor imóvel: ${totals.target === null ? '-' : formatBRL(totals.target)}`)
     lines.push(`Total proposta: ${formatBRL(totals.total)}`)
-    lines.push(`Comissão total: ${formatBRL(commissionValue)}`)
-    lines.push(`Valor líquido proprietário: ${formatBRL(ownerNetValue)}`)
-    lines.push(`Comissão corretor: ${formatBRL(brokerCommissionValue)} (${brokerSplitPercent.toFixed(2)}%)`)
-    lines.push(`Comissão parceiro: ${formatBRL(partnerCommissionValue)} (${partnerSplitPercent.toFixed(2)}%)`)
-    lines.push(`Comissão empresa: ${formatBRL(companyCommissionValue)}`)
 
     if (totals.target !== null) {
       if (totals.diff > 0) lines.push(`Falta: ${formatBRL(totals.diff)}`)
@@ -1169,16 +838,6 @@ export default function PropertyNegotiationsTabClient({
       if (!enabled) return
       const v = Number(draft.amounts?.[k] ?? 0)
       lines.push(`- ${PAYMENT_LABELS[k]}: ${formatBRL(v)}`)
-      if (k === 'installments' && (draft.installments?.length ?? 0) > 0) {
-        draft.installments?.forEach((item) => {
-          const amount = Number(item.amount ?? 0)
-          lines.push(
-            `  - Parcela ${Number(item.installment_no ?? 0)} (${item.due_date || '-'}) ${formatBRL(
-              Number.isFinite(amount) ? amount : 0
-            )}`
-          )
-        })
-      }
     })
 
     if (draft.notes?.trim()) {
@@ -1228,7 +887,7 @@ export default function PropertyNegotiationsTabClient({
                 </span>
                 {property?.deal_status === 'sold' ? (
                   <span className="ml-2 text-xs text-[var(--muted-foreground)]">
-                    visivel na vitrine ate {formatDate(property.deal_visible_until)}
+                    visível na vitrine até {formatDate(property.deal_visible_until)}
                   </span>
                 ) : null}
               </div>
@@ -1284,7 +943,7 @@ export default function PropertyNegotiationsTabClient({
             </div>
           ) : null}
 
-          <div className="grid grid-cols-1 gap-3 md:grid-cols-4">
+          <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
             <div className="rounded-[var(--radius)] border border-[var(--border)] p-3">
               <div className="text-xs text-[var(--muted-foreground)]">Valor referencia</div>
               <div className="text-lg font-extrabold text-[var(--foreground)]">{formatCurrency(propertyValue)}</div>
@@ -1293,22 +952,8 @@ export default function PropertyNegotiationsTabClient({
 
             <div className="rounded-[var(--radius)] border border-[var(--border)] p-3">
               <div className="text-xs text-[var(--muted-foreground)]">Status comercial</div>
-              <div className="mt-1">
-                <span
-                  className={`inline-flex items-center rounded-full px-2.5 py-1 text-sm font-extrabold ${
-                    property?.deal_status === 'sold'
-                      ? 'bg-emerald-600 text-white'
-                      : property?.deal_status === 'reserved'
-                      ? 'bg-amber-500 text-white'
-                      : 'bg-sky-500 text-white'
-                  }`}
-                >
-                  {property?.deal_status === 'sold'
-                    ? 'Vendido'
-                    : property?.deal_status === 'reserved'
-                    ? 'Reservado'
-                    : 'Disponivel'}
-                </span>
+              <div className="text-lg font-extrabold text-[var(--foreground)]">
+                {property?.deal_status ? (property.deal_status === 'sold' ? 'Vendido' : 'Reservado') : '-'}
               </div>
               <div className="mt-1 text-xs text-[var(--muted-foreground)]">
                 {property?.deal_marked_at ? `marcado em ${formatDate(property.deal_marked_at)}` : ''}
@@ -1318,13 +963,7 @@ export default function PropertyNegotiationsTabClient({
             <div className="rounded-[var(--radius)] border border-[var(--border)] p-3">
               <div className="text-xs text-[var(--muted-foreground)]">Regra vitrine</div>
               <div className="text-sm font-semibold text-[var(--foreground)]">Vendido fica 7 dias na vitrine</div>
-              <div className="mt-1 text-xs text-[var(--muted-foreground)]">Depois some automaticamente (pela VIEW publica).</div>
-            </div>
-
-            <div className="rounded-[var(--radius)] border border-[var(--primary)] bg-[var(--primary)]/10 p-3">
-              <div className="text-xs font-bold uppercase tracking-wide text-[var(--primary)]">Tempo publicacao</div>
-              <div className="mt-1 text-sm font-extrabold text-[var(--foreground)]">{propertyPublicationLabel}</div>
-              <div className="mt-1 text-xs text-[var(--muted-foreground)]">Indicador exibido no card e relatorios.</div>
+              <div className="mt-1 text-xs text-[var(--muted-foreground)]">Depois some automaticamente (pela VIEW pública).</div>
             </div>
           </div>
 
@@ -1332,155 +971,81 @@ export default function PropertyNegotiationsTabClient({
             <p className="text-sm text-[var(--muted-foreground)]">Nenhuma negociacao encontrada.</p>
           ) : (
             <div className="space-y-2">
-              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-6">
-                  {kanbanColumns.map((column) => (
-                    <div key={column.key} className="group rounded-2xl border border-[var(--border)] bg-[var(--muted)]/30 p-2">
-                      <div className="flex items-center justify-between gap-2 rounded-xl border border-[var(--border)] bg-[var(--card)] p-2">
-                        <span
-                          className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide ${column.tone}`}
-                        >
-                          {column.label}
-                        </span>
-                        <span className="text-xs font-semibold text-[var(--muted-foreground)]">{column.rows.length}</span>
+              {negotiations.map((n) => {
+                const title = n.person_is_restricted
+                  ? 'Cliente oculto'
+                  : n.person?.full_name || n.person?.email || n.person?.phone_e164 || ('Negociacao ' + n.id.slice(0, 6))
+                const proposalStatusLabel = n.proposal ? getProposalStatusLabel(n.proposal.status) : 'Sem proposta'
+                const proposalSummary =
+                  n.proposal?.description?.trim() || n.proposal?.title?.trim() || 'Sem resumo da proposta.'
+                const counterpartyLabel =
+                  n.proposal?.counterparty_broker?.full_name ||
+                  n.proposal?.counterparty_broker?.email ||
+                  (n.proposal?.counterparty_broker?.id ? `Corretor ${n.proposal.counterparty_broker.id.slice(0, 8)}` : '-')
+                const sentAtRaw = n.proposal?.sent_at ?? n.proposal?.updated_at ?? n.proposal?.created_at ?? null
+                const proposalEventKey = getProposalEventKey(n)
+                const isNewProposal =
+                  !!n.proposal?.sent_at && !!proposalEventKey && !readProposalEvents.includes(proposalEventKey)
+                return (
+                  <div
+                    key={n.id}
+                    className={`flex flex-wrap items-start justify-between gap-3 rounded-[var(--radius)] border p-3 text-sm ${
+                      isNewProposal
+                        ? 'border-[var(--primary)]/40 bg-[var(--primary)]/5'
+                        : 'border-[var(--border)] bg-[var(--card)]'
+                    }`}
+                  >
+                    <div className="min-w-0 flex-1">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <p className="truncate font-medium text-[var(--foreground)]">{title}</p>
+                        {isNewProposal ? (
+                          <span className="inline-flex items-center rounded-full bg-[var(--primary)]/15 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-[var(--primary)]">
+                            Nova
+                          </span>
+                        ) : null}
                       </div>
-
-                      <div className="mt-2 space-y-2">
-                        {column.rows.length === 0 ? (
-                          <div className="rounded-xl border border-dashed border-[var(--border)] bg-[var(--card)] p-3 text-xs text-[var(--muted-foreground)]">
-                            Sem negociacoes neste status.
-                          </div>
-                        ) : (
-                          column.rows.map((n) => {
-                            const title = n.person_is_restricted
-                              ? 'Cliente oculto'
-                              : n.person?.full_name ||
-                                n.person?.email ||
-                                n.person?.phone_e164 ||
-                                'Negociacao ' + n.id.slice(0, 6)
-                            const proposalStatusLabel = n.proposal ? getProposalStatusLabel(n.proposal.status) : 'Sem proposta'
-                            const proposalStatusTone = n.proposal
-                              ? getProposalStatusTone(n.proposal.status)
-                              : 'border-zinc-200 bg-zinc-100 text-zinc-700'
-                            const proposalSummary =
-                              n.proposal?.description?.trim() || n.proposal?.title?.trim() || 'Sem resumo da proposta.'
-                            const counterpartyLabel =
-                              n.proposal?.counterparty_broker?.full_name ||
-                              n.proposal?.counterparty_broker?.email ||
-                              (n.proposal?.counterparty_broker?.id
-                                ? `Corretor ${n.proposal.counterparty_broker.id.slice(0, 8)}`
-                                : '-')
-                            const sentAtRaw = n.proposal?.sent_at ?? n.proposal?.updated_at ?? n.proposal?.created_at ?? null
-                            const proposalEventKey = getProposalEventKey(n)
-                            const isNewProposal =
-                              !!n.proposal?.sent_at && !!proposalEventKey && !readProposalEvents.includes(proposalEventKey)
-                            const analysisTargetProfileId =
-                              n.proposal?.status === 'in_review'
-                                ? n.proposal?.broker_seller_profile_id ?? property?.owner_user_id ?? null
-                                : n.proposal?.status === 'counterproposal'
-                                ? n.proposal?.broker_buyer_profile_id ?? property?.owner_user_id ?? null
-                                : null
-                            const isPendingForCurrentUser =
-                              !!analysisTargetProfileId && !!userId && analysisTargetProfileId === userId
-
-                            return (
-                              <div
-                                key={n.id}
-                                className={`rounded-[var(--radius)] border p-3 transition-shadow hover:shadow-md ${
-                                  isNewProposal
-                                    ? 'border-[var(--primary)]/40 bg-[var(--primary)]/5'
-                                    : 'border-[var(--border)] bg-[var(--card)]'
-                                }`}
-                              >
-                                <div className="flex flex-col gap-3">
-                                  <div className="w-full overflow-hidden rounded-[var(--radius)] border border-[var(--border)] bg-[var(--muted)] p-2">
-                                    <div className="flex min-h-[108px] flex-col justify-between gap-1.5">
-                                      <span
-                                        className={`inline-flex items-center justify-center rounded-lg border px-2 py-1.5 text-center text-[11px] font-extrabold leading-tight ${proposalStatusTone}`}
-                                      >
-                                        {proposalStatusLabel}
-                                      </span>
-                                      <span className="inline-flex items-center justify-center rounded-lg border border-[var(--primary)] bg-[var(--primary)] px-2 py-1.5 text-center text-[11px] font-extrabold leading-tight text-[var(--primary-foreground)]">
-                                        Total {n.proposal ? formatCurrency(n.proposal.total_value) : '-'}
-                                      </span>
-                                      <span
-                                        className={`inline-flex items-center justify-center rounded-lg border px-2 py-1.5 text-center text-[11px] font-extrabold leading-tight ${propertyPublicationTone}`}
-                                      >
-                                        {propertyPublicationLabel}
-                                      </span>
-                                    </div>
-                                  </div>
-
-                                  <div className="min-w-0 space-y-2">
-                                    <div className="flex flex-wrap items-center gap-2">
-                                      <p className="truncate text-sm font-semibold text-[var(--foreground)]">{title}</p>
-                                      {isPendingForCurrentUser ? (
-                                        <span className="inline-flex items-center rounded-full border border-rose-300 bg-rose-500 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-white">
-                                          Pendente para voce
-                                        </span>
-                                      ) : null}
-                                      {isNewProposal ? (
-                                        <span className="inline-flex items-center rounded-full bg-[var(--primary)]/15 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-[var(--primary)]">
-                                          Nova
-                                        </span>
-                                      ) : null}
-                                      <span className="rounded-full bg-[var(--muted)] px-2 py-0.5 text-[10px] font-semibold text-[var(--muted-foreground)]">
-                                        Negociacao {n.status || '-'}
-                                      </span>
-                                    </div>
-
-                                    <p className="truncate text-xs text-[var(--muted-foreground)]">
-                                      Resumo: <span className="text-[var(--foreground)]">{proposalSummary}</span>
-                                    </p>
-
-                                    <div className="flex flex-wrap items-center gap-3 text-xs text-[var(--muted-foreground)]">
-                                      <span>
-                                        Criada em{' '}
-                                        <span className="font-semibold text-[var(--foreground)]">{formatDate(n.created_at)}</span>
-                                      </span>
-                                      <span>
-                                        Enviada em{' '}
-                                        <span className="font-semibold text-[var(--foreground)]">{formatDateTime(sentAtRaw)}</span>
-                                      </span>
-                                      <span>
-                                        Outra ponta <span className="font-semibold text-[var(--foreground)]">{counterpartyLabel}</span>
-                                      </span>
-                                    </div>
-
-                                    <div className="flex flex-wrap items-center gap-2 pt-1">
-                                      <Button
-                                        variant="outline"
-                                        onClick={() => void openProposalAndMarkAsRead(n)}
-                                        disabled={!n.person_id}
-                                      >
-                                        {n.proposal ? 'Abrir proposta' : 'Montar proposta'}
-                                      </Button>
-
-                                      {n.lead_id ? (
-                                        <Link
-                                          href={`/leads/${n.lead_id}`}
-                                          className="text-xs font-medium text-[var(--primary)] hover:underline"
-                                        >
-                                          Abrir lead
-                                        </Link>
-                                      ) : n.person_id && !n.person_is_restricted ? (
-                                        <Link
-                                          href={`/people/${n.person_id}`}
-                                          className="text-xs font-medium text-[var(--primary)] hover:underline"
-                                        >
-                                          Abrir pessoa
-                                        </Link>
-                                      ) : null}
-                                    </div>
-                                  </div>
-                                </div>
-                              </div>
-                            )
-                          })
-                        )}
-                      </div>
+                      <p className="text-xs text-[var(--muted-foreground)]">Criada em {formatDate(n.created_at)}</p>
+                      <p className="text-xs text-[var(--muted-foreground)]">
+                        Status negociacao: <span className="font-semibold text-[var(--foreground)]">{n.status || '-'}</span>
+                      </p>
+                      <p className="text-xs text-[var(--muted-foreground)]">
+                        Status proposta: <span className="font-semibold text-[var(--foreground)]">{proposalStatusLabel}</span>
+                      </p>
+                      <p className="mt-1 text-xs text-[var(--muted-foreground)]">
+                        Resumo: <span className="text-[var(--foreground)]">{proposalSummary}</span>
+                      </p>
+                      <p className="text-xs text-[var(--muted-foreground)]">
+                        Outra ponta: <span className="font-medium text-[var(--foreground)]">{counterpartyLabel}</span>
+                      </p>
+                      <p className="text-xs text-[var(--muted-foreground)]">
+                        Enviada em: <span className="font-medium text-[var(--foreground)]">{formatDateTime(sentAtRaw)}</span>
+                      </p>
+                      {n.proposal ? (
+                        <p className="text-xs text-[var(--muted-foreground)]">
+                          Total proposta:{' '}
+                          <span className="font-semibold text-[var(--foreground)]">{formatCurrency(n.proposal.total_value)}</span>
+                        </p>
+                      ) : null}
                     </div>
-                  ))}
-                </div>
+
+                    <div className="flex items-center gap-2">
+                      <Button variant="outline" onClick={() => void openProposalAndMarkAsRead(n)} disabled={!n.person_id}>
+                        {n.proposal ? 'Abrir proposta' : 'Montar proposta'}
+                      </Button>
+
+                      {n.lead_id ? (
+                        <Link href={`/leads/${n.lead_id}`} className="text-xs font-medium text-[var(--primary)] hover:underline">
+                          Abrir lead
+                        </Link>
+                      ) : n.person_id && !n.person_is_restricted ? (
+                        <Link href={`/people/${n.person_id}`} className="text-xs font-medium text-[var(--primary)] hover:underline">
+                          Abrir pessoa
+                        </Link>
+                      ) : null}
+                    </div>
+                  </div>
+                )
+              })}
             </div>
           )}
         </CardContent>
@@ -1668,88 +1233,57 @@ export default function PropertyNegotiationsTabClient({
                   O total da proposta precisa ser maior que zero para enviar.
                 </div>
               ) : null}
-              {isProposalDraftEditable && canManageProposal && !isCommissionPercentValid ? (
-                <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
-                  O percentual de comissao deve estar entre 0% e 100%.
-                </div>
-              ) : null}
-              {isProposalDraftEditable && canManageProposal && !isSplitPercentValid ? (
-                <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
-                  A soma dos splits (corretor + parceiro) esta acima de 100%. Ajuste no imovel antes de enviar.
-                </div>
-              ) : null}
-              {isProposalDraftEditable && canManageProposal && installmentsRequireDetails && !hasInstallmentsRows ? (
-                <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
-                  Parcelado direto ativo: gere ao menos uma parcela com vencimento e valor.
-                </div>
-              ) : null}
-              {isProposalDraftEditable && canManageProposal && hasInstallmentsInvalidRow ? (
-                <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
-                  Existe parcela sem valor positivo ou sem vencimento.
-                </div>
-              ) : null}
-              {isProposalDraftEditable && canManageProposal && installmentsSummaryMismatch ? (
-                <div className="rounded-xl border border-sky-200 bg-sky-50 p-3 text-sm text-sky-800">
-                  Total do campo parcelado direto diferente da soma das parcelas. Ao salvar, a soma das parcelas sera usada.
-                </div>
-              ) : null}
 
-              {/* Comissao */}
+              {/* Comissão */}
               <div className="rounded-2xl border border-black/10 p-4">
                 <div>
-                  <div className="text-sm font-extrabold text-black/90">Comissao</div>
-                  <div className="text-sm text-black/60">
-                    Snapshot financeiro da proposta (comissao, liquido do proprietario e splits).
-                  </div>
-                </div>
-                <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-3">
-                  <div className="md:col-span-2">
-                    <div className="text-xs text-black/60">Base de calculo</div>
-                    <div className="mt-1 rounded-xl border border-black/10 bg-black/5 px-3 py-2 text-sm font-semibold text-black/90">
-                      {formatCurrency(commissionBaseValue)}
-                    </div>
-                    <div className="mt-1 text-xs text-black/60">
-                      Usa total da proposta; se vazio, usa valor do imovel.
-                    </div>
-                  </div>
-                  <div>
-                    <div className="text-xs text-black/60">% comissao</div>
-                    <input
-                      type="number"
-                      step="0.01"
-                      min={0}
-                      max={100}
-                      disabled={!isProposalDraftEditable || !canManageProposal || proposalSubmitting}
-                      value={Number.isFinite(commissionPercent) ? commissionPercent : 0}
-                      onChange={(e) => setCommissionPercent(parseFloat(e.target.value || '0'))}
-                      className="mt-1 w-full rounded-xl border border-black/10 bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-black/10 disabled:bg-black/5"
-                    />
-                    <div className="mt-1 text-xs text-black/60">Herdado do imovel e editavel na proposta.</div>
-                  </div>
+                  <div className="text-sm font-extrabold text-black/90">Comissão</div>
+                  <div className="text-sm text-black/60">Salva a comissão vinculada a negociacao.</div>
                 </div>
 
-                <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
-                  <div className="rounded-xl border border-black/10 bg-black/5 p-3">
-                    <div className="text-xs text-black/60">Comissao total</div>
-                    <div className="text-base font-extrabold text-black/90">{formatCurrency(commissionValue)}</div>
-                  </div>
-                  <div className="rounded-xl border border-black/10 bg-black/5 p-3">
-                    <div className="text-xs text-black/60">Liquido proprietario</div>
-                    <div className="text-base font-extrabold text-black/90">{formatCurrency(ownerNetValue)}</div>
-                  </div>
-                  <div className="rounded-xl border border-black/10 bg-black/5 p-3">
-                    <div className="text-xs text-black/60">Corretor ({brokerSplitPercent.toFixed(2)}%)</div>
-                    <div className="text-base font-extrabold text-black/90">{formatCurrency(brokerCommissionValue)}</div>
-                  </div>
-                  <div className="rounded-xl border border-black/10 bg-black/5 p-3">
-                    <div className="text-xs text-black/60">Parceiro ({partnerSplitPercent.toFixed(2)}%)</div>
-                    <div className="text-base font-extrabold text-black/90">{formatCurrency(partnerCommissionValue)}</div>
-                  </div>
-                  <div className="rounded-xl border border-black/10 bg-black/5 p-3">
-                    <div className="text-xs text-black/60">Empresa (saldo)</div>
-                    <div className="text-base font-extrabold text-black/90">{formatCurrency(companyCommissionValue)}</div>
-                  </div>
-                </div>
+                {!createCommissionAction ? (
+                  <div className="mt-3 text-sm text-black/60">Action de comissão não injetada (wrapper server faltando).</div>
+                ) : (
+                  <form action={createCommissionAction} className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-3">
+                    <input type="hidden" name="negotiationId" value={proposalEntity.negotiation_id} />
+
+                    <div className="md:col-span-2">
+                      <div className="text-xs text-black/60">Valor bruto</div>
+                      <input
+                        name="grossValue"
+                        type="number"
+                        step="0.01"
+                        disabled={!isProposalDraftEditable || proposalSubmitting}
+                        value={Number.isFinite(commissionGross) ? commissionGross : 0}
+                        onChange={(e) => setCommissionGross(parseFloat(e.target.value || '0'))}
+                        className="mt-1 w-full rounded-xl border border-black/10 bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-black/10 disabled:bg-black/5"
+                      />
+                      <div className="mt-1 text-xs text-black/60">{formatCurrency(commissionGross)}</div>
+                    </div>
+
+                    <div>
+                      <div className="text-xs text-black/60">% comissão</div>
+                      <input
+                        name="commissionPercent"
+                        type="number"
+                        step="0.01"
+                        disabled={!isProposalDraftEditable || proposalSubmitting}
+                        value={Number.isFinite(commissionPercent) ? commissionPercent : 0}
+                        onChange={(e) => setCommissionPercent(parseFloat(e.target.value || '0'))}
+                        className="mt-1 w-full rounded-xl border border-black/10 bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-black/10 disabled:bg-black/5"
+                      />
+                      <div className="mt-1 text-xs text-black/60">ex: 5,00%</div>
+                    </div>
+
+                    {isProposalDraftEditable && canManageProposal ? (
+                      <div className="md:col-span-3 flex items-center justify-end gap-2">
+                        <Button type="submit" disabled={proposalSubmitting}>
+                          Salvar comissão
+                        </Button>
+                      </div>
+                    ) : null}
+                  </form>
+                )}
               </div>
 
               {/* Formas de pagamento */}
@@ -1757,7 +1291,7 @@ export default function PropertyNegotiationsTabClient({
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <div>
                     <div className="text-sm font-extrabold text-black/90">Formas de pagamento</div>
-                    <div className="text-sm text-black/60">Selecione uma ou varias e preencha valores.</div>
+                    <div className="text-sm text-black/60">Selecione uma ou várias e preencha valores.</div>
                   </div>
 
                   <Button
@@ -1777,12 +1311,7 @@ export default function PropertyNegotiationsTabClient({
                     const amount = Number(proposalDraft.amounts?.[k] ?? 0)
 
                     return (
-                      <div
-                        key={k}
-                        className={`rounded-xl border border-black/10 p-3 transition-colors ${
-                          enabled ? 'bg-white' : 'bg-black/[0.02]'
-                        }`}
-                      >
+                      <div key={k} className="rounded-xl border border-black/10 p-3">
                         <div className="flex items-center justify-between gap-2">
                           <label className="flex items-center gap-2 text-sm font-semibold text-black/90">
                             <input
@@ -1790,16 +1319,11 @@ export default function PropertyNegotiationsTabClient({
                               checked={enabled}
                               disabled={!isProposalDraftEditable || !canManageProposal || proposalSubmitting}
                               onChange={(e) => {
-                                const isEnabled = e.target.checked
                                 const next = {
                                   ...proposalDraft,
-                                  enabled: { ...(proposalDraft.enabled || {}), [k]: isEnabled },
+                                  enabled: { ...(proposalDraft.enabled || {}), [k]: e.target.checked },
                                   installments:
-                                    !isEnabled && k === 'installments' ? [] : proposalDraft.installments || [],
-                                  amounts:
-                                    !isEnabled && k === 'installments'
-                                      ? { ...(proposalDraft.amounts || {}), installments: 0 }
-                                      : proposalDraft.amounts || {},
+                                    !e.target.checked && k === 'installments' ? [] : proposalDraft.installments || [],
                                 }
                                 setProposalDraft(next)
                                 saveProposalDraftLocal(proposalEntity.person_id, next)
@@ -1819,168 +1343,25 @@ export default function PropertyNegotiationsTabClient({
                           )}
                         </div>
 
-                        <div
-                          className={`grid overflow-hidden transition-[grid-template-rows,opacity,margin] duration-300 ease-out ${
-                            enabled ? 'mt-3 grid-rows-[1fr] opacity-100' : 'mt-0 grid-rows-[0fr] opacity-0'
-                          }`}
-                        >
-                          <div className="min-h-0">
-                            <div className="text-xs text-black/60">Valor</div>
-                            <input
-                              type="number"
-                              step="0.01"
-                              disabled={!enabled || !isProposalDraftEditable || !canManageProposal || proposalSubmitting}
-                              value={Number.isFinite(amount) ? amount : 0}
-                              onChange={(e) => {
-                                const v = parseFloat(e.target.value || '0')
-                                const next = {
-                                  ...proposalDraft,
-                                  amounts: { ...(proposalDraft.amounts || {}), [k]: Number.isFinite(v) ? v : 0 },
-                                }
-                                setProposalDraft(next)
-                                saveProposalDraftLocal(proposalEntity.person_id, next)
-                              }}
-                              className="mt-1 w-full rounded-xl border border-black/10 bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-black/10 disabled:bg-black/5"
-                            />
-                            <div className="mt-1 text-xs text-black/60">{formatCurrency(amount)}</div>
-
-                            {k === 'installments' ? (
-                              <div className="mt-4 rounded-xl border border-black/10 bg-black/5 p-3 space-y-3">
-                                <div className="text-xs font-semibold text-black/70">Detalhamento das parcelas</div>
-                                <div className="grid grid-cols-1 gap-2 md:grid-cols-3">
-                                  <div>
-                                    <div className="text-[11px] text-black/60">Quantidade</div>
-                                    <input
-                                      type="number"
-                                      min={1}
-                                      max={120}
-                                      value={installmentCount}
-                                      disabled={!enabled || !isProposalDraftEditable || !canManageProposal || proposalSubmitting}
-                                      onChange={(e) => {
-                                        const next = Number(e.target.value)
-                                        setInstallmentCount(Number.isFinite(next) ? Math.max(1, Math.floor(next)) : 1)
-                                      }}
-                                      className="mt-1 w-full rounded-xl border border-black/10 bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-black/10 disabled:bg-black/5"
-                                    />
-                                  </div>
-                                  <div>
-                                    <div className="text-[11px] text-black/60">1 vencimento</div>
-                                    <input
-                                      type="date"
-                                      value={installmentFirstDueDate}
-                                      disabled={!enabled || !isProposalDraftEditable || !canManageProposal || proposalSubmitting}
-                                      onChange={(e) => setInstallmentFirstDueDate(e.target.value)}
-                                      className="mt-1 w-full rounded-xl border border-black/10 bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-black/10 disabled:bg-black/5"
-                                    />
-                                  </div>
-                                  <div className="flex items-end">
-                                    <Button
-                                      variant="outline"
-                                      className="w-full"
-                                      disabled={!enabled || !isProposalDraftEditable || !canManageProposal || proposalSubmitting}
-                                      onClick={() => {
-                                        const plan = buildInstallmentPlan(
-                                          Number(proposalDraft.amounts?.installments ?? 0),
-                                          installmentCount,
-                                          installmentFirstDueDate
-                                        )
-                                        applyInstallmentsDraft(plan)
-                                      }}
-                                    >
-                                      Gerar parcelas
-                                    </Button>
-                                  </div>
-                                </div>
-
-                                {(proposalDraft.installments?.length ?? 0) > 0 ? (
-                                  <div className="space-y-2">
-                                    {(proposalDraft.installments ?? []).map((row, index) => (
-                                      <div
-                                        key={`${row.installment_no}-${index}`}
-                                        className="grid grid-cols-1 gap-2 rounded-xl border border-black/10 bg-white p-2 md:grid-cols-[80px,1fr,140px,40px]"
-                                      >
-                                        <div className="flex items-center justify-center rounded-lg border border-black/10 text-xs font-semibold text-black/70">
-                                          #{index + 1}
-                                        </div>
-                                        <input
-                                          type="date"
-                                          value={row.due_date || ''}
-                                          disabled={!enabled || !isProposalDraftEditable || !canManageProposal || proposalSubmitting}
-                                          onChange={(e) => {
-                                            const nextRows = [...(proposalDraft.installments ?? [])]
-                                            nextRows[index] = { ...nextRows[index], due_date: e.target.value }
-                                            applyInstallmentsDraft(nextRows)
-                                          }}
-                                          className="rounded-xl border border-black/10 bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-black/10 disabled:bg-black/5"
-                                        />
-                                        <input
-                                          type="number"
-                                          step="0.01"
-                                          min={0}
-                                          value={Number.isFinite(Number(row.amount ?? 0)) ? Number(row.amount ?? 0) : 0}
-                                          disabled={!enabled || !isProposalDraftEditable || !canManageProposal || proposalSubmitting}
-                                          onChange={(e) => {
-                                            const value = parseFloat(e.target.value || '0')
-                                            const nextRows = [...(proposalDraft.installments ?? [])]
-                                            nextRows[index] = {
-                                              ...nextRows[index],
-                                              amount: Number.isFinite(value) ? value : 0,
-                                            }
-                                            applyInstallmentsDraft(nextRows)
-                                          }}
-                                          className="rounded-xl border border-black/10 bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-black/10 disabled:bg-black/5"
-                                        />
-                                        <button
-                                          type="button"
-                                          disabled={!enabled || !isProposalDraftEditable || !canManageProposal || proposalSubmitting}
-                                          onClick={() => {
-                                            const nextRows = (proposalDraft.installments ?? []).filter((_, i) => i !== index)
-                                            applyInstallmentsDraft(nextRows)
-                                          }}
-                                          className="inline-flex h-10 items-center justify-center rounded-xl border border-black/10 text-xs font-bold text-black/60 hover:bg-black/5 disabled:opacity-50"
-                                          title="Remover parcela"
-                                        >
-                                          x
-                                        </button>
-                                      </div>
-                                    ))}
-                                  </div>
-                                ) : (
-                                  <div className="text-xs text-black/60">Nenhuma parcela gerada.</div>
-                                )}
-
-                                <div className="flex items-center justify-between gap-2">
-                                  <Button
-                                    variant="outline"
-                                    disabled={!enabled || !isProposalDraftEditable || !canManageProposal || proposalSubmitting}
-                                    onClick={() => {
-                                      const currentInstallments = proposalDraft.installments ?? []
-                                      const baseDate =
-                                        (currentInstallments.length > 0
-                                          ? currentInstallments[currentInstallments.length - 1]?.due_date
-                                          : null) || installmentFirstDueDate
-                                      const nextRows = [
-                                        ...currentInstallments,
-                                        {
-                                          installment_no: currentInstallments.length + 1,
-                                          amount: 0,
-                                          due_date: addMonthsToDateInput(baseDate, 1),
-                                          note: null,
-                                        },
-                                      ]
-                                      applyInstallmentsDraft(nextRows)
-                                    }}
-                                  >
-                                    Adicionar parcela
-                                  </Button>
-                                  <div className="text-xs text-black/60">
-                                    Soma parcelas:{' '}
-                                    <span className="font-semibold text-black/80">{formatCurrency(installmentsTotal)}</span>
-                                  </div>
-                                </div>
-                              </div>
-                            ) : null}
-                          </div>
+                        <div className="mt-3">
+                          <div className="text-xs text-black/60">Valor</div>
+                          <input
+                            type="number"
+                            step="0.01"
+                            disabled={!enabled || !isProposalDraftEditable || !canManageProposal || proposalSubmitting}
+                            value={Number.isFinite(amount) ? amount : 0}
+                            onChange={(e) => {
+                              const v = parseFloat(e.target.value || '0')
+                              const next = {
+                                ...proposalDraft,
+                                amounts: { ...(proposalDraft.amounts || {}), [k]: Number.isFinite(v) ? v : 0 },
+                              }
+                              setProposalDraft(next)
+                              saveProposalDraftLocal(proposalEntity.person_id, next)
+                            }}
+                            className="mt-1 w-full rounded-xl border border-black/10 bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-black/10 disabled:bg-black/5"
+                          />
+                          <div className="mt-1 text-xs text-black/60">{formatCurrency(amount)}</div>
                         </div>
                       </div>
                     )
@@ -2036,9 +1417,9 @@ export default function PropertyNegotiationsTabClient({
                   <Button
                     onClick={() => handleTransitionProposal('submit_review')}
                     disabled={!canSubmitProposal || proposalSubmitting || proposalLoading}
-                    title={!canSubmitProposal ? 'Revise total, percentual de comissao, splits e parcelas.' : undefined}
+                    title={!canSubmitProposal ? 'Selecione forma(s) de pagamento e total maior que zero.' : undefined}
                   >
-                    {proposalSubmitting && proposalAction === 'submit_review' ? 'Em analise...' : 'Enviar para analise'}
+                    {proposalSubmitting && proposalAction === 'submit_review' ? 'Em análise...' : 'Enviar para análise'}
                   </Button>
                 ) : null}
 
@@ -2047,7 +1428,7 @@ export default function PropertyNegotiationsTabClient({
                     variant="outline"
                     onClick={() => handleTransitionProposal('submit_counterproposal')}
                     disabled={!canSubmitProposal || proposalSubmitting || proposalLoading}
-                    title={!canSubmitProposal ? 'Revise total, percentual de comissao, splits e parcelas.' : undefined}
+                    title={!canSubmitProposal ? 'Selecione forma(s) de pagamento e total maior que zero.' : undefined}
                   >
                     {proposalSubmitting && proposalAction === 'submit_counterproposal'
                       ? 'Enviando contraproposta...'
@@ -2103,3 +1484,6 @@ export default function PropertyNegotiationsTabClient({
     </>
   )
 }
+
+
+

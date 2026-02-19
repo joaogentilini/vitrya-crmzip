@@ -106,7 +106,7 @@ export async function PATCH(
 
     if (!existing) {
       return NextResponse.json(
-        { error: 'Usuario ainda nao possui Google Agenda conectada.' },
+        { error: 'Usuário ainda não possui Google Agenda conectada.' },
         { status: 404 }
       )
     }

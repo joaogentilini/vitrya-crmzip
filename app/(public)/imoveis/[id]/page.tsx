@@ -120,7 +120,7 @@ export async function generateMetadata({
 
   const canonical =
     metadataBase && propertyId
-      ? new URL(`/imoveis/${propertyId}`, metadataBase).toString()
+      ? new URL(`/imóveis/${propertyId}`, metadataBase).toString()
       : undefined;
 
   // ✅ Segurança: domínio provisório (sem NEXT_PUBLIC_SITE_URL) => noindex
@@ -397,12 +397,12 @@ export default async function PublicPropertyPage({
   const headerList = await headers();
   const host = headerList.get("x-forwarded-host") || headerList.get("host") || "";
   const proto = headerList.get("x-forwarded-proto") || "https";
-  const shareUrl = host ? `${proto}://${host}/imoveis/${property.id}` : "";
+  const shareUrl = host ? `${proto}://${host}/imóveis/${property.id}` : "";
 
   // ✅ Canonical base (SEO)
   const baseUrlEnv = (process.env.NEXT_PUBLIC_SITE_URL ?? "").trim();
   const baseUrl = baseUrlEnv || (host ? `${proto}://${host}` : "");
-  const canonicalUrl = baseUrl ? `${baseUrl}/imoveis/${property.id}` : shareUrl || "";
+  const canonicalUrl = baseUrl ? `${baseUrl}/imóveis/${property.id}` : shareUrl || "";
 
   // ✅ Media (signed)
   const { data: mediaRows, error: mediaError } = await supabase

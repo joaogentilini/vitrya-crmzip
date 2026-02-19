@@ -1,13 +1,13 @@
 'use client'
 
-import { useMemo, useState, useTransition } from 'react'
+import { ReactNode, useMemo, useState, useTransition } from 'react'
 import { Button } from '@/components/ui/Button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card'
 import { Input } from '@/components/ui/Input'
 import { Select } from '@/components/ui/Select'
 import { Textarea } from '@/components/ui/Textarea'
 import { useToast } from '@/components/ui/Toast'
-import { searchPeople, updatePropertyBasics } from './actions'
+import { generatePropertyMarketingCopy, searchPeople, updatePropertyBasics } from './actions'
 
 type AnyRow = Record<string, unknown>
 
@@ -151,6 +151,43 @@ function MoneyInput({
   )
 }
 
+function SectionHeader({
+  title,
+  subtitle,
+  icon,
+}: {
+  title: string
+  subtitle?: string
+  icon: ReactNode
+}) {
+  return (
+    <div className="flex items-start gap-3 rounded-[var(--radius)] border border-[var(--border)] bg-[var(--muted)]/30 px-3 py-2.5">
+      <div className="mt-0.5 inline-flex h-8 w-8 items-center justify-center rounded-[var(--radius)] bg-[var(--primary)]/15 text-[var(--primary)]">
+        {icon}
+      </div>
+      <div>
+        <h3 className="text-sm font-semibold text-[var(--foreground)]">{title}</h3>
+        {subtitle ? <p className="text-xs text-[var(--muted-foreground)]">{subtitle}</p> : null}
+      </div>
+    </div>
+  )
+}
+
+function normalizeMarketingText(value: string) {
+  let next = value
+    .replace(/\r\n/g, '\n')
+    .replace(/[ \t]+\n/g, '\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .replace(/[ ]{2,}/g, ' ')
+    .trim()
+
+  next = next.replace(/(^|[.!?]\s+)([a-záàãâéêíóôõúç])/g, (_m, prefix, letter) => {
+    return `${prefix}${String(letter).toUpperCase()}`
+  })
+
+  return next
+}
+
 const STATUS_OPTIONS = [
   { value: 'draft', label: 'Rascunho' },
   { value: 'active', label: 'Ativo' },
@@ -223,6 +260,13 @@ export default function PropertyFullEditorClient({
   const { success: showSuccess, error: showError } = useToast()
   const [isEditing, setIsEditing] = useState(false)
   const [isSaving, startTransition] = useTransition()
+  const [isGeneratingCopy, startGeneratingCopy] = useTransition()
+  const [editorFontFamily, setEditorFontFamily] = useState<'sans' | 'serif' | 'mono'>('sans')
+  const [editorFontSize, setEditorFontSize] = useState<'sm' | 'md' | 'lg'>('md')
+  const [aiPortalProfile, setAiPortalProfile] = useState<'general' | 'olx' | 'zap' | 'vivareal'>('general')
+  const [editorBold, setEditorBold] = useState(false)
+  const [editorItalic, setEditorItalic] = useState(false)
+  const [autoCorrectionEnabled, setAutoCorrectionEnabled] = useState(true)
 
   const [form, setForm] = useState({
     status: String(property.status ?? ''),
@@ -334,9 +378,9 @@ export default function PropertyFullEditorClient({
 
   const publicationDays = useMemo(() => getDaysSince(form.created_at), [form.created_at])
   const publicationLabel = useMemo(() => {
-    if (form.status !== 'active') return 'Imovel nao publicado'
-    if (publicationDays === null) return 'Tempo de publicacao sem data'
-    return `${publicationDays} dia${publicationDays === 1 ? '' : 's'} de publicacao`
+    if (form.status !== 'active') return 'Imóvel não publicado'
+    if (publicationDays === null) return 'Tempo de publicação sem data'
+    return `${publicationDays} dia${publicationDays === 1 ? '' : 's'} de publicação`
   }, [form.status, publicationDays])
 
   const categoryOptions = useMemo(() => {
@@ -519,16 +563,33 @@ export default function PropertyFullEditorClient({
       owner_client_id: form.owner_client_id,
       owner_user_id: form.owner_user_id,
       created_by: form.created_by,
+      cover_media_url: form.cover_media_url,
+      property_standard: form.property_standard,
+      created_at: form.created_at,
+      updated_at: form.updated_at,
       ...hiddenKeys
     }),
-    [form.owner_client_id, form.owner_user_id, form.created_by, hiddenKeys]
+    [
+      form.owner_client_id,
+      form.owner_user_id,
+      form.created_by,
+      form.cover_media_url,
+      form.property_standard,
+      form.created_at,
+      form.updated_at,
+      hiddenKeys
+    ]
   )
 
   const debugLabelMap = useMemo(
     () => ({
       owner_client_id: 'Proprietário',
       owner_user_id: 'Responsável (usuário)',
-      created_by: 'Criado por'
+      created_by: 'Criado por',
+      cover_media_url: 'URL da capa',
+      property_standard: 'Padrão do imóvel',
+      created_at: 'Criado em',
+      updated_at: 'Atualizado em'
     }),
     []
   )
@@ -537,10 +598,95 @@ export default function PropertyFullEditorClient({
     () => ({
       owner_client_id: ownerPersonRestricted ? 'Oculto para este perfil' : ownerPersonLabel || form.owner_client_id,
       owner_user_id: ownerDisplay || form.owner_user_id,
-      created_by: createdByDisplay || form.created_by
+      created_by: createdByDisplay || form.created_by,
+      cover_media_url: form.cover_media_url || '-',
+      property_standard: form.property_standard || '-',
+      created_at: form.created_at || '-',
+      updated_at: form.updated_at || '-'
     }),
-    [ownerPersonRestricted, ownerPersonLabel, ownerDisplay, createdByDisplay, form.owner_client_id, form.owner_user_id, form.created_by]
+    [
+      ownerPersonRestricted,
+      ownerPersonLabel,
+      ownerDisplay,
+      createdByDisplay,
+      form.owner_client_id,
+      form.owner_user_id,
+      form.created_by,
+      form.cover_media_url,
+      form.property_standard,
+      form.created_at,
+      form.updated_at
+    ]
   )
+
+  const editorFontFamilyClass =
+    editorFontFamily === 'serif'
+      ? 'font-serif'
+      : editorFontFamily === 'mono'
+      ? 'font-mono'
+      : 'font-sans'
+  const editorFontSizeClass =
+    editorFontSize === 'sm' ? 'text-sm' : editorFontSize === 'lg' ? 'text-base' : 'text-[15px]'
+
+  const applyAutoCorrection = () => {
+    setForm((prev) => ({
+      ...prev,
+      title: normalizeMarketingText(prev.title),
+      description: normalizeMarketingText(prev.description),
+    }))
+  }
+
+  const handleGenerateWithAI = () => {
+    if (!canEditOverviewData) {
+      showError('Sem permissão: apenas responsável/admin/gestor pode editar.')
+      return
+    }
+
+    startGeneratingCopy(async () => {
+      try {
+        const result = await generatePropertyMarketingCopy({
+          propertyId: String(property.id),
+          context: {
+            portal_profile: aiPortalProfile,
+            purpose: form.purpose || null,
+            title: form.title || null,
+            description: form.description || null,
+            city: form.city || null,
+            neighborhood: form.neighborhood || null,
+            address: form.address || null,
+            price: parseBRL(form.price),
+            rent_price: parseBRL(form.rent_price),
+            area_m2: parseNumberOrNull(form.area_m2),
+            land_area_m2: parseNumberOrNull(form.land_area_m2),
+            built_area_m2: parseNumberOrNull(form.built_area_m2),
+            bedrooms: parseNumberOrNull(form.bedrooms),
+            bathrooms: parseNumberOrNull(form.bathrooms),
+            parking: parseNumberOrNull(form.parking),
+            suites: parseNumberOrNull(form.suites),
+            condo_fee: parseBRL(form.condo_fee),
+            usage: form.usage || null,
+            condition: form.condition || null,
+            property_standard: form.property_standard || null,
+          },
+        })
+
+        if (!result.success) {
+          showError(result.error || 'Não foi possível gerar o texto com IA.')
+          return
+        }
+
+        setForm((prev) => ({
+          ...prev,
+          title: normalizeMarketingText(result.title || prev.title),
+          description: normalizeMarketingText(result.description || prev.description),
+        }))
+
+        showSuccess(result.used_ai ? 'Texto premium gerado com IA.' : 'Texto premium gerado com assistente interno.')
+      } catch (err) {
+        showError(err instanceof Error ? err.message : 'Erro ao gerar texto com IA.')
+      }
+    })
+  }
 
   const handleSave = () => {
     if (!canEditOverviewData) {
@@ -595,12 +741,8 @@ export default function PropertyFullEditorClient({
 
         if (canEditCommissionPercent) {
           payload.sale_commission_percent = parseDecimalOrNull(form.sale_commission_percent)
-          payload.sale_broker_split_percent = parseDecimalOrNull(form.sale_broker_split_percent)
-          payload.sale_partner_split_percent = parseDecimalOrNull(form.sale_partner_split_percent)
           payload.rent_initial_commission_percent = parseDecimalOrNull(form.rent_initial_commission_percent)
           payload.rent_recurring_commission_percent = parseDecimalOrNull(form.rent_recurring_commission_percent)
-          payload.rent_broker_split_percent = parseDecimalOrNull(form.rent_broker_split_percent)
-          payload.rent_partner_split_percent = parseDecimalOrNull(form.rent_partner_split_percent)
         }
 
         if (canViewLegalData) {
@@ -657,24 +799,16 @@ export default function PropertyFullEditorClient({
           sale_commission_percent: canEditCommissionPercent
             ? parseDecimalOrNull(form.sale_commission_percent)
             : (property as any).sale_commission_percent ?? (property as any).commission_percent ?? null,
-          sale_broker_split_percent: canEditCommissionPercent
-            ? parseDecimalOrNull(form.sale_broker_split_percent)
-            : (property as any).sale_broker_split_percent ?? null,
-          sale_partner_split_percent: canEditCommissionPercent
-            ? parseDecimalOrNull(form.sale_partner_split_percent)
-            : (property as any).sale_partner_split_percent ?? null,
+          sale_broker_split_percent: (property as any).sale_broker_split_percent ?? null,
+          sale_partner_split_percent: (property as any).sale_partner_split_percent ?? null,
           rent_initial_commission_percent: canEditCommissionPercent
             ? parseDecimalOrNull(form.rent_initial_commission_percent)
             : (property as any).rent_initial_commission_percent ?? null,
           rent_recurring_commission_percent: canEditCommissionPercent
             ? parseDecimalOrNull(form.rent_recurring_commission_percent)
             : (property as any).rent_recurring_commission_percent ?? null,
-          rent_broker_split_percent: canEditCommissionPercent
-            ? parseDecimalOrNull(form.rent_broker_split_percent)
-            : (property as any).rent_broker_split_percent ?? null,
-          rent_partner_split_percent: canEditCommissionPercent
-            ? parseDecimalOrNull(form.rent_partner_split_percent)
-            : (property as any).rent_partner_split_percent ?? null,
+          rent_broker_split_percent: (property as any).rent_broker_split_percent ?? null,
+          rent_partner_split_percent: (property as any).rent_partner_split_percent ?? null,
           commission_percent: canEditCommissionPercent
             ? parseDecimalOrNull(form.sale_commission_percent)
             : (property as any).commission_percent ?? null
@@ -694,7 +828,7 @@ export default function PropertyFullEditorClient({
     <div className="space-y-4">
       <Card>
         <CardHeader className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <CardTitle className="text-base">Dados completos</CardTitle>
+          <CardTitle className="text-base">Visão completa do imóvel</CardTitle>
           <div className="flex flex-wrap gap-2">
             <Button
               variant="outline"
@@ -717,23 +851,141 @@ export default function PropertyFullEditorClient({
         </CardHeader>
         <CardContent className="space-y-6">
           <div className="space-y-3">
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <h3 className="text-sm font-semibold text-[var(--foreground)]">Título & Descrição</h3>
-              <Button type="button" variant="outline" disabled>
-                Gerar com IA
-              </Button>
-            </div>
-            <div className="grid gap-4 sm:grid-cols-2">
+            <SectionHeader
+              title="Título e descrição comercial"
+              subtitle="Refine o texto com IA, padronize linguagem e ajuste legibilidade para anúncio."
+              icon={
+                <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M7 8h10M7 12h6m-6 4h10M5 5h14a2 2 0 012 2v10a2 2 0 01-2 2H5a2 2 0 01-2-2V7a2 2 0 012-2z"
+                  />
+                </svg>
+              }
+            />
+            <div className="space-y-4 rounded-[var(--radius)] border border-[var(--border)] p-4">
+              <div className="flex flex-wrap items-center gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  disabled={!isEditing || isGeneratingCopy}
+                  onClick={handleGenerateWithAI}
+                >
+                  {isGeneratingCopy ? 'Gerando com IA...' : 'Gerar com IA'}
+                </Button>
+                <Button type="button" variant="outline" disabled={!isEditing} onClick={applyAutoCorrection}>
+                  Corrigir texto
+                </Button>
+                <label className="ml-auto flex items-center gap-2 text-xs text-[var(--muted-foreground)]">
+                  <input
+                    type="checkbox"
+                    checked={autoCorrectionEnabled}
+                    disabled={!isEditing}
+                    onChange={(event) => setAutoCorrectionEnabled(event.target.checked)}
+                  />
+                  Correção automática
+                </label>
+              </div>
+
+              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-6">
+                <div>
+                  <label className="text-xs text-[var(--muted-foreground)]">Fonte</label>
+                  <select
+                    value={editorFontFamily}
+                    disabled={!isEditing}
+                    onChange={(event) => setEditorFontFamily(event.target.value as 'sans' | 'serif' | 'mono')}
+                    className="mt-1 h-10 w-full rounded-[var(--radius)] border border-[var(--input)] bg-[var(--background)] px-3 text-sm"
+                  >
+                    <option value="sans">Sans</option>
+                    <option value="serif">Serif</option>
+                    <option value="mono">Mono</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="text-xs text-[var(--muted-foreground)]">Tamanho</label>
+                  <select
+                    value={editorFontSize}
+                    disabled={!isEditing}
+                    onChange={(event) => setEditorFontSize(event.target.value as 'sm' | 'md' | 'lg')}
+                    className="mt-1 h-10 w-full rounded-[var(--radius)] border border-[var(--input)] bg-[var(--background)] px-3 text-sm"
+                  >
+                    <option value="sm">Pequeno</option>
+                    <option value="md">Médio</option>
+                    <option value="lg">Grande</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="text-xs text-[var(--muted-foreground)]">Portal alvo</label>
+                  <select
+                    value={aiPortalProfile}
+                    disabled={!isEditing}
+                    onChange={(event) =>
+                      setAiPortalProfile(event.target.value as 'general' | 'olx' | 'zap' | 'vivareal')
+                    }
+                    className="mt-1 h-10 w-full rounded-[var(--radius)] border border-[var(--input)] bg-[var(--background)] px-3 text-sm"
+                  >
+                    <option value="general">Geral</option>
+                    <option value="olx">OLX</option>
+                    <option value="zap">ZAP Imóveis</option>
+                    <option value="vivareal">VivaReal</option>
+                  </select>
+                </div>
+                <div className="flex items-end gap-2 lg:col-span-2">
+                  <Button
+                    type="button"
+                    variant={editorBold ? 'default' : 'outline'}
+                    disabled={!isEditing}
+                    onClick={() => setEditorBold((prev) => !prev)}
+                  >
+                    Negrito
+                  </Button>
+                  <Button
+                    type="button"
+                    variant={editorItalic ? 'default' : 'outline'}
+                    disabled={!isEditing}
+                    onClick={() => setEditorItalic((prev) => !prev)}
+                  >
+                    Itálico
+                  </Button>
+                </div>
+                <div className="flex items-end text-xs text-[var(--muted-foreground)]">
+                  {form.description.length} caracteres
+                </div>
+              </div>
+
               <Input
                 label="Título"
                 value={form.title}
                 disabled={!isEditing}
+                className={`${editorFontFamilyClass} ${editorFontSizeClass} ${editorBold ? 'font-semibold' : ''} ${
+                  editorItalic ? 'italic' : ''
+                }`}
+                onBlur={() => {
+                  if (autoCorrectionEnabled) {
+                    setForm((prev) => ({ ...prev, title: normalizeMarketingText(prev.title) }))
+                  }
+                }}
                 onChange={(event) => setForm((prev) => ({ ...prev, title: event.target.value }))}
               />
+
               <Textarea
                 label="Descrição"
                 value={form.description}
                 disabled={!isEditing}
+                rows={8}
+                spellCheck
+                autoCorrect="on"
+                autoCapitalize="sentences"
+                className={`${editorFontFamilyClass} ${editorFontSizeClass} ${editorBold ? 'font-semibold' : ''} ${
+                  editorItalic ? 'italic' : ''
+                }`}
+                onBlur={() => {
+                  if (autoCorrectionEnabled) {
+                    setForm((prev) => ({ ...prev, description: normalizeMarketingText(prev.description) }))
+                  }
+                }}
                 onChange={(event) =>
                   setForm((prev) => ({ ...prev, description: event.target.value }))
                 }
@@ -742,15 +994,28 @@ export default function PropertyFullEditorClient({
           </div>
 
           <div className="space-y-3">
-            <h3 className="text-sm font-semibold text-[var(--foreground)]">Básico</h3>
+            <SectionHeader
+              title="Proprietário e Publicação"
+              subtitle="Defina responsabilidade, status e categoria comercial do imóvel."
+              icon={
+                <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M5.121 17.804A9 9 0 1118.88 6.196M15 11a3 3 0 11-6 0 3 3 0 016 0zm-9 9a9 9 0 0112 0"
+                  />
+                </svg>
+              }
+            />
             <div className="rounded-[var(--radius)] border border-[var(--primary)] bg-[var(--primary)]/10 p-3">
-              <p className="text-[11px] font-extrabold uppercase tracking-wide text-[var(--primary)]">Tempo de publicacao</p>
+              <p className="text-[11px] font-extrabold uppercase tracking-wide text-[var(--primary)]">Tempo de publicação</p>
               <div className="mt-1 flex flex-wrap items-center gap-2">
                 <span className="rounded-full border border-[var(--primary)] bg-[var(--primary)] px-2.5 py-1 text-xs font-extrabold text-white">
                   {publicationLabel}
                 </span>
                 <span className="text-xs text-[var(--muted-foreground)]">
-                  O indicador aparece tambem na aba de negociacoes e no painel de campanha.
+                  O indicador aparece também na aba de negociações e no painel de campanha.
                 </span>
               </div>
             </div>
@@ -830,19 +1095,25 @@ export default function PropertyFullEditorClient({
                   setForm((prev) => ({ ...prev, lead_type_id: event.target.value }))
                 }
               />
-              <Input
-                label="URL da capa"
-                value={form.cover_media_url}
-                disabled={!isEditing}
-                onChange={(event) =>
-                  setForm((prev) => ({ ...prev, cover_media_url: event.target.value }))
-                }
-              />
             </div>
           </div>
 
           <div className="space-y-3">
-            <h3 className="text-sm font-semibold text-[var(--foreground)]">Endereço & Geo</h3>
+            <SectionHeader
+              title="Endereço completo"
+              subtitle="Dados de localização para anúncio, busca e georreferenciamento."
+              icon={
+                <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M17.657 16.657L13.414 20.9a2 2 0 01-2.828 0l-4.243-4.243a8 8 0 1111.314 0z"
+                  />
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+                </svg>
+              }
+            />
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
               <Input
                 label="Endereço"
@@ -914,9 +1185,20 @@ export default function PropertyFullEditorClient({
           </div>
 
           <div className="space-y-3">
-            <h3 className="text-sm font-semibold text-[var(--foreground)]">
-              Valores & Financiamento
-            </h3>
+            <SectionHeader
+              title="Dados de venda"
+              subtitle="Organização comercial da venda, comissionamento e resumo líquido."
+              icon={
+                <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M12 8c-2.21 0-4 .895-4 2s1.79 2 4 2 4 .895 4 2-1.79 2-4 2m0-10v12m0-12V4m0 16v-2"
+                  />
+                </svg>
+              }
+            />
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
               <MoneyInput
                 label="Valor anunciado"
@@ -931,18 +1213,6 @@ export default function PropertyFullEditorClient({
                 }
               />
               <MoneyInput
-                label="Aluguel anunciado"
-                value={form.rent_price}
-                disabled={!isEditing}
-                onChange={(value) => setForm((prev) => ({ ...prev, rent_price: value }))}
-                onBlur={() =>
-                  setForm((prev) => ({
-                    ...prev,
-                    rent_price: formatBRL(parseBRL(prev.rent_price) ?? null)
-                  }))
-                }
-              />
-              <MoneyInput
                 label="Valor de avaliação"
                 value={form.appraisal_value}
                 disabled={!isEditing}
@@ -951,18 +1221,6 @@ export default function PropertyFullEditorClient({
                   setForm((prev) => ({
                     ...prev,
                     appraisal_value: formatBRL(parseBRL(prev.appraisal_value) ?? null)
-                  }))
-                }
-              />
-              <MoneyInput
-                label="Condomínio"
-                value={form.condo_fee}
-                disabled={!isEditing}
-                onChange={(value) => setForm((prev) => ({ ...prev, condo_fee: value }))}
-                onBlur={() =>
-                  setForm((prev) => ({
-                    ...prev,
-                    condo_fee: formatBRL(parseBRL(prev.condo_fee) ?? null)
                   }))
                 }
               />
@@ -1000,80 +1258,12 @@ export default function PropertyFullEditorClient({
                   setForm((prev) => ({ ...prev, sale_commission_percent: event.target.value }))
                 }
               />
-              <Input
-                label="Split corretor venda (%)"
-                value={form.sale_broker_split_percent}
-                type="number"
-                inputMode="decimal"
-                min="0"
-                step="0.01"
-                disabled={!isEditing || !canEditCommissionPercent}
-                onChange={(event) =>
-                  setForm((prev) => ({ ...prev, sale_broker_split_percent: event.target.value }))
-                }
-              />
-              <Input
-                label="Split parceiro venda (%)"
-                value={form.sale_partner_split_percent}
-                type="number"
-                inputMode="decimal"
-                min="0"
-                step="0.01"
-                disabled={!isEditing || !canEditCommissionPercent}
-                onChange={(event) =>
-                  setForm((prev) => ({ ...prev, sale_partner_split_percent: event.target.value }))
-                }
-              />
-              <Input
-                label="Comissão aluguel inicial (%)"
-                value={form.rent_initial_commission_percent}
-                type="number"
-                inputMode="decimal"
-                min="0"
-                step="0.01"
-                disabled={!isEditing || !canEditCommissionPercent}
-                onChange={(event) =>
-                  setForm((prev) => ({ ...prev, rent_initial_commission_percent: event.target.value }))
-                }
-              />
-              <Input
-                label="Comissão aluguel recorrente (%)"
-                value={form.rent_recurring_commission_percent}
-                type="number"
-                inputMode="decimal"
-                min="0"
-                step="0.01"
-                disabled={!isEditing || !canEditCommissionPercent}
-                onChange={(event) =>
-                  setForm((prev) => ({ ...prev, rent_recurring_commission_percent: event.target.value }))
-                }
-              />
-              <Input
-                label="Split corretor aluguel (%)"
-                value={form.rent_broker_split_percent}
-                type="number"
-                inputMode="decimal"
-                min="0"
-                step="0.01"
-                disabled={!isEditing || !canEditCommissionPercent}
-                onChange={(event) =>
-                  setForm((prev) => ({ ...prev, rent_broker_split_percent: event.target.value }))
-                }
-              />
-              <Input
-                label="Split parceiro aluguel (%)"
-                value={form.rent_partner_split_percent}
-                type="number"
-                inputMode="decimal"
-                min="0"
-                step="0.01"
-                disabled={!isEditing || !canEditCommissionPercent}
-                onChange={(event) =>
-                  setForm((prev) => ({ ...prev, rent_partner_split_percent: event.target.value }))
-                }
-              />
             </div>
-            <div className="grid gap-3 sm:grid-cols-2">
+            <p className="text-xs text-[var(--muted-foreground)]">
+              Divisão de comissão (corretor, Vitrya e parceiro) é definida no perfil do corretor por gestor/admin, e
+              a parceria é ajustada no modal de proposta.
+            </p>
+            <div className="grid gap-3">
               <div className="rounded-[var(--radius)] border border-[var(--border)] p-3">
                 <p className="text-xs text-[var(--muted-foreground)]">Resumo venda</p>
                 <p className="mt-1 text-sm font-medium text-[var(--foreground)]">
@@ -1086,6 +1276,63 @@ export default function PropertyFullEditorClient({
                   Líquido proprietário: {saleOwnerNetValue > 0 ? `R$ ${formatBRL(saleOwnerNetValue)}` : '-'}
                 </p>
               </div>
+            </div>
+          </div>
+
+          <div className="space-y-3">
+            <SectionHeader
+              title="Dados de aluguel"
+              subtitle="Parâmetros de locação mensal e temporada com comissões específicas."
+              icon={
+                <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M8 11V7a4 4 0 118 0v4m-9 0h10a2 2 0 012 2v5a2 2 0 01-2 2H7a2 2 0 01-2-2v-5a2 2 0 012-2z"
+                  />
+                </svg>
+              }
+            />
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+              <MoneyInput
+                label="Aluguel anunciado"
+                value={form.rent_price}
+                disabled={!isEditing}
+                onChange={(value) => setForm((prev) => ({ ...prev, rent_price: value }))}
+                onBlur={() =>
+                  setForm((prev) => ({
+                    ...prev,
+                    rent_price: formatBRL(parseBRL(prev.rent_price) ?? null)
+                  }))
+                }
+              />
+              <Input
+                label="Comissão aluguel (%)"
+                value={form.rent_initial_commission_percent}
+                type="number"
+                inputMode="decimal"
+                min="0"
+                step="0.01"
+                disabled={!isEditing || !canEditCommissionPercent}
+                onChange={(event) =>
+                  setForm((prev) => ({ ...prev, rent_initial_commission_percent: event.target.value }))
+                }
+              />
+              <Input
+                label="Comissão aluguel Temporada (%)"
+                value={form.rent_recurring_commission_percent}
+                type="number"
+                inputMode="decimal"
+                min="0"
+                step="0.01"
+                disabled={!isEditing || !canEditCommissionPercent}
+                onChange={(event) =>
+                  setForm((prev) => ({ ...prev, rent_recurring_commission_percent: event.target.value }))
+                }
+              />
+            </div>
+            <div className="grid gap-3">
               <div className="rounded-[var(--radius)] border border-[var(--border)] p-3">
                 <p className="text-xs text-[var(--muted-foreground)]">Resumo aluguel</p>
                 <p className="mt-1 text-sm font-medium text-[var(--foreground)]">
@@ -1102,10 +1349,45 @@ export default function PropertyFullEditorClient({
           </div>
 
           <div className="space-y-3">
-            <h3 className="text-sm font-semibold text-[var(--foreground)]">Características</h3>
+            <SectionHeader
+              title="Metragem e especificações"
+              subtitle="Condomínio, tipologia, áreas e estado geral do imóvel."
+              icon={
+                <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M7 7h10M7 12h6m-6 5h10M4 4h16v16H4z"
+                  />
+                </svg>
+              }
+            />
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+              <MoneyInput
+                label="Condomínio"
+                value={form.condo_fee}
+                disabled={!isEditing}
+                onChange={(value) => setForm((prev) => ({ ...prev, condo_fee: value }))}
+                onBlur={() =>
+                  setForm((prev) => ({
+                    ...prev,
+                    condo_fee: formatBRL(parseBRL(prev.condo_fee) ?? null)
+                  }))
+                }
+              />
               <Input
-                label="Area do terreno (m2)"
+                label="Área privativa (m2)"
+                value={form.area_m2}
+                type="number"
+                inputMode="decimal"
+                disabled={!isEditing}
+                onChange={(event) =>
+                  setForm((prev) => ({ ...prev, area_m2: event.target.value }))
+                }
+              />
+              <Input
+                label="Área do terreno (m2)"
                 value={form.land_area_m2}
                 type="number"
                 inputMode="decimal"
@@ -1115,21 +1397,13 @@ export default function PropertyFullEditorClient({
                 }
               />
               <Input
-                label="Area construida (m2)"
+                label="Área construída (m2)"
                 value={form.built_area_m2}
                 type="number"
                 inputMode="decimal"
                 disabled={!isEditing}
                 onChange={(event) =>
                   setForm((prev) => ({ ...prev, built_area_m2: event.target.value }))
-                }
-              />
-              <Input
-                label="Padrão do imóvel"
-                value={form.property_standard}
-                disabled={!isEditing}
-                onChange={(event) =>
-                  setForm((prev) => ({ ...prev, property_standard: event.target.value }))
                 }
               />
               <label className="flex items-center gap-2 text-sm text-[var(--foreground)]">
@@ -1230,7 +1504,20 @@ export default function PropertyFullEditorClient({
           </div>
 
           <div className="space-y-3">
-            <h3 className="text-sm font-semibold text-[var(--foreground)]">Jurídico/Registro</h3>
+            <SectionHeader
+              title="Registro e Detalhes"
+              subtitle="Matrícula, cartório e informações fiscais do imóvel."
+              icon={
+                <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M9 12h6m-6 4h6M7 4h10a2 2 0 012 2v12a2 2 0 01-2 2H7a2 2 0 01-2-2V6a2 2 0 012-2z"
+                  />
+                </svg>
+              }
+            />
             {!legalDataRestricted ? (
               <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
                 <Input
@@ -1288,25 +1575,17 @@ export default function PropertyFullEditorClient({
               </div>
             )}
           </div>
-
-          <div className="space-y-3">
-            <h3 className="text-sm font-semibold text-[var(--foreground)]">Metadados</h3>
-            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-              <Input label="Criado em" value={form.created_at} disabled />
-              <Input label="Atualizado em" value={form.updated_at} disabled />
-            </div>
-          </div>
         </CardContent>
       </Card>
 
       <Card>
         <CardHeader>
-          <CardTitle className="text-base">Dados do banco (debug)</CardTitle>
+          <CardTitle className="text-base">Dados técnicos e históricos</CardTitle>
         </CardHeader>
         <CardContent>
           <details>
             <summary className="cursor-pointer text-sm font-medium text-[var(--foreground)]">
-              Ver campos do banco
+              Ver dados técnicos (banco + metadados)
             </summary>
             <div className="mt-4">
               <KeyValueList data={debugData} labelMap={debugLabelMap} valueMap={debugValueMap} />

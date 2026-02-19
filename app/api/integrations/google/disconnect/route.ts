@@ -24,7 +24,7 @@ export async function POST() {
     } = await supabase.auth.getUser()
 
     if (!user) {
-      return NextResponse.json({ error: 'Nao autenticado.' }, { status: 401 })
+      return NextResponse.json({ error: 'Não autenticado.' }, { status: 401 })
     }
 
     const { data: integration } = await supabase

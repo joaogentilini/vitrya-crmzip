@@ -209,18 +209,18 @@ export function PerfilClient({
       {isAdmin && (
         <Card>
           <CardHeader>
-            <CardTitle>Integracoes</CardTitle>
+            <CardTitle>Integrações</CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="flex items-center justify-between gap-3">
               <div>
                 <p className="text-sm font-semibold text-[var(--foreground)]">Google Agenda</p>
                 <p className="text-xs text-[var(--muted-foreground)]">
-                  Ao criar/reagendar tarefa para o usuario responsavel, a plataforma sincroniza na agenda Google dele.
+                  Ao criar/reagendar tarefa para o usuário responsável, a plataforma sincroniza na agenda Google dele.
                 </p>
               </div>
               <Badge variant={googleCalendar.connected ? 'default' : 'secondary'}>
-                {googleCalendar.connected ? 'Conectada' : 'Nao conectada'}
+                {googleCalendar.connected ? 'Conectada' : 'Não conectada'}
               </Badge>
             </div>
 
@@ -233,10 +233,10 @@ export function PerfilClient({
                   Conectada em: {formatDateTime(googleCalendar.connectedAt)}
                 </p>
                 <p className="text-xs text-[var(--muted-foreground)]">
-                  Ultima atualizacao: {formatDateTime(googleCalendar.updatedAt)}
+                  Ultima atualização: {formatDateTime(googleCalendar.updatedAt)}
                 </p>
                 <p className="text-xs text-[var(--muted-foreground)] mt-1">
-                  Sync ativo: {googleCalendar.syncEnabled ? 'Sim' : 'Nao'} | Auto tarefa: {googleCalendar.autoCreateFromTasks ? 'Sim' : 'Nao'}
+                  Sync ativo: {googleCalendar.syncEnabled ? 'Sim' : 'Não'} | Auto tarefa: {googleCalendar.autoCreateFromTasks ? 'Sim' : 'Não'}
                 </p>
               </div>
             ) : null}
