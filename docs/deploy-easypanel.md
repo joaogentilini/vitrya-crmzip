@@ -14,6 +14,14 @@ SUPABASE_SERVICE_ROLE_KEY=eyJhbGciOiJ...
 
 ```env
 NODE_ENV=production
+PORTAL_INTEGRATIONS_ENABLED=0
+GRUPO_OLX_WEBHOOK_TOKEN=troque-este-token
+GRUPO_OLX_FEED_TOKEN=troque-este-token
+OLX_WEBHOOK_TOKEN=troque-este-token
+# Futuro (OAuth OLX)
+# OLX_CLIENT_ID=...
+# OLX_CLIENT_SECRET=...
+# OLX_REDIRECT_URI=...
 ```
 
 ## Configuração no EasyPanel

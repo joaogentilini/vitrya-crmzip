@@ -252,7 +252,7 @@ export default async function PropertyDetailPage({
           </div>
         </div>
         <Link
-          href={`${siteBase}/imoveis/${propertyId}`}
+          href={`${siteBase}/imóveis/${propertyId}`}
           target="_blank"
           rel="noreferrer"
           className="rounded-[var(--radius)] bg-[#17BEBB] px-4 py-2 text-sm font-medium text-white"

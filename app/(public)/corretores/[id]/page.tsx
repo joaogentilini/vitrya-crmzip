@@ -125,7 +125,7 @@ export default async function PublicBrokerPage({
       <main className="pv-main">
         <div className="pv-container">
           <div className="pv-glass">
-            <h1 style={{ margin: 0 }}>Corretor nao encontrado</h1>
+            <h1 style={{ margin: 0 }}>Corretor não encontrado</h1>
             <p style={{ opacity: 0.75 }}>ID: {id}</p>
             {brokerError ? (
               <pre style={{ marginTop: 12, color: "crimson" }}>
@@ -133,7 +133,7 @@ export default async function PublicBrokerPage({
               </pre>
             ) : null}
             <Link
-              href="/imoveis"
+              href="/imóveis"
               style={{
                 display: "inline-block",
                 marginTop: 12,
@@ -197,7 +197,7 @@ export default async function PublicBrokerPage({
       <main className="pv-main">
         <div className="pv-container">
           <div className="pv-glass">
-            <h1 style={{ margin: 0 }}>Erro ao carregar imoveis</h1>
+            <h1 style={{ margin: 0 }}>Erro ao carregar imóveis</h1>
             <pre style={{ marginTop: 12, color: "crimson" }}>
               {JSON.stringify(propertiesError, null, 2)}
             </pre>
@@ -293,7 +293,7 @@ export default async function PublicBrokerPage({
           >
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
               <Link
-                href="/imoveis"
+                href="/imóveis"
                 style={{
                   color: "var(--cobalt)",
                   textDecoration: "none",
@@ -312,7 +312,7 @@ export default async function PublicBrokerPage({
                   background: "rgba(255,255,255,.65)",
                 }}
               >
-                Perfil publico
+                Perfil público
               </span>
             </div>
 
@@ -429,7 +429,7 @@ export default async function PublicBrokerPage({
                     <p style={{ margin: 0, lineHeight: 1.65, opacity: 0.88 }}>{b.bio}</p>
                   ) : (
                     <p style={{ margin: 0, lineHeight: 1.65, opacity: 0.7 }}>
-                      Este corretor ainda nao adicionou uma bio publica.
+                      Este corretor ainda não adicionou uma bio pública.
                     </p>
                   )}
                 </div>
@@ -514,19 +514,19 @@ export default async function PublicBrokerPage({
 
         <div className="pv-glass" style={{ marginTop: 20 }}>
           <div style={{ marginBottom: "1.25rem", display: "grid", gap: 4 }}>
-            <h2 style={{ marginTop: 0, marginBottom: 0 }}>Imoveis deste corretor</h2>
+            <h2 style={{ marginTop: 0, marginBottom: 0 }}>Imóveis deste corretor</h2>
             <p style={{ margin: 0, opacity: 0.75 }}>
-              {propertiesWithImages.length} imovel(is) ativo(s) na vitrine
+              {propertiesWithImages.length} imóvel(is) ativo(s) na vitrine
             </p>
           </div>
 
           {propertiesWithImages.length === 0 ? (
             <div style={{ textAlign: "center", padding: "2.5rem 1rem" }}>
-              <h3 style={{ marginTop: 0 }}>Nenhum imovel publicado</h3>
+              <h3 style={{ marginTop: 0 }}>Nenhum imóvel publicado</h3>
               <p style={{ margin: "0.5rem 0 1rem", opacity: 0.8 }}>
                 Volte em breve para novas oportunidades.
               </p>
-              <Link href="/imoveis" style={{ color: "var(--cobalt)", fontWeight: 800 }}>
+              <Link href="/imóveis" style={{ color: "var(--cobalt)", fontWeight: 800 }}>
                 Voltar para vitrine
               </Link>
             </div>
@@ -536,7 +536,7 @@ export default async function PublicBrokerPage({
                 const location =
                   [p.neighborhood, p.city].filter(Boolean).join(" • ") ||
                   p.address ||
-                  "Localizacao nao informada";
+                  "Localizacao não informada";
 
                 const price =
                   p.purpose === "rent"
@@ -544,17 +544,17 @@ export default async function PublicBrokerPage({
                     : fmtMoney(p.price);
 
                 return (
-                  <Link key={p.id} href={`/imoveis/${p.id}`} className="pv-card">
+                  <Link key={p.id} href={`/imóveis/${p.id}`} className="pv-card">
                     <div className="pv-thumb" style={{ position: "relative" }}>
                       {p.imageUrls.length ? (
-                        <ThumbCarousel images={p.imageUrls} alt={p.title ?? "Imovel"} />
+                        <ThumbCarousel images={p.imageUrls} alt={p.title ?? "Imóvel"} />
                       ) : (
                         <span>Sem foto</span>
                       )}
                     </div>
 
                     <div className="pv-cardbody">
-                      <h3 className="pv-cardtitle">{p.title ?? "Imovel"}</h3>
+                      <h3 className="pv-cardtitle">{p.title ?? "Imóvel"}</h3>
 
                       <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 4 }}>
                         {p.property_category_name ? (

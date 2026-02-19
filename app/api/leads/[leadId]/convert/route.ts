@@ -19,6 +19,25 @@ async function getAdminSupabase() {
 const CLIENT_TYPES = ['buyer', 'seller', 'tenant', 'landlord', 'investor'] as const
 type ClientType = typeof CLIENT_TYPES[number]
 
+function normalizeDigits(value: string | null | undefined): string | null {
+  if (!value) return null
+  const digits = value.replace(/\D/g, '')
+  return digits || null
+}
+
+function isSchemaMissingError(code: string | null | undefined, message: string | null | undefined): boolean {
+  const normalizedCode = String(code || '')
+  const normalizedMessage = String(message || '').toLowerCase()
+  return (
+    normalizedCode === '42P01' ||
+    normalizedCode === '42703' ||
+    normalizedCode === 'PGRST204' ||
+    normalizedCode === 'PGRST205' ||
+    normalizedMessage.includes('does not exist') ||
+    normalizedMessage.includes('schema cache')
+  )
+}
+
 export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ leadId: string }> }
@@ -117,34 +136,77 @@ export async function POST(
       }, { status: 403 })
     }
 
+    const cpfDigits = normalizeDigits(cpf || null)
+    const cnpjDigits = normalizeDigits(cnpj || null)
     let personId = lead.person_id
 
     if (!personId) {
-      // Try to find existing person by phone_e164 first, then by email
-      let existingPerson = null
+      let existingPerson: { id: string } | null = null
 
-      if (lead.phone_e164) {
-        const { data: personByPhone } = await adminSupabase
+      if (personType === 'PF' && cpfDigits) {
+        const personByCpf = await adminSupabase
+          .from('person_financing_profiles')
+          .select('person_id')
+          .eq('cpf', cpfDigits)
+          .limit(1)
+          .maybeSingle()
+
+        if (personByCpf.data?.person_id) {
+          existingPerson = { id: personByCpf.data.person_id as string }
+        } else if (personByCpf.error && !isSchemaMissingError(personByCpf.error.code, personByCpf.error.message)) {
+          return NextResponse.json({ error: personByCpf.error.message || 'Erro ao buscar pessoa por CPF' }, { status: 500 })
+        }
+      }
+
+      if (!existingPerson && personType === 'PJ' && cnpjDigits) {
+        const personByCnpj = await adminSupabase
+          .from('person_company_profiles')
+          .select('person_id')
+          .eq('cnpj', cnpjDigits)
+          .limit(1)
+          .maybeSingle()
+
+        if (personByCnpj.data?.person_id) {
+          existingPerson = { id: personByCnpj.data.person_id as string }
+        } else if (personByCnpj.error && !isSchemaMissingError(personByCnpj.error.code, personByCnpj.error.message)) {
+          return NextResponse.json({ error: personByCnpj.error.message || 'Erro ao buscar pessoa por CNPJ' }, { status: 500 })
+        }
+      }
+
+      if (!existingPerson && lead.phone_e164) {
+        const personByPhone = await adminSupabase
           .from('people')
           .select('id')
           .eq('phone_e164', lead.phone_e164)
-          .single()
-        existingPerson = personByPhone
+          .limit(1)
+          .maybeSingle()
+
+        if (personByPhone.data?.id) {
+          existingPerson = { id: personByPhone.data.id as string }
+        } else if (personByPhone.error && !isSchemaMissingError(personByPhone.error.code, personByPhone.error.message)) {
+          return NextResponse.json({ error: personByPhone.error.message || 'Erro ao buscar pessoa por telefone' }, { status: 500 })
+        }
       }
 
       if (!existingPerson && lead.email) {
-        const { data: personByEmail } = await adminSupabase
+        const personByEmail = await adminSupabase
           .from('people')
           .select('id')
           .ilike('email', lead.email)
-          .single()
-        existingPerson = personByEmail
+          .limit(1)
+          .maybeSingle()
+
+        if (personByEmail.data?.id) {
+          existingPerson = { id: personByEmail.data.id as string }
+        } else if (personByEmail.error && !isSchemaMissingError(personByEmail.error.code, personByEmail.error.message)) {
+          return NextResponse.json({ error: personByEmail.error.message || 'Erro ao buscar pessoa por email' }, { status: 500 })
+        }
       }
 
       if (existingPerson) {
         personId = existingPerson.id
       } else {
-        const documentId = personType === 'PJ' ? cnpj : cpf
+        const documentId = personType === 'PJ' ? cnpjDigits : cpfDigits
         const { data: newPerson, error: personError } = await adminSupabase
           .from('people')
           .insert({
@@ -178,7 +240,7 @@ export async function POST(
           .upsert(
             {
               person_id: personId,
-              cpf: cpf || null,
+              cpf: cpfDigits || null,
               rg: rg || null,
               rg_issuing_org: rgIssuingOrg || null,
               marital_status: maritalStatus || null,
@@ -196,7 +258,7 @@ export async function POST(
           .upsert(
             {
               person_id: personId,
-              cnpj: cnpj || null,
+              cnpj: cnpjDigits || null,
               legal_name: legalName || null,
               trade_name: tradeName || null,
               state_registration: stateRegistration || null,

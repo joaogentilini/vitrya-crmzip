@@ -1,4 +1,4 @@
-day_offset,position,channel,is_required,title,whatsapp_text,reel_script,ads_checklist
+(day_offset,position,channel,is_required,title,whatsapp_text,reel_script,ads_checklist
 35,10,CRM,true,Revisar mensagens/atendimento e tempo de resposta,,"","SLA: responder em <10 min; templates; follow-up"
 42,20,Reels,true,Reels: “Perguntas frequentes” (IPTU/condomínio/segurança),,"Gancho: '3 perguntas que sempre fazem antes de visitar esse alto padrão'","Legendas; CTA WhatsApp"
 45,30,Ads,true,Remarketing 30–45 dias (engajados e visitantes),,,"Público: engajados 30d; Criativo novo; CTA visitas"

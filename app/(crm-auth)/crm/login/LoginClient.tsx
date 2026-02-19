@@ -93,7 +93,7 @@ export function LoginClient({ nextPath }: LoginClientProps) {
     }
 
     setCodeSent(true)
-    success('Codigo de verificacao enviado para o email.')
+    success('Código de verificacao enviado para o email.')
   }
 
   async function confirmRecovery() {
@@ -103,7 +103,7 @@ export function LoginClient({ nextPath }: LoginClientProps) {
     }
 
     if (!verificationCode.trim()) {
-      showError('Informe o codigo de verificacao.')
+      showError('Informe o código de verificacao.')
       return
     }
 
@@ -113,7 +113,7 @@ export function LoginClient({ nextPath }: LoginClientProps) {
     }
 
     if (newPassword !== confirmPassword) {
-      showError('As senhas nao conferem.')
+      showError('As senhas n?o conferem.')
       return
     }
 
@@ -208,8 +208,8 @@ export function LoginClient({ nextPath }: LoginClientProps) {
               <CardTitle className="text-2xl">Recuperar Senha</CardTitle>
               <CardDescription>
                 {!codeSent
-                  ? 'Informe o email para receber o codigo de verificacao.'
-                  : 'Informe o codigo recebido e defina a nova senha.'}
+                  ? 'Informe o email para receber o código de verificacao.'
+                  : 'Informe o código recebido e defina a nova senha.'}
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
@@ -227,8 +227,8 @@ export function LoginClient({ nextPath }: LoginClientProps) {
                 <>
                   <Input
                     type="text"
-                    label="Codigo de verificacao"
-                    placeholder="Digite o codigo"
+                    label="Código de verificacao"
+                    placeholder="Digite o código"
                     value={verificationCode}
                     onChange={(e) => setVerificationCode(e.target.value)}
                     disabled={loading}
@@ -257,12 +257,12 @@ export function LoginClient({ nextPath }: LoginClientProps) {
             </CardContent>
             <CardFooter className="flex-col gap-3">
               <Button type="submit" className="w-full" loading={loading}>
-                {!codeSent ? 'Enviar Codigo' : 'Redefinir Senha'}
+                {!codeSent ? 'Enviar Código' : 'Redefinir Senha'}
               </Button>
 
               {codeSent ? (
                 <Button type="button" variant="ghost" className="w-full" onClick={sendRecoveryCode} disabled={loading}>
-                  Reenviar Codigo
+                  Reenviar Código
                 </Button>
               ) : null}
 
@@ -276,3 +276,4 @@ export function LoginClient({ nextPath }: LoginClientProps) {
     </main>
   )
 }
+

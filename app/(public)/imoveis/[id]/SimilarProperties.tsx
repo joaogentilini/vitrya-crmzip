@@ -108,7 +108,7 @@ export default async function SimilarProperties({
 
       return {
         id: String(p.id),
-        href: `/imoveis/${p.id}`,
+        href: `/imóveis/${p.id}`,
         title: p.title ?? "Imóvel",
         location,
         price,

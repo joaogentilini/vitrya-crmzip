@@ -145,7 +145,7 @@ export function ProfileClient({ profile }: ProfileClientProps) {
 
   const handleAvatarUpload = async (file: File) => {
     if (!ALLOWED_MIME_TYPES.includes(file.type)) {
-      showError('Formato invalido. Use JPG, PNG ou WEBP.')
+      showError('Formato inválido. Use JPG, PNG ou WEBP.')
       return
     }
 
@@ -232,7 +232,7 @@ export function ProfileClient({ profile }: ProfileClientProps) {
     }
 
     setAvatarUploadMessage(null)
-    success('Perfil publico atualizado.')
+    success('Perfil público atualizado.')
     router.refresh()
     setIsSaving(false)
   }
@@ -268,9 +268,9 @@ export function ProfileClient({ profile }: ProfileClientProps) {
     setIsCopyingPublicLink(true)
     try {
       await navigator.clipboard.writeText(`${window.location.origin}${publicProfilePath}`)
-      success('Link publico copiado.')
+      success('Link público copiado.')
     } catch {
-      showError('Nao foi possivel copiar o link.')
+      showError('Não foi possível copiar o link.')
     } finally {
       setIsCopyingPublicLink(false)
     }
@@ -281,17 +281,17 @@ export function ProfileClient({ profile }: ProfileClientProps) {
       <div className="rounded-[var(--radius-lg)] border border-[var(--border)] bg-[var(--card)] p-4 sm:p-5">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
           <div className="space-y-1">
-            <h1 className="text-2xl font-bold">Perfil publico do corretor</h1>
+            <h1 className="text-2xl font-bold">Perfil público do corretor</h1>
             <p className="text-sm text-[var(--muted-foreground)]">
-              Esses dados aparecem no card do corretor no imovel e na pagina publica do corretor.
+              Esses dados aparecem no card do corretor no imóvel e na pagina pública do corretor.
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
             <Button type="button" variant="outline" onClick={handleCopyPublicLink} disabled={isCopyingPublicLink}>
-              {isCopyingPublicLink ? 'Copiando...' : 'Copiar link publico'}
+              {isCopyingPublicLink ? 'Copiando...' : 'Copiar link público'}
             </Button>
             <Button type="button" onClick={handleOpenPublicProfile}>
-              Ver perfil publico
+              Ver perfil público
             </Button>
           </div>
         </div>
@@ -313,7 +313,7 @@ export function ProfileClient({ profile }: ProfileClientProps) {
         <div className="space-y-6">
           <Card>
             <CardHeader>
-              <CardTitle>Identidade publica</CardTitle>
+              <CardTitle>Identidade pública</CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="flex flex-col gap-4 sm:flex-row sm:items-start">
@@ -353,7 +353,7 @@ export function ProfileClient({ profile }: ProfileClientProps) {
                       className="block w-full text-sm text-[var(--foreground)] file:mr-3 file:rounded-[var(--radius)] file:border file:border-[var(--border)] file:bg-[var(--card)] file:px-3 file:py-1.5 file:text-sm file:font-medium file:text-[var(--foreground)] hover:file:bg-[var(--accent)]"
                     />
                     <p className="text-xs text-[var(--muted-foreground)]">
-                      Formatos: JPG, PNG, WEBP. Tamanho maximo: 5MB.
+                      Formatos: JPG, PNG, WEBP. Tamanho máximo: 5MB.
                     </p>
                   </div>
                   <div className="flex flex-wrap gap-2">
@@ -373,7 +373,7 @@ export function ProfileClient({ profile }: ProfileClientProps) {
               </div>
 
               <Input
-                label="Nome publico"
+                label="Nome público"
                 value={form.public_name}
                 onChange={(e) => handleChange('public_name', e.target.value)}
                 placeholder="Como deseja aparecer na vitrine"
@@ -427,7 +427,7 @@ export function ProfileClient({ profile }: ProfileClientProps) {
                 label="Headline"
                 value={form.tagline}
                 onChange={(e) => handleChange('tagline', e.target.value)}
-                placeholder="Ex: Especialista em imoveis de alto padrao"
+                placeholder="Ex: Especialista em imóveis de alto padrao"
               />
               <Textarea
                 label="Bio"
@@ -440,7 +440,7 @@ export function ProfileClient({ profile }: ProfileClientProps) {
 
           <Card>
             <CardHeader>
-              <CardTitle>Contato publico</CardTitle>
+              <CardTitle>Contato público</CardTitle>
             </CardHeader>
             <CardContent className="grid gap-4 sm:grid-cols-2">
               <Input
@@ -535,7 +535,7 @@ export function ProfileClient({ profile }: ProfileClientProps) {
                   </div>
                   <div className="min-w-0">
                     <p className="font-semibold text-[var(--foreground)] truncate">{previewName}</p>
-                    <p className="text-xs text-[var(--muted-foreground)]">{previewCreci ? `CRECI ${previewCreci}` : 'CRECI nao informado'}</p>
+                    <p className="text-xs text-[var(--muted-foreground)]">{previewCreci ? `CRECI ${previewCreci}` : 'CRECI não informado'}</p>
                   </div>
                 </div>
 
@@ -546,7 +546,7 @@ export function ProfileClient({ profile }: ProfileClientProps) {
                 {previewBio ? (
                   <p className="text-sm text-[var(--muted-foreground)]">{previewBio}</p>
                 ) : (
-                  <p className="text-sm text-[var(--muted-foreground)]">Adicione uma bio para aparecer no perfil publico.</p>
+                  <p className="text-sm text-[var(--muted-foreground)]">Adicione uma bio para aparecer no perfil público.</p>
                 )}
 
                 <div className="space-y-1 text-sm">
@@ -569,18 +569,18 @@ export function ProfileClient({ profile }: ProfileClientProps) {
               </div>
 
               <Button type="button" className="w-full" onClick={handleOpenPublicProfile}>
-                Ver perfil publico
+                Ver perfil público
               </Button>
             </CardContent>
           </Card>
 
           <Card>
             <CardHeader>
-              <CardTitle>Campos publicos em uso</CardTitle>
+              <CardTitle>Campos públicos em uso</CardTitle>
             </CardHeader>
             <CardContent className="text-sm text-[var(--muted-foreground)] space-y-2">
-              <p>Card do imovel: nome publico, avatar, CRECI, telefone/WhatsApp, bio e redes.</p>
-              <p>Pagina do corretor: todos os campos acima + email publico e imoveis ativos.</p>
+              <p>Card do imóvel: nome público, avatar, CRECI, telefone/WhatsApp, bio e redes.</p>
+              <p>Pagina do corretor: todos os campos acima + email público e imóveis ativos.</p>
             </CardContent>
           </Card>
         </div>

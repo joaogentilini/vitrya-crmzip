@@ -24,9 +24,9 @@ export default function PublicSearchPage() {
     if (maxPrice) params.set("max", maxPrice);
     if (bedrooms) params.set("bedrooms", bedrooms);
 
-    // Resultados em /imoveis/resultados
+    // Resultados em /imóveis/resultados
     const qs = params.toString();
-    router.push(qs ? `/imoveis/resultados?${qs}` : "/imoveis/resultados");
+    router.push(qs ? `/imóveis/resultados?${qs}` : "/imóveis/resultados");
   };
 
   return (

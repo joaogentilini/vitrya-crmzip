@@ -228,7 +228,7 @@ export async function GET(request: NextRequest) {
       items.push({
         id: `lead-${row.id}-${isNewLead ? 'new' : 'followup'}-${stableEventId}`,
         kind: isNewLead ? 'lead_new' : 'lead_followup',
-        title: isNewLead ? 'Novo lead para atender' : 'Lead sem atualizacao recente',
+        title: isNewLead ? 'Novo lead para atender' : 'Lead sem atualização recente',
         message: isNewLead
           ? `${leadTitle} (ID ${row.id.slice(0, 8)})`
           : `${leadTitle} (ID ${row.id.slice(0, 8)}) precisa de retorno`,

@@ -363,8 +363,14 @@ export default async function ErpFinanceiroPage({ searchParams }: PageProps) {
       toFiniteNumber(row.commission_percent) ?? (baseValue > 0 ? (commissionValue / baseValue) * 100 : 0)
 
     const propertyId = typeof row.property_id === 'string' ? row.property_id : null
+    const sourceType = typeof row.source_type === 'string' ? row.source_type : null
     const categoryId = propertyId ? propertyCategoryByPropertyId.get(propertyId) ?? null : null
-    const categoryName = categoryId ? categoryNameById.get(categoryId) ?? 'Sem categoria' : 'Sem categoria'
+    const categoryName =
+      sourceType === 'incorporation_unit'
+        ? 'Incorporacao'
+        : categoryId
+        ? categoryNameById.get(categoryId) ?? 'Sem categoria'
+        : 'Sem categoria'
 
     normalizedProposals.push({
       id,
@@ -405,7 +411,7 @@ export default async function ErpFinanceiroPage({ searchParams }: PageProps) {
         <div className="space-y-4">
           <h1 className="text-xl font-semibold text-slate-900">Financeiro</h1>
           <p className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">
-            Erro ao carregar pagamentos de comissao: {paymentsError.message}
+            Erro ao carregar pagamentos de comissão: {paymentsError.message}
           </p>
         </div>
       )
@@ -513,7 +519,7 @@ export default async function ErpFinanceiroPage({ searchParams }: PageProps) {
       <div className="space-y-2">
         <h1 className="text-xl font-semibold text-slate-900">Financeiro</h1>
         <p className="text-sm text-slate-600">
-          {selectedBrokerName} - intervalo {rangeStart.toLocaleDateString('pt-BR')} ate {rangeEnd.toLocaleDateString('pt-BR')}
+          {selectedBrokerName} - intervalo {rangeStart.toLocaleDateString('pt-BR')} até {rangeEnd.toLocaleDateString('pt-BR')}
         </p>
       </div>
 
@@ -534,7 +540,7 @@ export default async function ErpFinanceiroPage({ searchParams }: PageProps) {
             </label>
 
             <label className="space-y-1 text-xs text-slate-600">
-              <span>Ate</span>
+              <span>Até</span>
               <input
                 type="date"
                 name="to"
@@ -564,7 +570,7 @@ export default async function ErpFinanceiroPage({ searchParams }: PageProps) {
             )}
 
             <label className="space-y-1 text-xs text-slate-600">
-              <span>Meta de comissao (R$)</span>
+              <span>Meta de comissão (R$)</span>
               <input
                 type="number"
                 step="0.01"
@@ -593,7 +599,7 @@ export default async function ErpFinanceiroPage({ searchParams }: PageProps) {
 
           {!paymentsTableAvailable ? (
             <p className="mt-3 rounded-md border border-amber-200 bg-amber-50 p-2 text-xs text-amber-800">
-              A tabela `broker_commission_payments` ainda nao existe neste banco. Os indicadores de recebido/pendente estao em modo estimado.
+              A tabela `broker_commission_payments` ainda não existe neste banco. Os indicadores de recebido/pendente estao em modo estimado.
             </p>
           ) : null}
         </CardContent>
@@ -601,22 +607,22 @@ export default async function ErpFinanceiroPage({ searchParams }: PageProps) {
 
       <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
         <MetricCard
-          label="Comissao total da carteira"
+          label="Comissão total da carteira"
           value={formatCurrency(totalCommissionPortfolio)}
           hint={`${normalizedProposals.length} venda(s) aprovada(s)`}
         />
         <MetricCard
-          label="Comissao recebida no periodo"
+          label="Comissão recebida no periodo"
           value={formatCurrency(receivedInRange)}
           hint={paymentsTableAvailable ? 'Calculado por pagamentos recebidos.' : 'Estimativa sem ledger financeiro.'}
         />
         <MetricCard
-          label="Comissao pendente"
+          label="Comissão pendente"
           value={formatCurrency(pendingCommission)}
           hint={paymentsTableAvailable ? 'Pagamentos com status diferente de recebido.' : 'Carteira menos recebido.'}
         />
         <MetricCard
-          label="Meta de comissao"
+          label="Meta de comissão"
           value={formatCurrency(goalCommission)}
           hint={goalRemaining > 0 ? `Faltam ${formatCurrency(goalRemaining)} (${formatPercent(goalProgress)}).` : `Meta batida (${formatPercent(goalProgress)}).`}
         />
@@ -632,11 +638,11 @@ export default async function ErpFinanceiroPage({ searchParams }: PageProps) {
             <div className="text-2xl font-bold text-slate-900">{intervalSalesCount}</div>
           </div>
           <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
-            <div className="text-xs text-slate-500">Ticket medio</div>
+            <div className="text-xs text-slate-500">Ticket médio</div>
             <div className="text-2xl font-bold text-slate-900">{formatCurrency(intervalTicketAverage)}</div>
           </div>
           <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
-            <div className="text-xs text-slate-500">Media de comissao</div>
+            <div className="text-xs text-slate-500">Media de comissão</div>
             <div className="text-2xl font-bold text-slate-900">{formatPercent(intervalCommissionAverage)}</div>
           </div>
         </CardContent>
@@ -652,11 +658,11 @@ export default async function ErpFinanceiroPage({ searchParams }: PageProps) {
         />
 
         <BarList
-          title="Ticket medio por intervalo"
+          title="Ticket médio por intervalo"
           subtitle={bucketMode === 'day' ? 'Media diaria por vendas aprovadas.' : 'Media mensal por vendas aprovadas.'}
           data={ticketAverageSeries}
           formatter={formatCurrency}
-          emptyLabel="Sem vendas para calcular ticket medio."
+          emptyLabel="Sem vendas para calcular ticket médio."
         />
 
         <BarList
@@ -668,20 +674,20 @@ export default async function ErpFinanceiroPage({ searchParams }: PageProps) {
         />
 
         <BarList
-          title="Comissao por categoria"
-          subtitle="Comissao do corretor por categoria no intervalo."
+          title="Comissão por categoria"
+          subtitle="Comissão do corretor por categoria no intervalo."
           data={commissionByCategory}
           formatter={formatCurrency}
-          emptyLabel="Sem comissao por categoria no periodo."
+          emptyLabel="Sem comissão por categoria no periodo."
         />
       </div>
 
       <BarList
-        title="Media de comissao (%) por intervalo"
-        subtitle={bucketMode === 'day' ? 'Media diaria de percentual de comissao.' : 'Media mensal de percentual de comissao.'}
+        title="Media de comissão (%) por intervalo"
+        subtitle={bucketMode === 'day' ? 'Media diaria de percentual de comissão.' : 'Media mensal de percentual de comissão.'}
         data={averageCommissionSeries}
         formatter={formatPercent}
-        emptyLabel="Sem dados de comissao para o periodo."
+        emptyLabel="Sem dados de comissão para o periodo."
       />
     </div>
   )

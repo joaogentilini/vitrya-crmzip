@@ -9,7 +9,9 @@ const nextConfig = {
     'miniature-umbrella-5gjwjxq64579hv569-3000.app.github.dev',
   ],
   experimental: {
+    proxyClientMaxBodySize: '40mb',
     serverActions: {
+      bodySizeLimit: '40mb',
       allowedOrigins: [
         '922b1465-19cc-4a06-8409-2f63c03ac2d0-00-3mrljbh8zid2i.spock.replit.dev:5000',
         '922b1465-19cc-4a06-8409-2f63c03ac2d0-00-3mrljbh8zid2i.spock.replit.dev',

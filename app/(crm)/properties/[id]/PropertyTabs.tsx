@@ -132,7 +132,7 @@ export default function PropertyTabs({
       ? publicationDays === null
         ? "Tempo sem data"
         : `Publicado ha ${publicationDays} dia${publicationDays === 1 ? "" : "s"}`
-      : "Nao publicado"
+      : "Não publicado"
 
   useEffect(() => {
     if (!tabs.some((item) => item.key === tab)) {

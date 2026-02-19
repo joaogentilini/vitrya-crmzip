@@ -25,7 +25,7 @@ interface ChecklistResult {
   missing: string[]
 }
 
-interface ImovelDetailClientProps {
+interface ImóvelDetailClientProps {
   property: AnyRow
   media: PropertyMediaRow[]
   checklist: ChecklistResult
@@ -143,12 +143,12 @@ function KeyValueList({
   )
 }
 
-export default function ImovelDetailClient({
+export default function ImóvelDetailClient({
   property,
   media,
   checklist,
   propertyCategories
-}: ImovelDetailClientProps) {
+}: ImóvelDetailClientProps) {
   const { success: showSuccess, error: showError } = useToast()
   const [isEditing, setIsEditing] = useState(false)
   const [isSaving, startTransition] = useTransition()

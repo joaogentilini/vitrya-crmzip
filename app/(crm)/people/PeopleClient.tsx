@@ -96,7 +96,8 @@ export function PeopleClient({
     proprietario: 'Proprietário',
     corretor: 'Corretor',
     fornecedor: 'Fornecedor',
-    parceiro: 'Parceiro'
+    parceiro: 'Parceiro',
+    interessado_comprador: 'Interessado/Comprador'
   }
 
   const getInitials = (name?: string | null) => {

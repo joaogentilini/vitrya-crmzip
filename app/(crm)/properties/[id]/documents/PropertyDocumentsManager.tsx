@@ -132,11 +132,11 @@ export default function PropertyDocumentsManager({ propertyId }: PropertyDocumen
           ])
 
         if (propertyError) {
-          throw new Error(`Erro ao carregar dados do imovel: ${propertyError.message}`)
+          throw new Error(`Erro ao carregar dados do imóvel: ${propertyError.message}`)
         }
 
         if (settingsError) {
-          throw new Error(`Erro ao carregar configuracao de comissao: ${settingsError.message}`)
+          throw new Error(`Erro ao carregar configuração de comissão: ${settingsError.message}`)
         }
 
         const purpose = String(propertyData?.purpose ?? '').toLowerCase()
@@ -215,7 +215,7 @@ export default function PropertyDocumentsManager({ propertyId }: PropertyDocumen
     const { data, error: signError } = await supabase.storage.from('property-documents').createSignedUrl(doc.path, 600)
 
     if (signError || !data?.signedUrl) {
-      setError(`Erro ao gerar URL de preview: ${signError?.message || 'URL nao gerada'}`)
+      setError(`Erro ao gerar URL de preview: ${signError?.message || 'URL não gerada'}`)
       return
     }
 
@@ -288,7 +288,7 @@ export default function PropertyDocumentsManager({ propertyId }: PropertyDocumen
             </div>
 
             <div>
-              <label className="mb-1 block text-sm font-medium text-gray-700">Titulo (opcional)</label>
+              <label className="mb-1 block text-sm font-medium text-gray-700">Título (opcional)</label>
               <Input
                 type="text"
                 value={title}
@@ -309,7 +309,7 @@ export default function PropertyDocumentsManager({ propertyId }: PropertyDocumen
               disabled={uploading}
               className="block w-full text-sm text-gray-500 file:mr-4 file:rounded-md file:border-0 file:bg-[#294487] file:px-4 file:py-2 file:text-sm file:font-semibold file:text-white hover:file:bg-[#1e3366] disabled:cursor-not-allowed disabled:opacity-50"
             />
-            <p className="mt-1 text-xs text-gray-500">PDF ou imagem (JPG, PNG). Maximo recomendado: 10 MB.</p>
+            <p className="mt-1 text-xs text-gray-500">PDF ou imagem (JPG, PNG). Máximo recomendado: 10 MB.</p>
           </div>
 
           <Button onClick={handleUpload} disabled={uploading || !selectedFile} className="w-full md:w-auto">

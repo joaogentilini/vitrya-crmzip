@@ -5,10 +5,20 @@ export type PersonBase = {
   updated_at?: string | null
 }
 
-export const PERSON_KIND_TAGS = ['proprietario', 'corretor', 'fornecedor', 'parceiro'] as const
+export const PERSON_KIND_TAGS = [
+  'proprietario',
+  'corretor',
+  'fornecedor',
+  'parceiro',
+  'interessado_comprador'
+] as const
 export type PersonKindTag = (typeof PERSON_KIND_TAGS)[number]
 export const LEGACY_KIND_TAG_MAP: Record<string, PersonKindTag> = {
-  vendedor: 'proprietario'
+  vendedor: 'proprietario',
+  interessado: 'interessado_comprador',
+  comprador: 'interessado_comprador',
+  buyer: 'interessado_comprador',
+  'interessado/comprador': 'interessado_comprador'
 }
 
 const PERSON_KIND_TAG_SET = new Set(PERSON_KIND_TAGS)

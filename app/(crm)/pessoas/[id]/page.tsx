@@ -168,63 +168,163 @@ export default async function PessoaPage({ params }: PageProps) {
 
   const ownedProperties = (propertiesRes.data as Record<string, unknown>[]) ?? []
   const ownedPropertyIds = ownedProperties.map((row) => row.id).filter(Boolean) as string[]
+  const ownedPropertyIdSet = new Set(ownedPropertyIds)
 
-  const buyerLeadsQuery = supabase
-    .from('leads')
-    .select('id, title, status, property_id, budget_range, created_at')
+  const buyerNegotiationsQuery = supabase
+    .from('property_negotiations')
+    .select('id, property_id, person_id, lead_id, status, created_at, updated_at')
     .eq('person_id', id)
     .order('created_at', { ascending: false })
 
-  const ownerLeadsQuery =
+  const ownerNegotiationsQuery =
     ownedPropertyIds.length > 0
       ? supabase
-          .from('leads')
-          .select('id, title, status, property_id, budget_range, created_at')
+          .from('property_negotiations')
+          .select('id, property_id, person_id, lead_id, status, created_at, updated_at')
           .in('property_id', ownedPropertyIds)
           .order('created_at', { ascending: false })
       : Promise.resolve({ data: [], error: null })
 
-  const [buyerLeadsRes, ownerLeadsRes] = await Promise.all([buyerLeadsQuery, ownerLeadsQuery])
+  const [buyerNegotiationsRes, ownerNegotiationsRes] = await Promise.all([
+    buyerNegotiationsQuery,
+    ownerNegotiationsQuery
+  ])
 
-  const leadMap = new Map<string, Record<string, unknown>>()
-  const buyerLeads = buyerLeadsRes.error ? [] : (buyerLeadsRes.data as Record<string, unknown>[]) ?? []
-  const ownerLeads = ownerLeadsRes.error ? [] : (ownerLeadsRes.data as Record<string, unknown>[]) ?? []
-  for (const row of buyerLeads) {
-    if (row?.id) leadMap.set(String(row.id), row)
+  const negotiationMap = new Map<string, Record<string, unknown>>()
+  const buyerNegotiations = buyerNegotiationsRes.error
+    ? []
+    : (buyerNegotiationsRes.data as Record<string, unknown>[]) ?? []
+  const ownerNegotiations = ownerNegotiationsRes.error
+    ? []
+    : (ownerNegotiationsRes.data as Record<string, unknown>[]) ?? []
+
+  for (const row of [...buyerNegotiations, ...ownerNegotiations]) {
+    if (!row?.id) continue
+    const key = String(row.id)
+    const existing = negotiationMap.get(key)
+    if (!existing) {
+      negotiationMap.set(key, row)
+      continue
+    }
+
+    const existingStamp = Date.parse(String(existing.updated_at ?? existing.created_at ?? ''))
+    const currentStamp = Date.parse(String(row.updated_at ?? row.created_at ?? ''))
+    if (!Number.isNaN(currentStamp) && (Number.isNaN(existingStamp) || currentStamp >= existingStamp)) {
+      negotiationMap.set(key, row)
+    }
   }
-  for (const row of ownerLeads) {
-    if (row?.id) leadMap.set(String(row.id), row)
-  }
 
-  const negotiationsRaw = Array.from(leadMap.values())
-  const negotiationPropertyIds = negotiationsRaw
-    .map((row) => row.property_id)
-    .filter(Boolean) as string[]
+  const negotiationsRaw = Array.from(negotiationMap.values())
+  const negotiationIds = negotiationsRaw.map((row) => String(row.id)).filter(Boolean)
+  const negotiationPropertyIdsUnique = Array.from(
+    new Set(negotiationsRaw.map((row) => String(row.property_id ?? '')).filter(Boolean))
+  )
 
-  const negotiationPropertyIdsUnique = Array.from(new Set(negotiationPropertyIds))
-
-  const negotiationPropertiesRes =
+  const [negotiationPropertiesRes, proposalRowsRes] = await Promise.all([
     negotiationPropertyIdsUnique.length > 0
-      ? await supabase
+      ? supabase
           .from('properties')
           .select('id, title, city, neighborhood')
           .in('id', negotiationPropertyIdsUnique)
-      : { data: [], error: null }
+      : Promise.resolve({ data: [], error: null }),
+    negotiationIds.length > 0
+      ? supabase
+          .from('property_proposals')
+          .select(
+            'id, negotiation_id, status, title, created_at, updated_at, sent_at, commission_value, broker_seller_profile_id, broker_buyer_profile_id'
+          )
+          .in('negotiation_id', negotiationIds)
+      : Promise.resolve({ data: [], error: null })
+  ])
 
   const negotiationPropertyMap = new Map<string, Record<string, unknown>>(
-    ((negotiationPropertiesRes.data as Record<string, unknown>[]) ?? []).map((row) => [
-      String(row.id),
-      row
-    ])
+    ((negotiationPropertiesRes.data as Record<string, unknown>[]) ?? []).map((row) => [String(row.id), row])
   )
 
-  const negotiations = negotiationsRaw.map((row) => {
-    const propertyId = row.property_id as string | null
-    return {
-      ...row,
-      property: propertyId ? negotiationPropertyMap.get(propertyId) ?? null : null,
-      property_title: propertyId ? negotiationPropertyMap.get(propertyId)?.title ?? null : null
+  const proposalByNegotiationId = new Map<string, Record<string, unknown>>()
+  const scoreProposal = (row: Record<string, unknown>) => {
+    const stamp = Date.parse(String(row.updated_at ?? row.sent_at ?? row.created_at ?? ''))
+    return Number.isFinite(stamp) ? stamp : 0
+  }
+
+  for (const proposal of (proposalRowsRes.data as Record<string, unknown>[]) ?? []) {
+    const negotiationId = String(proposal.negotiation_id ?? '')
+    if (!negotiationId) continue
+    const current = proposalByNegotiationId.get(negotiationId)
+    if (!current || scoreProposal(proposal) >= scoreProposal(current)) {
+      proposalByNegotiationId.set(negotiationId, proposal)
     }
+  }
+
+  const proposalIds = Array.from(proposalByNegotiationId.values())
+    .map((proposal) => String(proposal.id ?? ''))
+    .filter(Boolean)
+
+  const proposalPaymentsRes =
+    proposalIds.length > 0
+      ? await supabase
+          .from('property_proposal_payments')
+          .select('proposal_id, amount')
+          .in('proposal_id', proposalIds)
+      : { data: [], error: null }
+
+  const proposalTotalById = new Map<string, number>()
+  for (const payment of (proposalPaymentsRes.data as Array<{ proposal_id: string; amount: number | null }>) ?? []) {
+    const proposalId = String(payment.proposal_id ?? '')
+    if (!proposalId) continue
+    const amount = Number(payment.amount ?? 0)
+    if (!Number.isFinite(amount)) continue
+    proposalTotalById.set(proposalId, (proposalTotalById.get(proposalId) ?? 0) + amount)
+  }
+
+  const negotiations = (
+    negotiationsRaw
+      .map((row) => {
+        const negotiationId = String(row.id ?? '')
+        const propertyId = String(row.property_id ?? '')
+        const proposal = proposalByNegotiationId.get(negotiationId) ?? null
+        if (!proposal) return null
+
+        const proposalId = String(proposal.id ?? '')
+        const paymentTotal = proposalId ? proposalTotalById.get(proposalId) ?? null : null
+        const fallbackTotal = Number(proposal.commission_value ?? 0)
+        const proposalTotalValue =
+          paymentTotal !== null ? paymentTotal : Number.isFinite(fallbackTotal) ? fallbackTotal : null
+
+        const isBuyer = String(row.person_id ?? '') === id
+        const isOwner = !!propertyId && ownedPropertyIdSet.has(propertyId)
+        const involvement =
+          isBuyer && isOwner ? 'buyer_owner' : isBuyer ? 'buyer' : isOwner ? 'owner' : 'participant'
+
+        return {
+          id: negotiationId,
+          property_id: propertyId || null,
+          person_id: row.person_id ?? null,
+          lead_id: row.lead_id ?? null,
+          status: row.status ?? null,
+          created_at: row.created_at ?? null,
+          updated_at: row.updated_at ?? null,
+          property: propertyId ? negotiationPropertyMap.get(propertyId) ?? null : null,
+          property_title: propertyId ? negotiationPropertyMap.get(propertyId)?.title ?? null : null,
+          negotiation_involvement: involvement,
+          proposal_id: proposalId || null,
+          proposal_title: proposal.title ?? null,
+          proposal_status: proposal.status ?? null,
+          proposal_created_at: proposal.created_at ?? null,
+          proposal_updated_at: proposal.updated_at ?? proposal.sent_at ?? proposal.created_at ?? null,
+          proposal_total_value: proposalTotalValue,
+          broker_seller_profile_id: proposal.broker_seller_profile_id ?? null,
+          broker_buyer_profile_id: proposal.broker_buyer_profile_id ?? null
+        } as Record<string, unknown>
+      })
+      .filter((row) => row !== null) as Record<string, unknown>[]
+  ).sort((a, b) => {
+    const aStamp = Date.parse(String(a.proposal_updated_at ?? a.updated_at ?? a.created_at ?? ''))
+    const bStamp = Date.parse(String(b.proposal_updated_at ?? b.updated_at ?? b.created_at ?? ''))
+    if (Number.isNaN(aStamp) && Number.isNaN(bStamp)) return 0
+    if (Number.isNaN(aStamp)) return 1
+    if (Number.isNaN(bStamp)) return -1
+    return bStamp - aStamp
   })
 
   const personForClient = {

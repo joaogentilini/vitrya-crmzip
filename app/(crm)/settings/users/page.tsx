@@ -7,6 +7,33 @@ import { redirect } from 'next/navigation'
 import { UsersClient } from './UsersClient'
 import { ensureUserProfile } from '@/lib/auth'
 
+type UserRole = 'admin' | 'gestor' | 'corretor'
+
+interface DbUser {
+  id: string
+  full_name: string
+  email: string | null
+  phone_e164: string | null
+  role: UserRole
+  is_active: boolean
+  created_at: string
+  updated_at: string
+  broker_commission_level?: string | null
+  broker_commission_percent?: number | null
+  company_commission_percent?: number | null
+  partner_commission_percent?: number | null
+}
+
+interface GoogleCalendarSummary {
+  connected: boolean
+  google_email: string | null
+  sync_enabled: boolean
+  auto_create_from_tasks: boolean
+  connected_at: string | null
+  updated_at: string | null
+  last_error: string | null
+}
+
 export default async function UsersPage({
   searchParams,
 }: {
@@ -30,24 +57,38 @@ export default async function UsersPage({
   const userId = profile.id
   const supabase = await createClient()
 
-  const { data: users } = await supabase
+  const baseSelect = 'id, full_name, email, phone_e164, role, is_active, created_at, updated_at'
+  const extendedSelect = `${baseSelect}, broker_commission_level, broker_commission_percent, company_commission_percent, partner_commission_percent`
+
+  const extendedQuery = await supabase
     .from('profiles')
-    .select('id, full_name, email, phone_e164, role, is_active, created_at, updated_at')
+    .select(extendedSelect)
     .order('created_at', { ascending: false })
 
+  let users = (extendedQuery.data as DbUser[] | null) ?? null
+  let usersError = extendedQuery.error
+
+  if (
+    usersError &&
+    /broker_commission_level|broker_commission_percent|company_commission_percent|partner_commission_percent|column/i.test(
+      usersError.message || ''
+    )
+  ) {
+    const fallback = await supabase
+      .from('profiles')
+      .select(baseSelect)
+      .order('created_at', { ascending: false })
+
+    users = (fallback.data as DbUser[] | null) ?? null
+    usersError = fallback.error
+  }
+
+  if (usersError) {
+    throw new Error(usersError.message || 'Erro ao carregar usuários.')
+  }
+
   const userIds = (users || []).map((user) => user.id)
-  const integrationMap: Record<
-    string,
-    {
-      connected: boolean
-      google_email: string | null
-      sync_enabled: boolean
-      auto_create_from_tasks: boolean
-      connected_at: string | null
-      updated_at: string | null
-      last_error: string | null
-    }
-  > = {}
+  const integrationMap: Record<string, GoogleCalendarSummary> = {}
 
   if (userIds.length > 0) {
     const adminSupabase = createAdminClient()
@@ -69,7 +110,7 @@ export default async function UsersPage({
     }
   }
 
-  const usersWithIntegrations = (users || []).map((user) => ({
+  const usersWithIntegrations = (users || []).map((user): DbUser & { google_calendar: GoogleCalendarSummary } => ({
     ...user,
     google_calendar: integrationMap[user.id] ?? {
       connected: false,

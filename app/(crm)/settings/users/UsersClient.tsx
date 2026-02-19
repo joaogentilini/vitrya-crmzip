@@ -30,6 +30,10 @@ interface UserProfile {
   is_active: boolean
   created_at: string
   updated_at: string
+  broker_commission_level?: string | null
+  broker_commission_percent?: number | null
+  company_commission_percent?: number | null
+  partner_commission_percent?: number | null
   google_calendar: GoogleCalendarSummary
 }
 
@@ -53,11 +57,27 @@ const roleColors: Record<UserRole, string> = {
   corretor: 'bg-[var(--muted)] text-[var(--muted-foreground)]'
 }
 
+const COMMISSION_PRESETS = [
+  { label: 'Junior 40/60', level: 'Junior', broker: 40, company: 60, partner: 0 },
+  { label: 'Pleno 50/50', level: 'Pleno', broker: 50, company: 50, partner: 0 },
+  { label: 'Senior 60/40', level: 'Senior', broker: 60, company: 40, partner: 0 },
+] as const
+
 function formatDateTime(value?: string | null) {
   if (!value) return '-'
   const date = new Date(value)
   if (Number.isNaN(date.getTime())) return '-'
   return date.toLocaleString('pt-BR')
+}
+
+function formatPercent(value?: number | null) {
+  if (typeof value !== 'number' || !Number.isFinite(value)) return '-'
+  return `${value.toFixed(2)}%`
+}
+
+function toNumberOr(value: number | null | undefined, fallback: number) {
+  if (typeof value !== 'number' || !Number.isFinite(value)) return fallback
+  return value
 }
 
 export function UsersClient({
@@ -104,6 +124,12 @@ export function UsersClient({
     return true
   })
 
+  const totalUsers = users.length
+  const activeUsers = users.filter((user) => user.is_active).length
+  const brokerUsers = users.filter((user) => user.role === 'corretor').length
+  const googleConnectedUsers = users.filter((user) => user.google_calendar.connected).length
+  const isFiltering = !!filterRole || !!filterActive || !!search.trim()
+
   const handleToggleActive = async (userId: string, userName: string, currentActive: boolean) => {
     if (currentActive) {
       const confirmed = confirm(`Deseja desativar "${userName}"?\n\nAo desativar, o usuário será bloqueado e não poderá acessar o sistema.`)
@@ -146,15 +172,15 @@ export function UsersClient({
         if (!resp.ok) {
           const data = await resp.json().catch(() => ({}))
           const requestId = data.error?.requestId || data.requestId
-          const baseMsg = typeof data.error === 'string' ? data.error : (data.error?.message || 'Erro ao alterar role')
+          const baseMsg = typeof data.error === 'string' ? data.error : (data.error?.message || 'Erro ao alterar cargo')
           const errorMsg = requestId ? `${baseMsg} (ID: ${requestId})` : baseMsg
           throw new Error(errorMsg)
         }
         
-        success('Role alterado com sucesso')
+        success('Cargo alterado com sucesso')
         router.refresh()
       } catch (err) {
-        showError(err instanceof Error ? err.message : 'Erro ao alterar role')
+        showError(err instanceof Error ? err.message : 'Erro ao alterar cargo')
       }
     })
   }
@@ -177,8 +203,35 @@ export function UsersClient({
           </Button>
         </div>
 
+        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+          <Card>
+            <CardContent className="pt-4">
+              <p className="text-xs text-[var(--muted-foreground)]">Total de usuários</p>
+              <p className="mt-1 text-2xl font-bold text-[var(--foreground)]">{totalUsers}</p>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardContent className="pt-4">
+              <p className="text-xs text-[var(--muted-foreground)]">Ativos</p>
+              <p className="mt-1 text-2xl font-bold text-[var(--success)]">{activeUsers}</p>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardContent className="pt-4">
+              <p className="text-xs text-[var(--muted-foreground)]">Corretores</p>
+              <p className="mt-1 text-2xl font-bold text-[#294487]">{brokerUsers}</p>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardContent className="pt-4">
+              <p className="text-xs text-[var(--muted-foreground)]">Google conectado</p>
+              <p className="mt-1 text-2xl font-bold text-emerald-700">{googleConnectedUsers}</p>
+            </CardContent>
+          </Card>
+        </div>
+
         <Card>
-          <CardContent className="pt-4">
+          <CardContent className="space-y-3 pt-4">
             <div className="flex flex-col sm:flex-row gap-3">
               <div className="flex-1">
                 <Input
@@ -192,7 +245,7 @@ export function UsersClient({
                 onChange={(e) => setFilterRole(e.target.value)}
                 className="h-10 rounded-[var(--radius)] border border-[var(--input)] bg-[var(--background)] px-3 text-sm"
               >
-                <option value="">Todos os Roles</option>
+                <option value="">Todos os cargos</option>
                 <option value="admin">Administrador</option>
                 <option value="gestor">Gestor</option>
                 <option value="corretor">Corretor</option>
@@ -206,6 +259,20 @@ export function UsersClient({
                 <option value="active">Ativos</option>
                 <option value="inactive">Inativos</option>
               </select>
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setFilterRole('')
+                  setFilterActive('')
+                  setSearch('')
+                }}
+                disabled={!isFiltering}
+              >
+                Limpar filtros
+              </Button>
+            </div>
+            <div className="text-xs text-[var(--muted-foreground)]">
+              Exibindo {filteredUsers.length} de {totalUsers} usuários
             </div>
           </CardContent>
         </Card>
@@ -213,11 +280,12 @@ export function UsersClient({
         <Card>
           <CardContent className="p-0">
             <div className="overflow-x-auto">
-              <table className="w-full">
+              <table className="w-full min-w-[1060px]">
                 <thead>
                   <tr className="border-b border-[var(--border)]">
                     <th className="text-left px-4 py-3 text-sm font-medium text-[var(--muted-foreground)]">Usuário</th>
-                    <th className="text-left px-4 py-3 text-sm font-medium text-[var(--muted-foreground)]">Role</th>
+                    <th className="text-left px-4 py-3 text-sm font-medium text-[var(--muted-foreground)]">Cargo</th>
+                    <th className="text-left px-4 py-3 text-sm font-medium text-[var(--muted-foreground)]">Comissão</th>
                     <th className="text-left px-4 py-3 text-sm font-medium text-[var(--muted-foreground)]">Status</th>
                     <th className="text-left px-4 py-3 text-sm font-medium text-[var(--muted-foreground)]">Google Agenda</th>
                     <th className="text-left px-4 py-3 text-sm font-medium text-[var(--muted-foreground)]">Criado em</th>
@@ -228,9 +296,12 @@ export function UsersClient({
                   {filteredUsers.map((user) => (
                     <tr key={user.id} className="border-b border-[var(--border)] last:border-0 hover:bg-[var(--accent)]/50">
                       <td className="px-4 py-3">
-                        <div>
+                        <div className="space-y-0.5">
                           <p className="font-medium text-[var(--foreground)]">{user.full_name}</p>
-                          <p className="text-sm text-[var(--muted-foreground)]">{user.email}</p>
+                          <p className="text-sm text-[var(--muted-foreground)]">{user.email || '-'}</p>
+                          <p className="text-[11px] text-[var(--muted-foreground)]">
+                            ID {user.id.slice(0, 8)} | Atualizado {formatDateTime(user.updated_at)}
+                          </p>
                         </div>
                       </td>
                       <td className="px-4 py-3">
@@ -252,6 +323,37 @@ export function UsersClient({
                         )}
                       </td>
                       <td className="px-4 py-3">
+                        {user.role === 'corretor' ? (
+                          <div className="space-y-2 text-xs">
+                            <div className="inline-flex rounded-full border border-[#294487]/30 bg-[#294487]/10 px-2 py-1 font-semibold text-[#294487]">
+                              Nível: {user.broker_commission_level?.trim() || '-'}
+                            </div>
+                            <div className="flex flex-wrap gap-1.5 text-[11px]">
+                              <span className="inline-flex rounded-full bg-emerald-100 px-2 py-1 font-semibold text-emerald-700">
+                                Corretor {formatPercent(user.broker_commission_percent)}
+                              </span>
+                              <span className="inline-flex rounded-full bg-[#FF681F]/15 px-2 py-1 font-semibold text-[#FF681F]">
+                                Vitrya {formatPercent(user.company_commission_percent)}
+                              </span>
+                              <span className="inline-flex rounded-full bg-cyan-100 px-2 py-1 font-semibold text-cyan-700">
+                                Parceiro {formatPercent(user.partner_commission_percent)}
+                              </span>
+                            </div>
+                            <p className="text-[11px] text-[var(--muted-foreground)]">
+                              Total{' '}
+                              {(
+                                toNumberOr(user.broker_commission_percent, 0) +
+                                toNumberOr(user.company_commission_percent, 0) +
+                                toNumberOr(user.partner_commission_percent, 0)
+                              ).toFixed(2)}
+                              %
+                            </p>
+                          </div>
+                        ) : (
+                          <span className="text-xs text-[var(--muted-foreground)]">-</span>
+                        )}
+                      </td>
+                      <td className="px-4 py-3">
                         <span className={`inline-flex px-2 py-1 text-xs font-medium rounded-full ${
                           user.is_active 
                             ? 'bg-[var(--success)]/10 text-[var(--success)]' 
@@ -268,7 +370,7 @@ export function UsersClient({
                               : 'bg-[var(--muted)] text-[var(--muted-foreground)]'
                           }`}
                         >
-                          {user.google_calendar.connected ? 'Conectada' : 'Nao conectada'}
+                          {user.google_calendar.connected ? 'Conectada' : 'Não conectada'}
                         </span>
                       </td>
                       <td className="px-4 py-3">
@@ -277,7 +379,7 @@ export function UsersClient({
                         </span>
                       </td>
                       <td className="px-4 py-3">
-                        <div className="flex items-center justify-end gap-2">
+                        <div className="flex flex-wrap items-center justify-end gap-2">
                           <Button
                             variant="ghost"
                             size="sm"
@@ -315,7 +417,7 @@ export function UsersClient({
                             </>
                           )}
                           {user.id === currentUserId && (
-                            <span className="text-xs text-[var(--muted-foreground)]">(voce)</span>
+                            <span className="text-xs text-[var(--muted-foreground)]">(você)</span>
                           )}
                         </div>
                       </td>
@@ -323,8 +425,8 @@ export function UsersClient({
                   ))}
                   {filteredUsers.length === 0 && (
                     <tr>
-                      <td colSpan={6} className="px-4 py-8 text-center text-[var(--muted-foreground)]">
-                        Nenhum usuario encontrado
+                      <td colSpan={7} className="px-4 py-8 text-center text-[var(--muted-foreground)]">
+                        Nenhum usuário encontrado
                       </td>
                     </tr>
                   )}
@@ -483,7 +585,7 @@ function CreateUserModal({ onClose, onSuccess, currentUserRole }: CreateUserModa
             </div>
             
             <div>
-              <Label htmlFor="role">Role *</Label>
+              <Label htmlFor="role">Cargo *</Label>
               <select
                 id="role"
                 value={formData.role}
@@ -527,19 +629,77 @@ function EditUserModal({ user, onClose, onSuccess, currentUserRole }: EditUserMo
     full_name: user.full_name,
     phone_e164: user.phone_e164 || '',
     role: user.role,
-    is_active: user.is_active
+    is_active: user.is_active,
+    broker_commission_level: user.broker_commission_level || '',
+    broker_commission_percent: Number(user.broker_commission_percent ?? 50),
+    company_commission_percent: Number(user.company_commission_percent ?? 50),
+    partner_commission_percent: Number(user.partner_commission_percent ?? 0),
   })
+
+  const commissionTotal =
+    Number(formData.broker_commission_percent || 0) +
+    Number(formData.company_commission_percent || 0) +
+    Number(formData.partner_commission_percent || 0)
+
+  const isCommissionRangeValid = [
+    Number(formData.broker_commission_percent),
+    Number(formData.company_commission_percent),
+    Number(formData.partner_commission_percent),
+  ].every((value) => Number.isFinite(value) && value >= 0 && value <= 100)
+
+  const isCommissionTotalValid = Math.abs(commissionTotal - 100) <= 0.0001
+
+  const canSave =
+    !isPending && (formData.role !== 'corretor' || (isCommissionRangeValid && isCommissionTotalValid))
+
+  const applyCommissionPreset = (preset: (typeof COMMISSION_PRESETS)[number]) => {
+    setFormData((prev) => ({
+      ...prev,
+      broker_commission_level: preset.level,
+      broker_commission_percent: preset.broker,
+      company_commission_percent: preset.company,
+      partner_commission_percent: preset.partner,
+    }))
+  }
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
-    
+
     if (!formData.full_name.trim()) {
-      showError('Nome completo é obrigatório')
+      showError('Nome completo e obrigatório')
       return
+    }
+
+    if (formData.role === 'corretor') {
+      const broker = Number(formData.broker_commission_percent)
+      const company = Number(formData.company_commission_percent)
+      const partner = Number(formData.partner_commission_percent)
+      const parts = [broker, company, partner]
+
+      if (parts.some((value) => !Number.isFinite(value) || value < 0 || value > 100)) {
+        showError('Percentuais de comissão devem estar entre 0 e 100.')
+        return
+      }
+
+      const total = broker + company + partner
+      if (Math.abs(total - 100) > 0.0001) {
+        showError('A soma de Corretor + Vitrya + Parceiro deve ser 100%.')
+        return
+      }
     }
 
     startTransition(async () => {
       try {
+        const commissionPayload =
+          formData.role === 'corretor'
+            ? {
+                broker_commission_level: formData.broker_commission_level.trim() || null,
+                broker_commission_percent: Number(formData.broker_commission_percent),
+                company_commission_percent: Number(formData.company_commission_percent),
+                partner_commission_percent: Number(formData.partner_commission_percent),
+              }
+            : {}
+
         const resp = await fetch(`/api/admin/users/${user.id}`, {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json' },
@@ -547,12 +707,13 @@ function EditUserModal({ user, onClose, onSuccess, currentUserRole }: EditUserMo
             full_name: formData.full_name.trim(),
             phone_e164: formData.phone_e164.trim() || null,
             role: formData.role,
-            is_active: formData.is_active
+            is_active: formData.is_active,
+            ...commissionPayload,
           })
         })
-        
+
         const data = await resp.json().catch(() => ({ error: 'Erro de comunicação com servidor' }))
-        
+
         if (!resp.ok) {
           console.error('[EditUserModal] Error updating user:', {
             status: resp.status,
@@ -564,7 +725,7 @@ function EditUserModal({ user, onClose, onSuccess, currentUserRole }: EditUserMo
           const errorMsg = requestId ? `${baseMsg} (ID: ${requestId})` : baseMsg
           throw new Error(errorMsg)
         }
-        
+
         success('Usuário atualizado com sucesso')
         onSuccess()
       } catch (err) {
@@ -577,9 +738,9 @@ function EditUserModal({ user, onClose, onSuccess, currentUserRole }: EditUserMo
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center">
       <div className="absolute inset-0 bg-black/50" onClick={onClose} />
-      <Card className="relative z-10 w-full max-w-md mx-4">
+      <Card className="relative z-10 w-full max-w-3xl mx-4">
         <CardHeader>
-          <CardTitle>Editar Usuário</CardTitle>
+          <CardTitle>Editar usuário</CardTitle>
         </CardHeader>
         <CardContent>
           <form onSubmit={handleSubmit} className="space-y-4">
@@ -622,6 +783,114 @@ function EditUserModal({ user, onClose, onSuccess, currentUserRole }: EditUserMo
               </select>
             </div>
 
+            {formData.role === 'corretor' ? (
+              <div className="rounded-[var(--radius)] border border-[var(--border)] p-3 space-y-3">
+                <div className="flex flex-wrap items-start justify-between gap-2">
+                  <div>
+                    <div className="text-sm font-semibold text-[var(--foreground)]">Comissão do corretor</div>
+                    <p className="text-xs text-[var(--muted-foreground)]">
+                      Edição exclusiva de gestor/admin. Soma de Corretor + Vitrya + Parceiro deve ser 100%.
+                    </p>
+                  </div>
+                  <span
+                    className={`inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ${
+                      isCommissionTotalValid
+                        ? 'bg-emerald-100 text-emerald-700'
+                        : 'bg-amber-100 text-amber-800'
+                    }`}
+                  >
+                    Total {commissionTotal.toFixed(2)}%
+                  </span>
+                </div>
+                <div>
+                  <Label htmlFor="edit_broker_commission_level">Nível do corretor</Label>
+                  <Input
+                    id="edit_broker_commission_level"
+                    value={formData.broker_commission_level}
+                    onChange={(e) =>
+                      setFormData((prev) => ({ ...prev, broker_commission_level: e.target.value }))
+                    }
+                    placeholder="Junior, Pleno, Senior..."
+                  />
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  {COMMISSION_PRESETS.map((preset) => (
+                    <Button
+                      key={preset.label}
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => applyCommissionPreset(preset)}
+                      disabled={isPending}
+                    >
+                      {preset.label}
+                    </Button>
+                  ))}
+                </div>
+                <div className="grid gap-3 sm:grid-cols-3">
+                  <div>
+                    <Label htmlFor="edit_broker_commission_percent">Corretor (%)</Label>
+                    <Input
+                      id="edit_broker_commission_percent"
+                      type="number"
+                      min={0}
+                      max={100}
+                      step="0.01"
+                      value={String(formData.broker_commission_percent)}
+                      onChange={(e) =>
+                        setFormData((prev) => ({
+                          ...prev,
+                          broker_commission_percent: Number(e.target.value || 0),
+                        }))
+                      }
+                    />
+                  </div>
+                  <div>
+                    <Label htmlFor="edit_company_commission_percent">Vitrya (%)</Label>
+                    <Input
+                      id="edit_company_commission_percent"
+                      type="number"
+                      min={0}
+                      max={100}
+                      step="0.01"
+                      value={String(formData.company_commission_percent)}
+                      onChange={(e) =>
+                        setFormData((prev) => ({
+                          ...prev,
+                          company_commission_percent: Number(e.target.value || 0),
+                        }))
+                      }
+                    />
+                  </div>
+                  <div>
+                    <Label htmlFor="edit_partner_commission_percent">Parceiro (%)</Label>
+                    <Input
+                      id="edit_partner_commission_percent"
+                      type="number"
+                      min={0}
+                      max={100}
+                      step="0.01"
+                      value={String(formData.partner_commission_percent)}
+                      onChange={(e) =>
+                        setFormData((prev) => ({
+                          ...prev,
+                          partner_commission_percent: Number(e.target.value || 0),
+                        }))
+                      }
+                    />
+                  </div>
+                </div>
+                {!isCommissionRangeValid ? (
+                  <p className="text-xs text-[var(--destructive)]">
+                    Percentuais inválidos: use apenas valores entre 0 e 100.
+                  </p>
+                ) : null}
+                {!isCommissionTotalValid ? (
+                  <p className="text-xs text-amber-700">Ajuste os campos para fechar exatamente 100%.</p>
+                ) : null}
+              </div>
+            ) : null}
+
             <div className="flex items-center gap-3">
               <label className="relative inline-flex items-center cursor-pointer">
                 <input
@@ -631,7 +900,7 @@ function EditUserModal({ user, onClose, onSuccess, currentUserRole }: EditUserMo
                   className="sr-only peer"
                 />
                 <div className="w-11 h-6 bg-[var(--muted)] peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-[var(--ring)] rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[var(--success)]"></div>
-                <span className="ml-3 text-sm font-medium text-[var(--foreground)]">Usuário Ativo</span>
+                <span className="ml-3 text-sm font-medium text-[var(--foreground)]">Usuário ativo</span>
               </label>
             </div>
 
@@ -639,7 +908,7 @@ function EditUserModal({ user, onClose, onSuccess, currentUserRole }: EditUserMo
               <Button type="button" variant="outline" onClick={onClose} className="flex-1">
                 Cancelar
               </Button>
-              <Button type="submit" disabled={isPending} className="flex-1">
+              <Button type="submit" disabled={!canSave} className="flex-1">
                 {isPending ? 'Salvando...' : 'Salvar'}
               </Button>
             </div>
@@ -666,7 +935,7 @@ function UserGoogleIntegrationModal({ user, onClose, onSuccess }: UserGoogleInte
 
   const handleSavePreferences = () => {
     if (!user.google_calendar.connected) {
-      showError('Conecte a Google Agenda antes de salvar preferencias.')
+      showError('Conecte a Google Agenda antes de salvar preferências.')
       return
     }
 
@@ -686,14 +955,14 @@ function UserGoogleIntegrationModal({ user, onClose, onSuccess }: UserGoogleInte
           const baseMsg =
             typeof data.error === 'string'
               ? data.error
-              : data.error?.message || 'Falha ao atualizar integracao Google.'
+              : data.error?.message || 'Falha ao atualizar integração Google.'
           throw new Error(baseMsg)
         }
 
-        success('Preferencias da integracao Google atualizadas.')
+        success('Preferências da integração Google atualizadas.')
         onSuccess()
       } catch (err) {
-        showError(err instanceof Error ? err.message : 'Falha ao atualizar integracao Google.')
+        showError(err instanceof Error ? err.message : 'Falha ao atualizar integração Google.')
       }
     })
   }
@@ -741,7 +1010,7 @@ function UserGoogleIntegrationModal({ user, onClose, onSuccess }: UserGoogleInte
             <p>
               Status:{' '}
               <span className="font-medium">
-                {user.google_calendar.connected ? 'Conectada' : 'Nao conectada'}
+                {user.google_calendar.connected ? 'Conectada' : 'Não conectada'}
               </span>
             </p>
             <p>
@@ -752,7 +1021,7 @@ function UserGoogleIntegrationModal({ user, onClose, onSuccess }: UserGoogleInte
               Conectada em: {formatDateTime(user.google_calendar.connected_at)}
             </p>
             <p className="text-xs text-[var(--muted-foreground)]">
-              Ultima atualizacao: {formatDateTime(user.google_calendar.updated_at)}
+              Última atualização: {formatDateTime(user.google_calendar.updated_at)}
             </p>
             {user.google_calendar.last_error ? (
               <p className="text-xs text-[var(--destructive)] mt-1">
@@ -763,7 +1032,7 @@ function UserGoogleIntegrationModal({ user, onClose, onSuccess }: UserGoogleInte
 
           <div className="space-y-3">
             <label className="flex items-center justify-between rounded-[var(--radius)] border border-[var(--border)] p-3">
-              <span className="text-sm text-[var(--foreground)]">Sincronizacao ativa</span>
+              <span className="text-sm text-[var(--foreground)]">Sincronização ativa</span>
               <input
                 type="checkbox"
                 checked={syncEnabled}
@@ -828,12 +1097,12 @@ function ResetPasswordModal({ user, onClose, onSuccess }: ResetPasswordModalProp
     e.preventDefault()
 
     if (newPassword.length < 6) {
-      showError('A senha deve ter no minimo 6 caracteres.')
+      showError('A senha deve ter no mínimo 6 caracteres.')
       return
     }
 
     if (newPassword !== confirmPassword) {
-      showError('As senhas nao conferem.')
+      showError('As senhas não conferem.')
       return
     }
 
@@ -906,3 +1175,4 @@ function ResetPasswordModal({ user, onClose, onSuccess }: ResetPasswordModalProp
     </div>
   )
 }
+

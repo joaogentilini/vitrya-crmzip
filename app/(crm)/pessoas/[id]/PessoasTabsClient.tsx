@@ -35,14 +35,16 @@ const kindTagLabels: Record<PersonKindTag, string> = {
   proprietario: 'Proprietário',
   corretor: 'Corretor',
   fornecedor: 'Fornecedor',
-  parceiro: 'Parceiro'
+  parceiro: 'Parceiro',
+  interessado_comprador: 'Interessado/Comprador'
 }
 
 const allRoleOptions: { value: PersonKindTag; label: string }[] = [
   { value: 'proprietario', label: 'Proprietário' },
   { value: 'corretor', label: 'Corretor' },
   { value: 'fornecedor', label: 'Fornecedor' },
-  { value: 'parceiro', label: 'Parceiro' }
+  { value: 'parceiro', label: 'Parceiro' },
+  { value: 'interessado_comprador', label: 'Interessado/Comprador' }
 ]
 
 const maritalStatusOptions: { value: string; label: string }[] = [
@@ -53,7 +55,7 @@ const maritalStatusOptions: { value: string; label: string }[] = [
   { value: 'viuvo', label: 'Viúvo(a)' }
 ]
 
-// Lista “boa o suficiente” pra não travar agora. Depois a gente pluga uma tabela/enum no banco.
+// Lista "boa o suficiente" para não travar agora. Depois plugar tabela/enum no banco.
 const rgIssuingOrgOptions: { value: string; label: string }[] = [
   { value: 'SSP', label: 'SSP (Secretaria de Segurança Pública)' },
   { value: 'SSP-SP', label: 'SSP-SP' },
@@ -77,6 +79,21 @@ const leadStatusLabels: Record<string, string> = {
   open: 'Aberto',
   won: 'Comprou',
   lost: 'Não Comprou'
+}
+
+const proposalStatusLabels: Record<string, string> = {
+  draft: 'Rascunho',
+  in_review: 'Em análise',
+  counterproposal: 'Contraproposta',
+  approved: 'Aprovada',
+  rejected: 'Rejeitada'
+}
+
+const negotiationInvolvementLabels: Record<string, string> = {
+  buyer: 'Comprador',
+  owner: 'Proprietario',
+  buyer_owner: 'Comprador/Proprietario',
+  participant: 'Participante'
 }
 
 interface PersonProfile {
@@ -173,7 +190,15 @@ const formatCurrencyBRL = (value: number) =>
   new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value)
 
 const resolveNegotiationValue = (row: AnyRow) => {
-  const numericKeys = ['value', 'amount', 'price', 'sale_value', 'rent_price']
+  const numericKeys = [
+    'proposal_total_value',
+    'total_value',
+    'value',
+    'amount',
+    'price',
+    'sale_value',
+    'rent_price'
+  ]
   for (const key of numericKeys) {
     const value = row?.[key]
     if (typeof value === 'number' && Number.isFinite(value)) {
@@ -528,7 +553,7 @@ export default function PessoasTabsClient({
     (companyProfile as AnyRow | null)?.municipal_registration ?? ''
   )
 
-  // “bastidor”: se ainda não tiver cpf/cnpj, tenta inferir do legado, mas sem mostrar “CPF legado”
+  // "bastidor": se ainda não tiver CPF/CNPJ, tenta inferir do legado sem expor "CPF legado".
   const legacyDocumentDigits = toDigits(person.document_id ?? '')
   const cpfDisplay = formatCPF(financingCpf || (legacyDocumentDigits.length === 11 ? legacyDocumentDigits : ''))
   const cnpjDisplay = formatCNPJ(companyCnpj || (legacyDocumentDigits.length === 14 ? legacyDocumentDigits : ''))
@@ -982,7 +1007,7 @@ export default function PessoasTabsClient({
       <TabsList>
         <TabsTrigger value="dados">Dados</TabsTrigger>
         <TabsTrigger value="properties">Imóveis</TabsTrigger>
-        <TabsTrigger value="negotiations">Negociações</TabsTrigger>
+        <TabsTrigger value="negotiations">Negocios</TabsTrigger>
         <TabsTrigger value="relationships">Relacionamentos</TabsTrigger>
         <TabsTrigger value="timeline">Linha do tempo</TabsTrigger>
         <TabsTrigger value="documents">Documentos</TabsTrigger>
@@ -1452,53 +1477,76 @@ export default function PessoasTabsClient({
       <TabsContent value="negotiations">
         <Card>
           <CardHeader>
-            <CardTitle className="text-base">Negociações</CardTitle>
+            <CardTitle className="text-base">Negocios (propostas)</CardTitle>
           </CardHeader>
           <CardContent>
             {negotiations.length > 0 ? (
               <div className="space-y-2">
                 {negotiations.map((negotiation, idx) => {
-                  const id = String(negotiation.id ?? `negotiation-${idx}`)
+                  const negotiationId = String(negotiation.id ?? `negotiation-${idx}`)
                   const propertyId = negotiation.property_id as string | null | undefined
+                  const proposalId = negotiation.proposal_id as string | null | undefined
                   const propertyTitle =
                     (negotiation.property_title as string | null) ||
                     ((negotiation.property as any)?.title as string | null) ||
                     (propertyId ? `Imóvel ${propertyId.slice(0, 6)}` : 'Imóvel não informado')
-                  const status = String(negotiation.status ?? 'open')
-                  const dateLabel = formatValue(negotiation.created_at ?? '', 'created_at')
+                  const proposalStatus = String(negotiation.proposal_status ?? negotiation.status ?? 'draft')
+                  const proposalStatusLabel = proposalStatusLabels[proposalStatus] || proposalStatus
+                  const dateLabel = formatValue(
+                    negotiation.proposal_updated_at ?? negotiation.proposal_created_at ?? negotiation.created_at ?? '',
+                    'created_at'
+                  )
                   const valueLabel = resolveNegotiationValue(negotiation as AnyRow)
+                  const involvement = String(negotiation.negotiation_involvement ?? 'participant')
+                  const involvementLabel = negotiationInvolvementLabels[involvement] || involvement
+                  const proposalTitle =
+                    (negotiation.proposal_title as string | null) ||
+                    (proposalId ? `Proposta ${proposalId.slice(0, 8)}` : `Negocio ${negotiationId.slice(0, 8)}`)
+                  const detailsHref = propertyId
+                    ? `/properties/${propertyId}?tab=negociacoes&negotiationId=${negotiationId}${
+                        proposalId ? `&proposalId=${proposalId}` : ''
+                      }`
+                    : null
 
-                  return (
-                    <div
-                      key={id}
-                      className="flex flex-wrap items-center justify-between gap-3 rounded-[var(--radius)] border border-[var(--border)] p-3 text-sm"
-                    >
+                  const content = (
+                    <>
                       <div className="min-w-0">
-                        {propertyId ? (
-                          <Link
-                            href={`/properties/${propertyId}`}
-                            className="font-medium text-[var(--foreground)] hover:underline"
-                          >
-                            {propertyTitle}
-                          </Link>
-                        ) : (
-                          <p className="font-medium text-[var(--foreground)]">{propertyTitle}</p>
-                        )}
+                        <p className="font-medium text-[var(--foreground)]">{proposalTitle}</p>
+                        <p className="text-xs text-[var(--muted-foreground)]">
+                          {propertyTitle} • {involvementLabel}
+                        </p>
                         <p className="text-xs text-[var(--muted-foreground)]">{dateLabel}</p>
                       </div>
                       <div className="text-right">
                         <p className="text-xs text-[var(--muted-foreground)]">
-                          {leadStatusLabels[status as string] || status}
+                          {proposalStatusLabel}
                         </p>
                         <p className="text-sm font-medium text-[var(--foreground)]">{valueLabel}</p>
                       </div>
+                    </>
+                  )
+
+                  return detailsHref ? (
+                    <Link
+                      key={negotiationId}
+                      href={detailsHref}
+                      className="flex flex-wrap items-center justify-between gap-3 rounded-[var(--radius)] border border-[var(--border)] p-3 text-sm hover:bg-[var(--accent)] transition-colors"
+                    >
+                      {content}
+                    </Link>
+                  ) : (
+                    <div
+                      key={negotiationId}
+                      className="flex flex-wrap items-center justify-between gap-3 rounded-[var(--radius)] border border-[var(--border)] p-3 text-sm"
+                    >
+                      {content}
                     </div>
                   )
                 })}
               </div>
             ) : (
               <p className="text-sm text-[var(--muted-foreground)]">
-                Nenhuma negociação encontrada.
+                Nenhum negocio com proposta encontrado para esta pessoa.
               </p>
             )}
           </CardContent>
@@ -2090,3 +2138,5 @@ export default function PessoasTabsClient({
     </Tabs>
   )
 }
+
+

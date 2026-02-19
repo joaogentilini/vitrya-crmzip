@@ -32,7 +32,8 @@ const kindTagLabels: Record<PersonKindTag, string> = {
   proprietario: 'Proprietário',
   corretor: 'Corretor',
   fornecedor: 'Fornecedor',
-  parceiro: 'Parceiro'
+  parceiro: 'Parceiro',
+  interessado_comprador: 'Interessado/Comprador'
 }
 
 const availableTags = PERSON_KIND_TAGS
