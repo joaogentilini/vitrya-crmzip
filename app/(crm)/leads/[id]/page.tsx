@@ -215,7 +215,7 @@ export default async function LeadDetailsPage({
     .limit(50)
 
   if (!auditError && auditLogsRaw) {
-    const parsedLogs = auditLogsRaw.map(log => {
+    const parsedLogs = auditLogsRaw.map((log: any) => {
       let parsedBefore = log.before
       let parsedAfter = log.after
       

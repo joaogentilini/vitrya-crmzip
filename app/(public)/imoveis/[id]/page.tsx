@@ -460,13 +460,13 @@ export default async function PublicPropertyPage({
     })) ?? [];
 
   const mediaPaths = rawMediaItems
-    .map((item) => item.url)
-    .filter((item): item is string => Boolean(item));
+    .map((item: { url: string | null }) => item.url)
+    .filter((item: string | null): item is string => Boolean(item));
   if (property.cover_media_url) mediaPaths.unshift(String(property.cover_media_url));
 
   const signedUrlMap = await getSignedImageUrlMap(mediaPaths);
   const signedMediaItems = rawMediaItems
-    .map((item) => {
+    .map((item: { id: string; url: string | null; kind?: string }) => {
       const signedUrl = item.url ? signedUrlMap.get(item.url) || null : null;
       if (!signedUrl) return null;
       return { ...item, url: signedUrl };

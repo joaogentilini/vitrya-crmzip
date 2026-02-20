@@ -38,7 +38,7 @@ export async function createClient() {
         },
       },
     }
-  )
+  ) as any
 
   return supabase
 }

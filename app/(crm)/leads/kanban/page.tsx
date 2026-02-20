@@ -41,7 +41,7 @@ export default async function LeadsKanbanPage() {
     .order('created_at', { ascending: false })
     .limit(200)
 
-  const leadIds = (leads ?? []).map(l => l.id)
+  const leadIds = (leads ?? []).map((l: any) => l.id)
   let taskStatusMap: Map<string, { lead_id: string; is_overdue: boolean; has_open_task: boolean }> = new Map()
 
   if (leadIds.length > 0) {

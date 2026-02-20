@@ -474,7 +474,7 @@ export async function createLeadAction(data: CreateLeadInput): Promise<ActionRes
     action: 'create',
     before: null,
     after: inserted,
-  }).then(({ error: auditError }) => {
+  }).then(({ error: auditError }: { error: any }) => {
     if (auditError) {
       console.error('[createLeadAction] auditError:', auditError)
     }
@@ -617,7 +617,7 @@ export async function updateLeadAction(data: UpdateLeadInput): Promise<ActionRes
     action: 'update',
     before: currentLead,
     after: updated,
-  }).then(({ error: auditError }) => {
+  }).then(({ error: auditError }: { error: any }) => {
     if (auditError) {
       console.error('[updateLeadAction] auditError:', auditError)
     }
@@ -704,7 +704,7 @@ export async function updateLeadOwnerAction(leadId: string, newAssignedTo: strin
     action: 'assigned_to_changed',
     before: { assigned_to: currentLead.assigned_to },
     after: { assigned_to: newAssignedTo },
-  }).then(({ error }) => {
+  }).then(({ error }: { error: any }) => {
     if (error) console.error('[updateLeadOwnerAction] auditError:', error)
   })
 

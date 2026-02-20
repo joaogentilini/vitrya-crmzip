@@ -27,7 +27,7 @@ export async function GET(
       return NextResponse.json({ error: error.message }, { status: 500 })
     }
 
-    const authorIds = [...new Set(notes?.map(n => n.author_id).filter(Boolean) || [])]
+    const authorIds = [...new Set(notes?.map((n: any) => n.author_id).filter(Boolean) || [])]
     let authors: { id: string; full_name: string | null }[] = []
     
     if (authorIds.length > 0) {

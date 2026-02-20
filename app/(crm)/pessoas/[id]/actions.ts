@@ -201,22 +201,22 @@ export async function deletePersonAction(
   }
 
   const cleanupOperations: Array<() => Promise<{ error: { code?: string | null; message?: string | null } | null }>> = [
-    () => supabase.from('properties').update({ owner_client_id: null }).eq('owner_client_id', personId),
-    () => supabase.from('property_negotiations').update({ person_id: null }).eq('person_id', personId),
-    () => supabase.from('leads').update({ person_id: null }).eq('person_id', personId),
-    () => supabase.from('document_instances').update({ owner_person_id: null }).eq('owner_person_id', personId),
-    () => supabase.from('document_instances').update({ primary_person_id: null }).eq('primary_person_id', personId),
-    () => supabase.from('person_household_members').delete().eq('primary_person_id', personId),
-    () => supabase.from('person_household_members').delete().eq('member_person_id', personId),
-    () => supabase.from('person_bank_accounts').delete().eq('person_id', personId),
-    () => supabase.from('person_liabilities').delete().eq('person_id', personId),
-    () => supabase.from('person_income_sources').delete().eq('person_id', personId),
-    () => supabase.from('person_addresses').delete().eq('person_id', personId),
-    () => supabase.from('person_company_profiles').delete().eq('person_id', personId),
-    () => supabase.from('person_financing_profiles').delete().eq('person_id', personId),
-    () => supabase.from('person_documents').delete().eq('person_id', personId),
-    () => supabase.from('person_timeline_events').delete().eq('person_id', personId),
-    () => supabase.from('person_links').delete().eq('person_id', personId),
+    async () => await supabase.from('properties').update({ owner_client_id: null }).eq('owner_client_id', personId),
+    async () => await supabase.from('property_negotiations').update({ person_id: null }).eq('person_id', personId),
+    async () => await supabase.from('leads').update({ person_id: null }).eq('person_id', personId),
+    async () => await supabase.from('document_instances').update({ owner_person_id: null }).eq('owner_person_id', personId),
+    async () => await supabase.from('document_instances').update({ primary_person_id: null }).eq('primary_person_id', personId),
+    async () => await supabase.from('person_household_members').delete().eq('primary_person_id', personId),
+    async () => await supabase.from('person_household_members').delete().eq('member_person_id', personId),
+    async () => await supabase.from('person_bank_accounts').delete().eq('person_id', personId),
+    async () => await supabase.from('person_liabilities').delete().eq('person_id', personId),
+    async () => await supabase.from('person_income_sources').delete().eq('person_id', personId),
+    async () => await supabase.from('person_addresses').delete().eq('person_id', personId),
+    async () => await supabase.from('person_company_profiles').delete().eq('person_id', personId),
+    async () => await supabase.from('person_financing_profiles').delete().eq('person_id', personId),
+    async () => await supabase.from('person_documents').delete().eq('person_id', personId),
+    async () => await supabase.from('person_timeline_events').delete().eq('person_id', personId),
+    async () => await supabase.from('person_links').delete().eq('person_id', personId),
   ]
 
   for (const operation of cleanupOperations) {

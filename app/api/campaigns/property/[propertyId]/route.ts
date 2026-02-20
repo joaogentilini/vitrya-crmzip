@@ -58,7 +58,7 @@ export async function GET(
             'id, title, status, city, neighborhood, cover_media_url, created_at, property_category_id, property_categories ( id, name )'
           )
           .eq('id', propertyId)
-          .maybeSingle<PropertyRow>(),
+          .maybeSingle(),
         supabase
           .from('property_campaign_tasks')
           .select(

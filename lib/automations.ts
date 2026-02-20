@@ -308,7 +308,7 @@ export async function runProposalStage(systemActorId: string): Promise<Automatio
 
   if (!proposalStages || proposalStages.length === 0) return result
 
-  const stageIds = proposalStages.map(s => s.id)
+  const stageIds = proposalStages.map((s: any) => s.id)
 
   const { data: recentMoves } = await supabase
     .from('lead_audit_logs')
@@ -319,7 +319,7 @@ export async function runProposalStage(systemActorId: string): Promise<Automatio
 
   if (!recentMoves || recentMoves.length === 0) return result
 
-  const leadsMovedToProposal = recentMoves.filter(m => {
+  const leadsMovedToProposal = recentMoves.filter((m: any) => {
     const afterData = m.after as { stage_id?: string } | null
     return afterData?.stage_id && stageIds.includes(afterData.stage_id)
   })
