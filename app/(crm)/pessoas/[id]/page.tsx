@@ -2,7 +2,9 @@ import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { createClient } from '@/lib/supabaseServer'
 import { requireActiveUser } from '@/lib/auth'
+import AdminDeleteActionButton from '@/components/admin/AdminDeleteActionButton'
 import PessoasTabsClient, { type PersonRecord } from './PessoasTabsClient'
+import { deletePersonAction } from './actions'
 
 export const dynamic = 'force-dynamic'
 export const revalidate = 0
@@ -33,6 +35,7 @@ export default async function PessoaPage({ params }: PageProps) {
     .maybeSingle()
 
   const currentUserRole = currentProfile?.role ?? null
+  const canDeletePerson = currentUserRole === 'admin'
 
   // ✅ pessoa + perfis PF/PJ (fonte de CPF/RG e CNPJ)
   const { data: person, error: personError } = await supabase
@@ -342,11 +345,23 @@ export default async function PessoaPage({ params }: PageProps) {
         <span className="text-[var(--foreground)]">{person.full_name || 'Pessoa'}</span>
       </div>
 
-      <div>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
         <h1 className="text-2xl font-bold text-[var(--foreground)]">
           {person.full_name || 'Pessoa'}
         </h1>
         <p className="text-sm text-[var(--muted-foreground)]">Visualização em modo leitura.</p>
+        </div>
+        {canDeletePerson ? (
+          <AdminDeleteActionButton
+            action={deletePersonAction.bind(null, id)}
+            confirmMessage="Deseja excluir esta pessoa? Esta acao remove dados vinculados e nao pode ser desfeita."
+            successMessage="Pessoa excluida com sucesso."
+            fallbackErrorMessage="Nao foi possivel excluir a pessoa."
+            redirectTo="/pessoas"
+            label="Excluir pessoa"
+          />
+        ) : null}
       </div>
 
       <PessoasTabsClient

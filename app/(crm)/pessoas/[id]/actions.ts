@@ -2,7 +2,7 @@
 
 import { revalidatePath } from 'next/cache'
 import { createClient } from '@/lib/supabaseServer'
-import { requireActiveUser } from '@/lib/auth'
+import { requireActiveUser, requireRole } from '@/lib/auth'
 import { normalizePersonKindTags } from '@/lib/people2'
 
 const nowIso = () => new Date().toISOString()
@@ -16,6 +16,19 @@ const normalizeTextOrNull = (value: unknown) => {
 const normalizeBool = (value: unknown) => value === true
 
 const safeDigits = (value: unknown) => String(value ?? '').replace(/\D/g, '')
+
+const isOptionalRelationMissing = (error: { code?: string | null; message?: string | null } | null | undefined) => {
+  const code = String(error?.code || '')
+  const message = String(error?.message || '').toLowerCase()
+  return (
+    code === '42P01' ||
+    code === '42703' ||
+    code === 'PGRST204' ||
+    code === 'PGRST205' ||
+    message.includes('does not exist') ||
+    message.includes('schema cache')
+  )
+}
 
 export async function createPersonNote(personId: string, title: string, notes: string) {
   await requireActiveUser()
@@ -160,6 +173,74 @@ export async function updatePersonRoles(personId: string, kindTags: string[]) {
   if (error) throw new Error(error.message || 'Erro ao atualizar roles.')
 
   revalidatePath(`/pessoas/${personId}`)
+}
+
+export async function deletePersonAction(
+  personId: string
+): Promise<{ success: boolean; error?: string }> {
+  await requireRole(['admin'])
+
+  if (!personId) {
+    return { success: false, error: 'Pessoa invalida.' }
+  }
+
+  const supabase = await createClient()
+
+  const { data: person, error: personError } = await supabase
+    .from('people')
+    .select('id')
+    .eq('id', personId)
+    .maybeSingle()
+
+  if (personError) {
+    return { success: false, error: personError.message || 'Erro ao validar pessoa.' }
+  }
+
+  if (!person?.id) {
+    return { success: false, error: 'Pessoa nao encontrada.' }
+  }
+
+  const cleanupOperations: Array<() => Promise<{ error: { code?: string | null; message?: string | null } | null }>> = [
+    () => supabase.from('properties').update({ owner_client_id: null }).eq('owner_client_id', personId),
+    () => supabase.from('property_negotiations').update({ person_id: null }).eq('person_id', personId),
+    () => supabase.from('leads').update({ person_id: null }).eq('person_id', personId),
+    () => supabase.from('document_instances').update({ owner_person_id: null }).eq('owner_person_id', personId),
+    () => supabase.from('document_instances').update({ primary_person_id: null }).eq('primary_person_id', personId),
+    () => supabase.from('person_household_members').delete().eq('primary_person_id', personId),
+    () => supabase.from('person_household_members').delete().eq('member_person_id', personId),
+    () => supabase.from('person_bank_accounts').delete().eq('person_id', personId),
+    () => supabase.from('person_liabilities').delete().eq('person_id', personId),
+    () => supabase.from('person_income_sources').delete().eq('person_id', personId),
+    () => supabase.from('person_addresses').delete().eq('person_id', personId),
+    () => supabase.from('person_company_profiles').delete().eq('person_id', personId),
+    () => supabase.from('person_financing_profiles').delete().eq('person_id', personId),
+    () => supabase.from('person_documents').delete().eq('person_id', personId),
+    () => supabase.from('person_timeline_events').delete().eq('person_id', personId),
+    () => supabase.from('person_links').delete().eq('person_id', personId),
+  ]
+
+  for (const operation of cleanupOperations) {
+    const { error: cleanupError } = await operation()
+    if (!cleanupError || isOptionalRelationMissing(cleanupError)) continue
+    return {
+      success: false,
+      error: cleanupError.message || 'Erro ao limpar vinculos da pessoa antes da exclusao.',
+    }
+  }
+
+  const { error: deleteError } = await supabase.from('people').delete().eq('id', personId)
+  if (deleteError) {
+    return {
+      success: false,
+      error:
+        deleteError.message ||
+        'Nao foi possivel excluir a pessoa. Verifique se ainda existem vinculos obrigatorios.',
+    }
+  }
+
+  revalidatePath('/pessoas')
+  revalidatePath('/people')
+  return { success: true }
 }
 
 export type FinancingUpsertPayload = {

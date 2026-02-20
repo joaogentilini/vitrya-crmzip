@@ -1,6 +1,7 @@
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
 
+import AdminDeleteActionButton from '@/components/admin/AdminDeleteActionButton'
 import { Badge } from '@/components/ui/Badge'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card'
 import { requireRole } from '@/lib/auth'
@@ -9,6 +10,7 @@ import { createClient } from '@/lib/supabaseServer'
 
 import {
   convertUnitReservationToSaleAction,
+  deleteIncorporationAction,
   getIncorporationFeaturesData,
 } from '../actions'
 import CreateIncorporationPlanFormClient from '../CreateIncorporationPlanFormClient'
@@ -241,6 +243,7 @@ export default async function IncorporationDetailPage({
     Array.isArray(planParamRaw) ? planParamRaw[planParamRaw.length - 1] : typeof planParamRaw === 'string' ? planParamRaw : null
   )?.trim() || null
   const isManager = viewer.role === 'admin' || viewer.role === 'gestor'
+  const isAdmin = viewer.role === 'admin'
 
   const supabase = await createClient()
   let reservationsQuery = supabase
@@ -556,6 +559,18 @@ export default async function IncorporationDetailPage({
                 {tab.label}
               </Link>
             ))}
+            {isAdmin ? (
+              <div className="ml-auto">
+                <AdminDeleteActionButton
+                  action={deleteIncorporationAction.bind(null, incorporation.id)}
+                  confirmMessage="Deseja excluir este empreendimento? Unidades, reservas e propostas vinculadas tambem serao removidas."
+                  successMessage="Empreendimento excluido com sucesso."
+                  fallbackErrorMessage="Nao foi possivel excluir o empreendimento."
+                  redirectTo={developer?.id ? `/properties/incorporations/developers/${developer.id}` : '/properties/incorporations'}
+                  label="Excluir empreendimento"
+                />
+              </div>
+            ) : null}
           </div>
         </div>
 

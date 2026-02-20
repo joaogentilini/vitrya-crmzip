@@ -1,13 +1,14 @@
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
 
+import AdminDeleteActionButton from '@/components/admin/AdminDeleteActionButton'
 import { Badge } from '@/components/ui/Badge'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card'
 import { requireRole } from '@/lib/auth'
 import { getSignedIncorporationMediaUrl } from '@/lib/incorporations/media'
 import { createClient } from '@/lib/supabaseServer'
 
-import { updateDeveloperCommissionPercentAction } from '../../actions'
+import { deleteDeveloperAction, updateDeveloperCommissionPercentAction } from '../../actions'
 import CreateIncorporationFormClient from '../../CreateIncorporationFormClient'
 
 export const dynamic = 'force-dynamic'
@@ -45,6 +46,7 @@ export default async function DeveloperIncorporationsPage({
 }) {
   const viewer = await requireRole(['admin', 'gestor', 'corretor'])
   const isManager = viewer.role === 'admin' || viewer.role === 'gestor'
+  const isAdmin = viewer.role === 'admin'
   const { developerId } = await params
   const supabase = await createClient()
 
@@ -155,9 +157,21 @@ export default async function DeveloperIncorporationsPage({
               </span>
             </p>
           </div>
-          <Badge variant={developer.is_active ? 'success' : 'secondary'} className="ml-auto">
-            {developer.is_active ? 'Ativa' : 'Inativa'}
-          </Badge>
+          <div className="ml-auto flex items-center gap-2">
+            {isAdmin ? (
+              <AdminDeleteActionButton
+                action={deleteDeveloperAction.bind(null, developer.id)}
+                confirmMessage="Deseja excluir esta construtora? Todos os empreendimentos vinculados tambem serao excluidos."
+                successMessage="Construtora excluida com sucesso."
+                fallbackErrorMessage="Nao foi possivel excluir a construtora."
+                redirectTo="/properties/incorporations"
+                label="Excluir construtora"
+              />
+            ) : null}
+            <Badge variant={developer.is_active ? 'success' : 'secondary'}>
+              {developer.is_active ? 'Ativa' : 'Inativa'}
+            </Badge>
+          </div>
         </div>
       </div>
 

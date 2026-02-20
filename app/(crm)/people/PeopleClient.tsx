@@ -7,7 +7,9 @@ import { supabase } from '@/lib/supabaseClient'
 import { Card, CardContent } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
 import { useToast } from '@/components/ui/Toast'
+import AdminDeleteActionButton from '@/components/admin/AdminDeleteActionButton'
 import { normalizePersonKindTags, PersonKindTag } from '@/lib/types/people2'
+import { deletePersonAction } from '../pessoas/[id]/actions'
 
 interface Profile {
   id: string
@@ -56,6 +58,7 @@ export function PeopleClient({
   }
 
   const isAdmin = currentUserRole === 'admin' || currentUserRole === 'gestor'
+  const canDelete = currentUserRole === 'admin'
 
   const filteredPeople = useMemo(() => {
     return people
@@ -226,16 +229,30 @@ export function PeopleClient({
 
                     <div className="mt-auto flex items-center justify-between text-[10px] text-[var(--muted-foreground)]">
                       <span>{new Date(person.created_at).toLocaleDateString('pt-BR')}</span>
-                      <button
-                        type="button"
-                        onClick={(event) => {
-                          event.stopPropagation()
-                          router.push(`${documentsBasePath ?? basePath}/${person.id}/documents`)
-                        }}
-                        className="text-[var(--muted-foreground)] hover:text-[var(--foreground)]"
-                      >
-                        Documentos
-                      </button>
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={(event) => {
+                            event.stopPropagation()
+                            router.push(`${documentsBasePath ?? basePath}/${person.id}/documents`)
+                          }}
+                          className="text-[var(--muted-foreground)] hover:text-[var(--foreground)]"
+                        >
+                          Documentos
+                        </button>
+                        {canDelete ? (
+                          <AdminDeleteActionButton
+                            action={deletePersonAction.bind(null, person.id)}
+                            confirmMessage="Deseja excluir esta pessoa? Esta acao remove dados vinculados e nao pode ser desfeita."
+                            successMessage="Pessoa excluida com sucesso."
+                            fallbackErrorMessage="Nao foi possivel excluir a pessoa."
+                            size="sm"
+                            label="Excluir"
+                            stopPropagation
+                            onSuccess={() => router.refresh()}
+                          />
+                        ) : null}
+                      </div>
                     </div>
                   </div>
                 )

@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import Link from 'next/link'
 import { supabase } from '@/lib/supabaseClient'
+import AdminDeleteActionButton from '@/components/admin/AdminDeleteActionButton'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
 import { Badge } from '@/components/ui/Badge'
@@ -14,6 +15,7 @@ import {
   getProposalBundleByNegotiation,
   saveProposalDraftBundle,
   transitionProposalStatus,
+  deletePropertyNegotiationAction,
   type PersonSearchRow,
 } from '../actions'
 
@@ -1032,6 +1034,20 @@ export default function PropertyNegotiationsTabClient({
                       <Button variant="outline" onClick={() => void openProposalAndMarkAsRead(n)} disabled={!n.person_id}>
                         {n.proposal ? 'Abrir proposta' : 'Montar proposta'}
                       </Button>
+
+                      {userRole === 'admin' ? (
+                        <AdminDeleteActionButton
+                          action={deletePropertyNegotiationAction.bind(null, n.id)}
+                          confirmMessage="Deseja excluir esta negociacao? As propostas e pagamentos vinculados tambem serao removidos."
+                          successMessage="Negociacao excluida com sucesso."
+                          fallbackErrorMessage="Nao foi possivel excluir a negociacao."
+                          label="Excluir"
+                          size="sm"
+                          onSuccess={() => {
+                            void loadAll()
+                          }}
+                        />
+                      ) : null}
 
                       {n.lead_id ? (
                         <Link href={`/leads/${n.lead_id}`} className="text-xs font-medium text-[var(--primary)] hover:underline">

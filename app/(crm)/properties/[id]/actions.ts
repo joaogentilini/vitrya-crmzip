@@ -8,7 +8,7 @@ import {
   hasValidatedAuthorizationDoc,
   type AuthorizationPublicationState,
 } from './publish-guard'
-import { requireActiveUser } from '@/lib/auth'
+import { requireActiveUser, requireRole } from '@/lib/auth'
 import { buildAmenitiesSnapshot } from '@/lib/maps/googlePlaces'
 import type { AmenitiesSnapshotData, PropertyLocationSource } from '@/lib/maps/types'
 
@@ -2256,6 +2256,178 @@ export async function createPropertyNegotiation(
 
   return { success: true, negotiation }
 }
+
+async function deleteProposalBundlesByIds(supabase: Awaited<ReturnType<typeof createClient>>, proposalIds: string[]) {
+  const filteredProposalIds = proposalIds.filter(Boolean)
+  if (filteredProposalIds.length === 0) return { success: true as const }
+
+  const { data: paymentsRows, error: paymentListErr } = await supabase
+    .from('property_proposal_payments')
+    .select('id')
+    .in('proposal_id', filteredProposalIds)
+
+  if (paymentListErr) {
+    return { success: false as const, error: paymentListErr.message || 'Erro ao buscar pagamentos da proposta.' }
+  }
+
+  const paymentIds = (paymentsRows ?? []).map((row: any) => String(row.id || '')).filter(Boolean)
+  if (paymentIds.length > 0) {
+    const { error: installmentsErr } = await supabase
+      .from('property_proposal_installments')
+      .delete()
+      .in('proposal_payment_id', paymentIds)
+
+    if (installmentsErr) {
+      return { success: false as const, error: installmentsErr.message || 'Erro ao remover parcelas da proposta.' }
+    }
+  }
+
+  const { error: paymentsErr } = await supabase
+    .from('property_proposal_payments')
+    .delete()
+    .in('proposal_id', filteredProposalIds)
+
+  if (paymentsErr) {
+    return { success: false as const, error: paymentsErr.message || 'Erro ao remover pagamentos da proposta.' }
+  }
+
+  const { error: brokerPaymentsErr } = await supabase
+    .from('broker_commission_payments')
+    .delete()
+    .in('proposal_id', filteredProposalIds)
+
+  if (brokerPaymentsErr) {
+    return {
+      success: false as const,
+      error: brokerPaymentsErr.message || 'Erro ao remover financeiro de comissoes da proposta.',
+    }
+  }
+
+  const { error: proposalsErr } = await supabase.from('property_proposals').delete().in('id', filteredProposalIds)
+  if (proposalsErr) {
+    return { success: false as const, error: proposalsErr.message || 'Erro ao remover propostas vinculadas.' }
+  }
+
+  return { success: true as const }
+}
+
+export async function deletePropertyNegotiationAction(
+  negotiationId: string
+): Promise<{ success: boolean; error?: string }> {
+  await requireRole(['admin'])
+
+  if (!negotiationId) {
+    return { success: false, error: 'Negociacao invalida.' }
+  }
+
+  const supabase = await createClient()
+
+  const { data: negotiation, error: negotiationErr } = await supabase
+    .from('property_negotiations')
+    .select('id, property_id')
+    .eq('id', negotiationId)
+    .maybeSingle()
+
+  if (negotiationErr) {
+    return { success: false, error: negotiationErr.message || 'Erro ao validar negociacao.' }
+  }
+  if (!negotiation?.id) {
+    return { success: false, error: 'Negociacao nao encontrada.' }
+  }
+
+  const { data: proposalRows, error: proposalRowsErr } = await supabase
+    .from('property_proposals')
+    .select('id')
+    .eq('negotiation_id', negotiationId)
+
+  if (proposalRowsErr) {
+    return { success: false, error: proposalRowsErr.message || 'Erro ao carregar propostas da negociacao.' }
+  }
+
+  const proposalIds = (proposalRows ?? []).map((row: any) => String(row.id || '')).filter(Boolean)
+  const deleteProposalBundlesResult = await deleteProposalBundlesByIds(supabase, proposalIds)
+  if (!deleteProposalBundlesResult.success) {
+    return { success: false, error: deleteProposalBundlesResult.error }
+  }
+
+  const { error: deleteNegotiationErr } = await supabase
+    .from('property_negotiations')
+    .delete()
+    .eq('id', negotiationId)
+
+  if (deleteNegotiationErr) {
+    return {
+      success: false,
+      error: deleteNegotiationErr.message || 'Nao foi possivel excluir a negociacao.',
+    }
+  }
+
+  if (negotiation.property_id) {
+    revalidatePath(`/properties/${negotiation.property_id}`)
+  }
+  revalidatePath('/properties')
+  return { success: true }
+}
+
+export async function deletePropertyAction(propertyId: string): Promise<{ success: boolean; error?: string }> {
+  await requireRole(['admin'])
+
+  if (!propertyId) {
+    return { success: false, error: 'Imovel invalido.' }
+  }
+
+  const supabase = await createClient()
+
+  const { data: property, error: propertyErr } = await supabase
+    .from('properties')
+    .select('id')
+    .eq('id', propertyId)
+    .maybeSingle()
+
+  if (propertyErr) {
+    return { success: false, error: propertyErr.message || 'Erro ao validar imovel.' }
+  }
+  if (!property?.id) {
+    return { success: false, error: 'Imovel nao encontrado.' }
+  }
+
+  const { data: proposalRows, error: proposalRowsErr } = await supabase
+    .from('property_proposals')
+    .select('id')
+    .eq('property_id', propertyId)
+
+  if (proposalRowsErr) {
+    return { success: false, error: proposalRowsErr.message || 'Erro ao carregar propostas do imovel.' }
+  }
+
+  const proposalIds = (proposalRows ?? []).map((row: any) => String(row.id || '')).filter(Boolean)
+  const deleteProposalBundlesResult = await deleteProposalBundlesByIds(supabase, proposalIds)
+  if (!deleteProposalBundlesResult.success) {
+    return { success: false, error: deleteProposalBundlesResult.error }
+  }
+
+  const { error: negotiationsErr } = await supabase
+    .from('property_negotiations')
+    .delete()
+    .eq('property_id', propertyId)
+  if (negotiationsErr) {
+    return { success: false, error: negotiationsErr.message || 'Erro ao remover negociacoes do imovel.' }
+  }
+
+  const { error: deletePropertyErr } = await supabase.from('properties').delete().eq('id', propertyId)
+  if (deletePropertyErr) {
+    return {
+      success: false,
+      error:
+        deletePropertyErr.message ||
+        'Nao foi possivel excluir o imovel. Verifique se existem vinculos obrigatorios.',
+    }
+  }
+
+  revalidatePath('/properties')
+  return { success: true }
+}
+
 export type PropertyNegotiationRow = {
   id: string
   property_id: string

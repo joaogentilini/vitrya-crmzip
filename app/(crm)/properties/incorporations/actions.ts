@@ -548,6 +548,81 @@ export async function createIncorporationAction(formData: FormData) {
   return { success: true as const, data: { incorporationId: data.id } }
 }
 
+export async function deleteIncorporationAction(
+  incorporationId: string
+): Promise<{ success: boolean; error?: string }> {
+  await requireRole(['admin'])
+
+  if (!incorporationId) {
+    return { success: false, error: 'Empreendimento invalido.' }
+  }
+
+  const supabase = await createClient()
+  const { data: incorporation, error: loadError } = await supabase
+    .from('incorporations')
+    .select('id, developer_id')
+    .eq('id', incorporationId)
+    .maybeSingle()
+
+  if (loadError) {
+    return { success: false, error: loadError.message || 'Erro ao validar empreendimento.' }
+  }
+  if (!incorporation?.id) {
+    return { success: false, error: 'Empreendimento nao encontrado.' }
+  }
+
+  const { error: deleteError } = await supabase.from('incorporations').delete().eq('id', incorporationId)
+  if (deleteError) {
+    return {
+      success: false,
+      error:
+        deleteError.message ||
+        'Nao foi possivel excluir o empreendimento. Verifique se existem vinculos obrigatorios.',
+    }
+  }
+
+  revalidatePath('/properties/incorporations')
+  revalidatePath(`/properties/incorporations/developers/${incorporation.developer_id}`)
+  return { success: true }
+}
+
+export async function deleteDeveloperAction(
+  developerId: string
+): Promise<{ success: boolean; error?: string }> {
+  await requireRole(['admin'])
+
+  if (!developerId) {
+    return { success: false, error: 'Construtora invalida.' }
+  }
+
+  const supabase = await createClient()
+  const { data: developer, error: loadError } = await supabase
+    .from('developers')
+    .select('id')
+    .eq('id', developerId)
+    .maybeSingle()
+
+  if (loadError) {
+    return { success: false, error: loadError.message || 'Erro ao validar construtora.' }
+  }
+  if (!developer?.id) {
+    return { success: false, error: 'Construtora nao encontrada.' }
+  }
+
+  const { error: deleteError } = await supabase.from('developers').delete().eq('id', developerId)
+  if (deleteError) {
+    return {
+      success: false,
+      error:
+        deleteError.message ||
+        'Nao foi possivel excluir a construtora. Verifique se existem vinculos obrigatorios.',
+    }
+  }
+
+  revalidatePath('/properties/incorporations')
+  return { success: true }
+}
+
 export async function createIncorporationPlanAction(formData: FormData) {
   const viewer = await requireRole(['admin', 'gestor'])
   const supabase = await createClient()

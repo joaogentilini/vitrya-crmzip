@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 
+import AdminDeleteActionButton from "@/components/admin/AdminDeleteActionButton";
 import PropertyMediaManager from "./media/PropertyMediaManager";
 import PropertyDocumentsManager from "./documents/PropertyDocumentsManager";
 import PublishPanel from "./PublishPanel";
@@ -9,6 +10,7 @@ import PropertyFullEditorClient from "./PropertyFullEditorClient";
 import CampaignTab from "./CampaignTab";
 import PropertyFeaturesManager from "./features/PropertyFeaturesManager";
 import PropertyNegotiationsTab from "./negociacoes/PropertyNegotiationsTab";
+import { deletePropertyAction } from "./actions";
 
 type TabKey =
   | "overview"
@@ -126,6 +128,7 @@ export default function PropertyTabs({
   const [tab, setTab] = useState<TabKey>(safeInitialTab);
   const [status, setStatus] = useState<string>(property.status);
   const [currentProperty, setCurrentProperty] = useState<Property>(property);
+  const canDeleteProperty = viewerRole === "admin";
   const publicationDays = useMemo(() => getDaysSince(currentProperty.created_at), [currentProperty.created_at])
   const publicationLabel =
     status === "active"
@@ -162,6 +165,18 @@ export default function PropertyTabs({
         })}
 
         <div className="ml-auto flex flex-wrap items-center gap-2 text-xs">
+          {canDeleteProperty ? (
+            <AdminDeleteActionButton
+              action={deletePropertyAction.bind(null, property.id)}
+              confirmMessage="Deseja excluir este imovel? Esta acao remove negociacoes, propostas e nao pode ser desfeita."
+              successMessage="Imovel excluido com sucesso."
+              fallbackErrorMessage="Nao foi possivel excluir o imovel."
+              redirectTo="/properties"
+              label="Excluir imovel"
+              size="sm"
+              className="text-xs"
+            />
+          ) : null}
           <span className="rounded-full border border-[var(--border)] bg-[var(--card)] px-2 py-0.5 text-[var(--muted-foreground)]">
             Status: <span className="font-semibold text-[var(--foreground)]">{status}</span>
           </span>
