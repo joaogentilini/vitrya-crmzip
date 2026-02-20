@@ -5,6 +5,32 @@ import { createAdminClient } from '@/lib/supabase/admin'
 
 const PROVIDERS = new Set(['grupoolx', 'olx', 'meta'])
 
+type PortalIntegrationRow = {
+  id: string
+  provider: string
+  is_enabled?: boolean | null
+  settings?: Record<string, unknown> | null
+  created_at?: string | null
+  updated_at?: string | null
+}
+
+type PortalWebhookEventSummaryRow = {
+  provider: string | null
+  status: string | null
+}
+
+type PortalIntegrationPatch = Partial<Pick<PortalIntegrationRow, 'is_enabled' | 'settings'>> & {
+  updated_at?: string
+}
+
+type UserAuditLogInsert = {
+  actor_id: string | null
+  target_user_id: string | null
+  action: string
+  details?: Record<string, unknown>
+  created_at?: string
+}
+
 function boolFromEnv(name: string): boolean {
   const normalized = String(process.env[name] || '')
     .trim()
@@ -55,6 +81,7 @@ export async function GET() {
     .from('portal_integrations')
     .select('id, provider, is_enabled, settings, created_at, updated_at')
     .order('provider', { ascending: true })
+  const integrations = (integrationsRes.data ?? []) as PortalIntegrationRow[]
 
   if (integrationsRes.error) {
     if (isSchemaMissingError(integrationsRes.error.code, integrationsRes.error.message)) {
@@ -73,13 +100,14 @@ export async function GET() {
     .select('provider, status')
     .order('received_at', { ascending: false })
     .limit(1000)
+  const eventsSummary = (eventsSummaryRes.data ?? []) as PortalWebhookEventSummaryRow[]
 
   const summaryByProvider: Record<string, { processed: number; errors: number; duplicates: number }> = {}
   for (const provider of PROVIDERS) {
     summaryByProvider[provider] = { processed: 0, errors: 0, duplicates: 0 }
   }
 
-  for (const row of eventsSummaryRes.data || []) {
+  for (const row of eventsSummary) {
     const provider = String(row.provider || '')
     const status = String(row.status || '')
     if (!summaryByProvider[provider]) continue
@@ -89,7 +117,7 @@ export async function GET() {
   }
 
   return NextResponse.json({
-    integrations: integrationsRes.data || [],
+    integrations,
     summary_by_provider: summaryByProvider,
     env: {
       portal_integrations_enabled: boolFromEnv('PORTAL_INTEGRATIONS_ENABLED'),
@@ -123,13 +151,16 @@ export async function PATCH(request: NextRequest) {
     )
   }
 
-  const patch: Record<string, unknown> = {}
+  const patch: PortalIntegrationPatch = {}
   if (typeof isEnabled === 'boolean') patch.is_enabled = isEnabled
-  if (settings && typeof settings === 'object' && !Array.isArray(settings)) patch.settings = settings
+  if (settings && typeof settings === 'object' && !Array.isArray(settings)) {
+    patch.settings = settings as Record<string, unknown>
+  }
+  patch.updated_at = new Date().toISOString()
 
   const admin = createAdminClient()
-  const updateRes = await admin
-    .from('portal_integrations')
+  const portalIntegrationsTable = admin.from('portal_integrations') as any
+  const updateRes = await portalIntegrationsTable
     .update(patch)
     .eq('provider', provider)
     .select('id, provider, is_enabled, settings, created_at, updated_at')
@@ -147,7 +178,7 @@ export async function PATCH(request: NextRequest) {
     return NextResponse.json({ error: updateRes.error.message }, { status: 500 })
   }
 
-  await admin.from('user_audit_logs').insert({
+  const audit: UserAuditLogInsert = {
     actor_id: auth.user.id,
     target_user_id: auth.user.id,
     action: 'portal_integration_updated',
@@ -155,7 +186,10 @@ export async function PATCH(request: NextRequest) {
       provider,
       patch,
     },
-  })
+    created_at: new Date().toISOString(),
+  }
+  const auditLogsTable = admin.from('user_audit_logs') as any
+  await auditLogsTable.insert(audit)
 
   return NextResponse.json({ ok: true, integration: updateRes.data || null })
 }
