@@ -20,6 +20,26 @@ You can start editing the page by modifying `app/page.tsx`. The page auto-update
 
 This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
 
+## EasyPanel (Runtime ENV)
+
+No Dockerfile secrets are used via `ARG`/`ENV`.
+Configure sensitive variables only in EasyPanel (`Settings -> Environment`), for example:
+
+- `NEXT_PUBLIC_SUPABASE_URL`
+- `NEXT_PUBLIC_SUPABASE_ANON_KEY`
+- `SUPABASE_SERVICE_ROLE_KEY`
+- `NEXT_PUBLIC_SITE_URL`
+- `OPENAI_API_KEY`
+- `GOOGLE_OAUTH_CLIENT_ID`
+- `GOOGLE_OAUTH_CLIENT_SECRET`
+- `GOOGLE_OAUTH_REDIRECT_URI` (optional, if overriding auto callback)
+- `ZAPSIGN_API_KEY`
+- `ZAPSIGN_WEBHOOK_TOKEN`
+- `AUTOMATIONS_SECRET`
+- `GRUPO_OLX_WEBHOOK_TOKEN`
+- `GRUPO_OLX_FEED_TOKEN`
+- `OLX_WEBHOOK_TOKEN`
+
 ## Learn More
 
 To learn more about Next.js, take a look at the following resources:

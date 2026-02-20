@@ -26,6 +26,8 @@ OLX_WEBHOOK_TOKEN=troque-este-token
 
 ## Configuração no EasyPanel
 
+> **Segurança:** não use secrets em `Dockerfile` via `ARG/ENV`. Configure tudo apenas em **Settings -> Environment** no EasyPanel.
+
 ### 1. Criar Serviço
 
 1. Acesse EasyPanel
