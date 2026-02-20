@@ -133,7 +133,7 @@ export default async function PublicBrokerPage({
               </pre>
             ) : null}
             <Link
-              href="/imóveis"
+              href="/imoveis"
               style={{
                 display: "inline-block",
                 marginTop: 12,
@@ -165,7 +165,7 @@ export default async function PublicBrokerPage({
   const pageUrl = host ? `${proto}://${host}/corretores/${b.id}` : null;
 
   const whatsappTextParts = [
-    `Ola! Encontrei seu perfil na Vitrya e gostaria de falar com voce.`,
+    `Olá! Encontrei seu perfil na Vitrya e gostaria de falar com você.`,
     pageUrl ? `Perfil: ${pageUrl}` : null,
   ].filter(Boolean);
   const whatsappText = whatsappTextParts.join(" ");
@@ -293,7 +293,7 @@ export default async function PublicBrokerPage({
           >
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
               <Link
-                href="/imóveis"
+                href="/imoveis"
                 style={{
                   color: "var(--cobalt)",
                   textDecoration: "none",
@@ -526,7 +526,7 @@ export default async function PublicBrokerPage({
               <p style={{ margin: "0.5rem 0 1rem", opacity: 0.8 }}>
                 Volte em breve para novas oportunidades.
               </p>
-              <Link href="/imóveis" style={{ color: "var(--cobalt)", fontWeight: 800 }}>
+              <Link href="/imoveis" style={{ color: "var(--cobalt)", fontWeight: 800 }}>
                 Voltar para vitrine
               </Link>
             </div>
@@ -536,7 +536,7 @@ export default async function PublicBrokerPage({
                 const location =
                   [p.neighborhood, p.city].filter(Boolean).join(" • ") ||
                   p.address ||
-                  "Localizacao não informada";
+                  "Localização não informada";
 
                 const price =
                   p.purpose === "rent"
@@ -544,7 +544,7 @@ export default async function PublicBrokerPage({
                     : fmtMoney(p.price);
 
                 return (
-                  <Link key={p.id} href={`/imóveis/${p.id}`} className="pv-card">
+                  <Link key={p.id} href={`/imoveis/${p.id}`} className="pv-card">
                     <div className="pv-thumb" style={{ position: "relative" }}>
                       {p.imageUrls.length ? (
                         <ThumbCarousel images={p.imageUrls} alt={p.title ?? "Imóvel"} />

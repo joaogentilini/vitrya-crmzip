@@ -1696,7 +1696,7 @@ export async function assignPlanToExistingUnitsAction(formData: FormData) {
 
   revalidatePath(`/properties/incorporations/${incorporationId}`)
   revalidatePath('/properties/incorporations')
-  revalidatePath('/imóveis/resultados')
+  revalidatePath('/imoveis/resultados')
   revalidatePath('/empreendimentos')
   return {
     success: true as const,
@@ -2072,7 +2072,7 @@ export async function reconfigureIncorporationFloorsAction(formData: FormData) {
 
   revalidatePath(`/properties/incorporations/${incorporationId}`)
   revalidatePath('/properties/incorporations')
-  revalidatePath('/imóveis/resultados')
+  revalidatePath('/imoveis/resultados')
   revalidatePath('/empreendimentos')
 
   return {
@@ -2243,8 +2243,27 @@ export async function createIncorporationProposalAction(formData: FormData): Pro
       proposalUrl: proposalPdfUrl,
     })
 
+    const companyCommercialEmail =
+      String(
+        process.env.COMPANY_COMMERCIAL_EMAIL
+          || process.env.COMPANY_COMERCIAL_EMAIL
+          || 'vitrya.imoveis@gmail.com'
+      ).trim() || 'vitrya.imoveis@gmail.com'
+    const companyDocumentsEmail =
+      String(process.env.COMPANY_DOCUMENTS_EMAIL || companyCommercialEmail).trim() || companyCommercialEmail
+
     const emailResult = await sendProposalPdfByEmail({
-      to: recipientEmail,
+      to: recipientEmail || companyCommercialEmail,
+      cc: companyDocumentsEmail ? [companyDocumentsEmail] : [],
+      fromEmail:
+        process.env.RESEND_FROM_EMAIL_COMMERCIAL
+        || process.env.RESEND_FROM_EMAIL_COMERCIAL
+        || process.env.RESEND_FROM_EMAIL
+        || null,
+      replyTo:
+        process.env.RESEND_REPLY_TO_COMMERCIAL
+        || process.env.RESEND_REPLY_TO_COMERCIAL
+        || companyCommercialEmail,
       subject: `Proposta comercial - ${incorporationName} - ${unitCode}`,
       html: emailHtml,
       pdfFileName: `proposta-${data.id.slice(0, 8)}.pdf`,

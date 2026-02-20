@@ -7,7 +7,15 @@ import { Input } from '@/components/ui/Input'
 import { Select } from '@/components/ui/Select'
 import { Textarea } from '@/components/ui/Textarea'
 import { useToast } from '@/components/ui/Toast'
-import { generatePropertyMarketingCopy, searchPeople, updatePropertyBasics } from './actions'
+import MapPicker from '@/components/maps/MapPicker'
+import {
+  generateAmenitiesSnapshot,
+  generatePropertyMarketingCopy,
+  searchPeople,
+  updatePropertyBasics,
+  updatePropertyLocation,
+} from './actions'
+import type { AmenitiesSnapshotData, PropertyLocationSource } from '@/lib/maps/types'
 
 type AnyRow = Record<string, unknown>
 
@@ -24,6 +32,16 @@ type PersonSearchResult = {
   document_id?: string | null
   phone_e164?: string | null
   kind_tags?: string[] | null
+}
+
+type AmenitiesSnapshotRow = {
+  id: string
+  property_id: string
+  radius_m: number
+  data: AmenitiesSnapshotData
+  generated_at: string
+  source?: string | null
+  version?: number | null
 }
 
 const DB_FIELD_LABELS: Record<string, string> = {
@@ -46,7 +64,9 @@ const DB_FIELD_LABELS: Record<string, string> = {
   accepts_financing: 'Aceita financiamento',
   accepts_trade: 'Aceita permuta',
   property_standard: 'Padrão do imóvel',
-  artesian_well: 'Poço artesiano'
+  artesian_well: 'Poço artesiano',
+  location_source: 'Origem da localização',
+  location_updated_at: 'Localização atualizada em'
 }
 
 function formatDbFieldLabel(key: string) {
@@ -87,6 +107,14 @@ function parseNumberOrNull(value: string) {
 }
 
 function parseDecimalOrNull(value: string) {
+  const trimmed = value.trim()
+  if (!trimmed) return null
+  const normalized = trimmed.replace(',', '.')
+  const numberValue = Number(normalized)
+  return Number.isNaN(numberValue) ? null : numberValue
+}
+
+function parseCoordinateOrNull(value: string) {
   const trimmed = value.trim()
   if (!trimmed) return null
   const normalized = trimmed.replace(',', '.')
@@ -188,6 +216,23 @@ function normalizeMarketingText(value: string) {
   return next
 }
 
+function parseAmenitiesSnapshotFromProperty(raw: unknown): AmenitiesSnapshotRow | null {
+  if (!raw || typeof raw !== 'object') return null
+  const row = raw as Record<string, unknown>
+  const data = row.data
+  if (!data || typeof data !== 'object') return null
+
+  return {
+    id: String(row.id || ''),
+    property_id: String(row.property_id || ''),
+    radius_m: Number(row.radius_m || 1000),
+    data: data as AmenitiesSnapshotData,
+    generated_at: String(row.generated_at || ''),
+    source: typeof row.source === 'string' ? row.source : null,
+    version: typeof row.version === 'number' ? row.version : null,
+  }
+}
+
 const STATUS_OPTIONS = [
   { value: 'draft', label: 'Rascunho' },
   { value: 'active', label: 'Ativo' },
@@ -285,6 +330,7 @@ export default function PropertyFullEditorClient({
     postal_code: String(property.postal_code ?? ''),
     latitude: String(property.latitude ?? ''),
     longitude: String(property.longitude ?? ''),
+    location_source: String(property.location_source ?? ''),
     price: formatBRL(property.price as number | null),
     rent_price: formatBRL(property.rent_price as number | null),
     sale_value: formatBRL(property.sale_value as number | null),
@@ -316,6 +362,9 @@ export default function PropertyFullEditorClient({
     renovated_at: String(property.renovated_at ?? ''),
     registry_number: String(property.registry_number ?? ''),
     registry_office: String(property.registry_office ?? ''),
+    authorization_started_at: String(property.authorization_started_at ?? '').slice(0, 10),
+    authorization_expires_at: String(property.authorization_expires_at ?? '').slice(0, 10),
+    authorization_is_exclusive: Boolean(property.authorization_is_exclusive ?? false),
     iptu_value: formatBRL(property.iptu_value as number | null),
     iptu_year: String(property.iptu_year ?? ''),
     iptu_is_paid: Boolean(property.iptu_is_paid ?? false),
@@ -327,6 +376,28 @@ export default function PropertyFullEditorClient({
   })
 
   const [selectedOwner, setSelectedOwner] = useState<PersonSearchResult | null>(null)
+  const [isSavingLocation, startSavingLocation] = useTransition()
+  const [isRefreshingAmenities, startRefreshingAmenities] = useTransition()
+  const [locationDraft, setLocationDraft] = useState<{
+    lat: number | null
+    lng: number | null
+    placeId: string | null
+    formattedAddress: string | null
+    source: PropertyLocationSource
+  }>({
+    lat: parseCoordinateOrNull(String(property.latitude ?? '')),
+    lng: parseCoordinateOrNull(String(property.longitude ?? '')),
+    placeId: null,
+    formattedAddress: String(property.address ?? '').trim() || null,
+    source: (['manual_pin', 'autocomplete', 'device_gps'] as const).includes(
+      String((property as any).location_source || '') as PropertyLocationSource
+    )
+      ? (String((property as any).location_source || '') as PropertyLocationSource)
+      : 'manual_pin',
+  })
+  const [amenitiesSnapshot, setAmenitiesSnapshot] = useState<AmenitiesSnapshotRow | null>(
+    parseAmenitiesSnapshotFromProperty((property as any).amenities_snapshot_latest)
+  )
 
   const ownerProfile = property.owner_profile as
     | { full_name?: string | null; email?: string | null }
@@ -501,6 +572,8 @@ export default function PropertyFullEditorClient({
         'postal_code',
         'latitude',
         'longitude',
+        'location_source',
+        'location_updated_at',
         'price',
         'rent_price',
         'appraisal_value',
@@ -530,6 +603,9 @@ export default function PropertyFullEditorClient({
         'renovated_at',
         'registry_number',
         'registry_office',
+        'authorization_started_at',
+        'authorization_expires_at',
+        'authorization_is_exclusive',
         'iptu_value',
         'iptu_year',
         'iptu_is_paid',
@@ -688,6 +764,118 @@ export default function PropertyFullEditorClient({
     })
   }
 
+  const handleLocationPickerChange = (next: {
+    lat: number | null
+    lng: number | null
+    placeId?: string | null
+    formattedAddress?: string | null
+    source?: PropertyLocationSource | null
+  }) => {
+    const source: PropertyLocationSource =
+      next.source === 'autocomplete' || next.source === 'device_gps' ? next.source : 'manual_pin'
+
+    setLocationDraft((prev) => ({
+      ...prev,
+      lat: next.lat,
+      lng: next.lng,
+      placeId: next.placeId ?? prev.placeId ?? null,
+      formattedAddress: next.formattedAddress ?? prev.formattedAddress ?? null,
+      source,
+    }))
+
+    setForm((prev) => ({
+      ...prev,
+      latitude: next.lat === null ? '' : String(next.lat),
+      longitude: next.lng === null ? '' : String(next.lng),
+      location_source: source,
+      address: next.formattedAddress || prev.address,
+    }))
+  }
+
+  const handleSaveLocation = () => {
+    if (!canEditOverviewData) {
+      showError('Sem permissão: apenas responsável/admin/gestor pode editar.')
+      return
+    }
+
+    const latitude = locationDraft.lat ?? parseCoordinateOrNull(form.latitude)
+    const longitude = locationDraft.lng ?? parseCoordinateOrNull(form.longitude)
+
+    if (latitude === null || longitude === null) {
+      showError('Defina latitude e longitude válidas no mapa antes de salvar.')
+      return
+    }
+
+    startSavingLocation(async () => {
+      const result = await updatePropertyLocation(String(property.id), {
+        latitude,
+        longitude,
+        source: locationDraft.source,
+        place_id: locationDraft.placeId,
+        formatted_address: locationDraft.formattedAddress || form.address || null,
+      })
+
+      if (!result.success || !result.data) {
+        showError(result.error || 'Não foi possível salvar a localização.')
+        return
+      }
+
+      setLocationDraft((prev) => ({
+        ...prev,
+        lat: result.data?.latitude ?? prev.lat,
+        lng: result.data?.longitude ?? prev.lng,
+        source: result.data?.source ?? prev.source,
+      }))
+
+      setForm((prev) => ({
+        ...prev,
+        latitude: String(result.data?.latitude ?? latitude),
+        longitude: String(result.data?.longitude ?? longitude),
+        location_source: String(result.data?.source || locationDraft.source || 'manual_pin'),
+        address: locationDraft.formattedAddress || prev.address,
+      }))
+
+      onUpdated({
+        ...property,
+        latitude: result.data.latitude,
+        longitude: result.data.longitude,
+        location_source: result.data.source,
+        location_updated_at: new Date().toISOString(),
+        address: locationDraft.formattedAddress || form.address || null,
+        amenities_snapshot_latest: amenitiesSnapshot,
+      })
+
+      showSuccess('Localização salva com sucesso.')
+    })
+  }
+
+  const handleRefreshAmenitiesSnapshot = () => {
+    if (!canEditOverviewData) {
+      showError('Sem permissão para atualizar proximidades.')
+      return
+    }
+
+    startRefreshingAmenities(async () => {
+      const result = await generateAmenitiesSnapshot(String(property.id), 1000)
+      if (!result.success || !result.data) {
+        showError(result.error || 'Não foi possível atualizar proximidades.')
+        return
+      }
+
+      const snapshot = {
+        ...result.data,
+        data: result.data.data as AmenitiesSnapshotData,
+      } as AmenitiesSnapshotRow
+
+      setAmenitiesSnapshot(snapshot)
+      onUpdated({
+        ...property,
+        amenities_snapshot_latest: snapshot,
+      })
+      showSuccess('Snapshot de proximidades atualizado.')
+    })
+  }
+
   const handleSave = () => {
     if (!canEditOverviewData) {
       showError('Sem permissão: apenas responsável/admin/gestor pode editar.')
@@ -711,8 +899,9 @@ export default function PropertyFullEditorClient({
           neighborhood: form.neighborhood || null,
           state: form.state || null,
           postal_code: form.postal_code || null,
-          latitude: parseNumberOrNull(form.latitude),
-          longitude: parseNumberOrNull(form.longitude),
+          latitude: parseCoordinateOrNull(form.latitude),
+          longitude: parseCoordinateOrNull(form.longitude),
+          location_source: (form.location_source || null) as PropertyLocationSource | null,
           price: parseBRL(form.price),
           rent_price: parseBRL(form.rent_price),
           appraisal_value: parseBRL(form.appraisal_value),
@@ -748,6 +937,9 @@ export default function PropertyFullEditorClient({
         if (canViewLegalData) {
           payload.registry_number = form.registry_number || null
           payload.registry_office = form.registry_office || null
+          payload.authorization_started_at = form.authorization_started_at || null
+          payload.authorization_expires_at = form.authorization_expires_at || null
+          payload.authorization_is_exclusive = form.authorization_is_exclusive
         }
 
         await updatePropertyBasics(String(property.id), payload as any)
@@ -768,8 +960,10 @@ export default function PropertyFullEditorClient({
           neighborhood: form.neighborhood || null,
           state: form.state || null,
           postal_code: form.postal_code || null,
-          latitude: parseNumberOrNull(form.latitude),
-          longitude: parseNumberOrNull(form.longitude),
+          latitude: parseCoordinateOrNull(form.latitude),
+          longitude: parseCoordinateOrNull(form.longitude),
+          location_source: form.location_source || null,
+          amenities_snapshot_latest: amenitiesSnapshot,
           price: parseBRL(form.price),
           rent_price: parseBRL(form.rent_price),
           appraisal_value: parseBRL(form.appraisal_value),
@@ -792,6 +986,15 @@ export default function PropertyFullEditorClient({
           renovated_at: form.renovated_at || null,
           registry_number: canViewLegalData ? form.registry_number || null : (property as any).registry_number ?? null,
           registry_office: canViewLegalData ? form.registry_office || null : (property as any).registry_office ?? null,
+          authorization_started_at: canViewLegalData
+            ? form.authorization_started_at || null
+            : (property as any).authorization_started_at ?? null,
+          authorization_expires_at: canViewLegalData
+            ? form.authorization_expires_at || null
+            : (property as any).authorization_expires_at ?? null,
+          authorization_is_exclusive: canViewLegalData
+            ? form.authorization_is_exclusive
+            : Boolean((property as any).authorization_is_exclusive ?? false),
           iptu_value: parseBRL(form.iptu_value),
           iptu_year: parseNumberOrNull(form.iptu_year),
           iptu_is_paid: form.iptu_is_paid,
@@ -1169,18 +1372,106 @@ export default function PropertyFullEditorClient({
                 label="Latitude"
                 value={form.latitude}
                 disabled={!isEditing}
-                onChange={(event) =>
-                  setForm((prev) => ({ ...prev, latitude: event.target.value }))
-                }
+                onChange={(event) => {
+                  const nextValue = event.target.value
+                  setForm((prev) => ({ ...prev, latitude: nextValue }))
+                  setLocationDraft((prev) => ({
+                    ...prev,
+                    lat: parseCoordinateOrNull(nextValue),
+                    source: 'manual_pin',
+                  }))
+                }}
               />
               <Input
                 label="Longitude"
                 value={form.longitude}
                 disabled={!isEditing}
-                onChange={(event) =>
-                  setForm((prev) => ({ ...prev, longitude: event.target.value }))
-                }
+                onChange={(event) => {
+                  const nextValue = event.target.value
+                  setForm((prev) => ({ ...prev, longitude: nextValue }))
+                  setLocationDraft((prev) => ({
+                    ...prev,
+                    lng: parseCoordinateOrNull(nextValue),
+                    source: 'manual_pin',
+                  }))
+                }}
               />
+            </div>
+            <div className="space-y-3 rounded-[var(--radius)] border border-[var(--border)] bg-[var(--muted)]/20 p-3">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <p className="text-sm font-medium text-[var(--foreground)]">Ponto exato no mapa</p>
+                <div className="flex flex-wrap gap-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={handleSaveLocation}
+                    disabled={!canEditOverviewData || isSavingLocation}
+                  >
+                    {isSavingLocation ? 'Salvando localização...' : 'Salvar localização'}
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={handleRefreshAmenitiesSnapshot}
+                    disabled={!canEditOverviewData || isRefreshingAmenities}
+                  >
+                    {isRefreshingAmenities ? 'Atualizando proximidades...' : 'Atualizar proximidades'}
+                  </Button>
+                </div>
+              </div>
+
+              <MapPicker
+                disabled={!canEditOverviewData}
+                value={{
+                  lat: locationDraft.lat,
+                  lng: locationDraft.lng,
+                  placeId: locationDraft.placeId,
+                  formattedAddress: locationDraft.formattedAddress || form.address || null,
+                  source: locationDraft.source,
+                }}
+                onChange={handleLocationPickerChange}
+              />
+
+              {amenitiesSnapshot?.data?.categories?.length ? (
+                <div className="space-y-2 rounded-[var(--radius)] border border-[var(--border)] bg-[var(--card)] p-3">
+                  <div className="flex items-center justify-between gap-3">
+                    <p className="text-xs font-semibold uppercase tracking-wide text-[var(--muted-foreground)]">
+                      Snapshot de proximidades
+                    </p>
+                    <span className="text-xs text-[var(--muted-foreground)]">
+                      {amenitiesSnapshot.generated_at
+                        ? new Date(amenitiesSnapshot.generated_at).toLocaleString('pt-BR')
+                        : '-'}
+                    </span>
+                  </div>
+                  <div className="grid gap-2 sm:grid-cols-2">
+                    {amenitiesSnapshot.data.categories.map((category) => (
+                      <div
+                        key={category.key}
+                        className="rounded-[var(--radius)] border border-[var(--border)] bg-[var(--muted)]/20 px-2.5 py-2"
+                      >
+                        <p className="text-xs font-semibold text-[var(--foreground)]">
+                          {category.label} ({category.count})
+                        </p>
+                        {category.top.length > 0 ? (
+                          <p className="mt-1 text-xs text-[var(--muted-foreground)]">
+                            {category.top
+                              .slice(0, 2)
+                              .map((item) => item.name)
+                              .join(' • ')}
+                          </p>
+                        ) : (
+                          <p className="mt-1 text-xs text-[var(--muted-foreground)]">Sem registros no raio atual.</p>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ) : (
+                <p className="text-xs text-[var(--muted-foreground)]">
+                  Proximidades ainda não geradas. Clique em <strong>Atualizar proximidades</strong> para salvar o snapshot manual.
+                </p>
+              )}
             </div>
           </div>
 
@@ -1536,6 +1827,35 @@ export default function PropertyFullEditorClient({
                     setForm((prev) => ({ ...prev, registry_office: event.target.value }))
                   }
                 />
+                <Input
+                  label="Autorização (início)"
+                  value={form.authorization_started_at}
+                  type="date"
+                  disabled={!isEditing}
+                  onChange={(event) =>
+                    setForm((prev) => ({ ...prev, authorization_started_at: event.target.value }))
+                  }
+                />
+                <Input
+                  label="Autorização (vencimento)"
+                  value={form.authorization_expires_at}
+                  type="date"
+                  disabled={!isEditing}
+                  onChange={(event) =>
+                    setForm((prev) => ({ ...prev, authorization_expires_at: event.target.value }))
+                  }
+                />
+                <label className="flex items-center gap-2 text-sm text-[var(--foreground)]">
+                  <input
+                    type="checkbox"
+                    checked={form.authorization_is_exclusive}
+                    disabled={!isEditing}
+                    onChange={(event) =>
+                      setForm((prev) => ({ ...prev, authorization_is_exclusive: event.target.checked }))
+                    }
+                  />
+                  Autorização exclusiva
+                </label>
                 <MoneyInput
                   label="IPTU (valor)"
                   value={form.iptu_value}

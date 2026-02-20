@@ -10,7 +10,7 @@ export default function PropertyCard({ property }: { property: any }) {
     e.preventDefault()
     e.stopPropagation()
     if (typeof window !== 'undefined') {
-      window.open(`${siteBase}/imóveis/${property.id}`, '_blank', 'noreferrer')
+      window.open(`${siteBase}/imoveis/${property.id}`, '_blank', 'noreferrer')
     }
   }
 

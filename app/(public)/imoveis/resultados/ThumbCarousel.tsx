@@ -7,13 +7,14 @@ type Props = {
   images: string[]
   alt: string
   className?: string
+  priority?: boolean
 }
 
 function clamp(n: number, min: number, max: number) {
   return Math.max(min, Math.min(max, n))
 }
 
-export function ThumbCarousel({ images, alt, className }: Props) {
+export function ThumbCarousel({ images, alt, className, priority = false }: Props) {
   const safeImages = useMemo(() => (images || []).filter(Boolean), [images])
   const [index, setIndex] = useState(0)
 
@@ -90,7 +91,9 @@ export function ThumbCarousel({ images, alt, className }: Props) {
           src={current}
           alt={alt}
           className="pv-thumb-img"
-          loading="lazy"
+          loading={priority ? 'eager' : 'lazy'}
+          fetchPriority={priority ? 'high' : 'low'}
+          decoding="async"
           draggable={false}
           style={{ width: '100%', height: '100%', objectFit: 'cover' }}
         />

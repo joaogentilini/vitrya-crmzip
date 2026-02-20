@@ -10,10 +10,12 @@ const PROTECTED = [
   "/people",
   "/perfil",
   "/blocked",
-  "/erp", // ✅ ERP protegido (sessão)
+  "/erp",
 ];
 
 const isDev = process.env.NODE_ENV === "development";
+const ACCENTED_IMOVEIS = "/im\u00F3veis";
+const ENCODED_ACCENTED_IMOVEIS = "/im%C3%B3veis";
 
 function isSupabaseAuthCookie(cookieName: string): boolean {
   if (!cookieName.startsWith("sb-")) return false;
@@ -31,15 +33,35 @@ function isSupabaseAuthCookie(cookieName: string): boolean {
   }
 
   const authTokenChunkPattern = /^sb-[a-z0-9]+-auth-token\.\d+$/i;
-  if (authTokenChunkPattern.test(cookieName)) {
-    return true;
-  }
-
-  return false;
+  return authTokenChunkPattern.test(cookieName);
 }
 
-export function middleware(req: NextRequest) {
+function normalizeLegacyPath(pathname: string): string | null {
+  if (pathname === ENCODED_ACCENTED_IMOVEIS) return "/imoveis";
+  const encodedLegacyPrefix = `${ENCODED_ACCENTED_IMOVEIS}/`;
+  if (pathname.startsWith(encodedLegacyPrefix)) {
+    return `/imoveis/${pathname.slice(encodedLegacyPrefix.length)}`;
+  }
+
+  if (pathname === ACCENTED_IMOVEIS) return "/imoveis";
+
+  const legacyPrefix = `${ACCENTED_IMOVEIS}/`;
+  if (pathname.startsWith(legacyPrefix)) {
+    return `/imoveis/${pathname.slice(legacyPrefix.length)}`;
+  }
+
+  return null;
+}
+
+export function proxy(req: NextRequest) {
   const { pathname } = req.nextUrl;
+
+  const normalizedPath = normalizeLegacyPath(pathname);
+  if (normalizedPath) {
+    const url = req.nextUrl.clone();
+    url.pathname = normalizedPath;
+    return NextResponse.redirect(url, 308);
+  }
 
   if (
     pathname.startsWith("/_next") ||
@@ -49,14 +71,14 @@ export function middleware(req: NextRequest) {
     return NextResponse.next();
   }
 
-  const isProtected = PROTECTED.some((p) => pathname === p || pathname.startsWith(p + "/"));
+  const isProtected = PROTECTED.some((p) => pathname === p || pathname.startsWith(`${p}/`));
   if (!isProtected) return NextResponse.next();
 
   const allCookies = req.cookies.getAll();
 
   if (isDev) {
     const cookieNames = allCookies.map((c) => c.name);
-    console.log(`[middleware] pathname=${pathname}, cookies found:`, cookieNames);
+    console.log(`[proxy] pathname=${pathname}, cookies found:`, cookieNames);
   }
 
   const hasSession = allCookies.some((cookie) => isSupabaseAuthCookie(cookie.name));
@@ -65,7 +87,7 @@ export function middleware(req: NextRequest) {
   const hasAuthHeader = authHeader?.startsWith("Bearer ") && authHeader.length > 7;
 
   if (isDev) {
-    console.log(`[middleware] hasSession=${hasSession}, hasAuthHeader=${hasAuthHeader}`);
+    console.log(`[proxy] hasSession=${hasSession}, hasAuthHeader=${hasAuthHeader}`);
   }
 
   if (hasSession || hasAuthHeader) return NextResponse.next();

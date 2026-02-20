@@ -548,6 +548,24 @@ export function AppShell({
               </svg>
             ),
           },
+          ...(isManager
+            ? [
+                {
+                  href: '/settings/company',
+                  label: 'Empresa',
+                  icon: (
+                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M3 21h18M5 21V7l7-4 7 4v14M9 21v-6h6v6M9 10h.01M15 10h.01"
+                      />
+                    </svg>
+                  ),
+                },
+              ]
+            : []),
           {
             href: '/settings/catalogs',
             label: 'Catálogos',
@@ -960,7 +978,7 @@ export function AppShell({
             <div className="flex-1" />
 
             <Link
-              href="/imóveis"
+              href="/imoveis"
               className="flex items-center gap-2 px-3 py-1.5 text-sm font-medium text-[var(--foreground)] hover:bg-[var(--accent)] rounded-[var(--radius)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)]"
             >
               <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">

@@ -30,6 +30,7 @@ export default function SimilarCarouselClient({
   const [step, setStep] = useState(0); // largura do card + gap
   const [paused, setPaused] = useState(false);
   const [offset, setOffset] = useState(0);
+  const [isVisible, setIsVisible] = useState(false);
 
   const gap = 16;
   const total = items.length;
@@ -70,7 +71,22 @@ export default function SimilarCarouselClient({
 
   // Loop suave por pixels via rAF (sem reset perceptível)
   useEffect(() => {
+    if (!containerRef.current) return;
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        setIsVisible(entries.some((entry) => entry.isIntersecting));
+      },
+      { rootMargin: "120px" }
+    );
+
+    observer.observe(containerRef.current);
+    return () => observer.disconnect();
+  }, []);
+
+  useEffect(() => {
     if (paused) return;
+    if (!isVisible) return;
     if (total <= 1) return;
     if (step <= 0) return;
 
@@ -96,7 +112,7 @@ export default function SimilarCarouselClient({
 
     raf = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(raf);
-  }, [paused, speedPxPerSec, step, total]);
+  }, [isVisible, paused, speedPxPerSec, step, total]);
 
   if (items.length === 0) {
     return (
@@ -149,7 +165,13 @@ export default function SimilarCarouselClient({
           >
             <div className="pv-thumb" style={{ position: "relative" }}>
               {p.coverUrl ? (
-                <img src={p.coverUrl} alt={p.title} className="pv-thumb-img" />
+                <img
+                  src={p.coverUrl}
+                  alt={p.title}
+                  className="pv-thumb-img"
+                  loading="lazy"
+                  decoding="async"
+                />
               ) : (
                 <span>Sem foto</span>
               )}

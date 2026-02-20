@@ -152,7 +152,7 @@ export default function MyPropertiesBoardClient({
 
                     {/* ✅ “Ver no site” sem onClick: evita erro e funciona igual */}
                     <a
-                      href={`${siteBase}/imóveis/${p.id}`}
+                      href={`${siteBase}/imoveis/${p.id}`}
                       target="_blank"
                       rel="noreferrer"
                       style={{

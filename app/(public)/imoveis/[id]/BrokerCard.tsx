@@ -155,6 +155,8 @@ export function BrokerCard({
           <img
             src={avatarUrl}
             alt={name}
+            loading="lazy"
+            decoding="async"
             style={{
               width: 56,
               height: 56,

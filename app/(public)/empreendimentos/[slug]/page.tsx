@@ -240,7 +240,7 @@ export default async function PublicIncorporationDetailPage({
   const whatsappNumber = sanitizePhone(process.env.NEXT_PUBLIC_WHATSAPP_NUMBER)
   const whatsappLink = buildWhatsAppLink(
     whatsappNumber,
-    `Ola! Tenho interesse no empreendimento ${incorporation.name}.`
+    `Olá! Tenho interesse no empreendimento ${incorporation.name}.`
   )
 
   return (
@@ -277,8 +277,8 @@ export default async function PublicIncorporationDetailPage({
         <div className="space-y-2 p-5 text-sm">
           <p className="text-[var(--muted-foreground)]">{incorporation.description || 'Descrição em atualização.'}</p>
           <div className="flex flex-wrap gap-3 text-xs text-[var(--muted-foreground)]">
-            <span>Endereco: {location}</span>
-            <span>Lancamento: {formatDate(incorporation.launch_date)}</span>
+            <span>Endereço: {location}</span>
+            <span>Lançamento: {formatDate(incorporation.launch_date)}</span>
           </div>
         </div>
       </section>
@@ -334,17 +334,17 @@ export default async function PublicIncorporationDetailPage({
                   <CardContent className="space-y-2 pt-0 text-sm">
                     <p className="text-[var(--muted-foreground)]">
                       {typeof plan.bedrooms === 'number' ? `${plan.bedrooms} quartos` : '-'} /{' '}
-                      {typeof plan.suites === 'number' ? `${plan.suites} suites` : '-'} /{' '}
-                      {typeof plan.rooms_count === 'number' ? `${plan.rooms_count} comodos` : '-'} /{' '}
+                      {typeof plan.suites === 'number' ? `${plan.suites} suítes` : '-'} /{' '}
+                      {typeof plan.rooms_count === 'number' ? `${plan.rooms_count} cômodos` : '-'} /{' '}
                       {typeof plan.parking === 'number' ? `${plan.parking} vagas` : '-'}
                     </p>
                     <p className="text-[var(--muted-foreground)]">
-                      {typeof plan.area_m2 === 'number' ? `${plan.area_m2} m2 de area` : 'Metragem não informada'}
+                      {typeof plan.area_m2 === 'number' ? `${plan.area_m2} m² de área` : 'Metragem não informada'}
                     </p>
                     <p className="font-semibold text-[var(--foreground)]">A partir de {formatCurrency(plan.price_from)}</p>
                     <p className="line-clamp-4 text-xs text-[var(--muted-foreground)]">{plan.description || '-'}</p>
                     <p className="text-xs text-[var(--muted-foreground)]">
-                      Mídias herdadas de empreendimento/projeto/areas comuns: {inheritedMedia.length}
+                      Mídias herdadas de empreendimento/projeto/áreas comuns: {inheritedMedia.length}
                     </p>
                   </CardContent>
                 </Card>
@@ -356,7 +356,7 @@ export default async function PublicIncorporationDetailPage({
 
       {inheritedMedia.length > 0 ? (
         <section className="space-y-3">
-          <h2 className="text-xl font-semibold text-[var(--foreground)]">Projeto e areas comuns</h2>
+          <h2 className="text-xl font-semibold text-[var(--foreground)]">Projeto e áreas comuns</h2>
           <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
             {inheritedMedia.map((item) => (
               <Card key={item.id} className="overflow-hidden border-black/10">
@@ -383,7 +383,7 @@ export default async function PublicIncorporationDetailPage({
       <section className="rounded-[var(--radius-lg)] border border-[var(--border)] bg-white p-5">
         <h3 className="text-lg font-semibold text-[var(--foreground)]">Tenho interesse</h3>
         <p className="mt-1 text-sm text-[var(--muted-foreground)]">
-          Fale com um corretor Vitrya para receber condicoes e disponibilidade atual.
+          Fale com um corretor Vitrya para receber condições e disponibilidade atual.
         </p>
         <div className="mt-4 flex flex-wrap gap-3">
           {whatsappLink ? (
@@ -397,11 +397,11 @@ export default async function PublicIncorporationDetailPage({
             </a>
           ) : (
             <span className="inline-flex items-center rounded-[var(--radius)] border border-[var(--border)] px-4 py-2 text-sm text-[var(--muted-foreground)]">
-              WhatsApp indisponivel no ambiente
+              WhatsApp indisponível no ambiente
             </span>
           )}
           <Link
-            href="/imóveis"
+            href="/imoveis"
             className="inline-flex items-center rounded-[var(--radius)] border border-[var(--border)] px-4 py-2 text-sm font-semibold text-[var(--foreground)]"
           >
             Ver mais imóveis
@@ -411,3 +411,4 @@ export default async function PublicIncorporationDetailPage({
     </main>
   )
 }
+

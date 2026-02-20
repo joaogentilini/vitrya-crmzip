@@ -2,8 +2,15 @@
 
 import { createClient } from '@/lib/supabaseServer'
 import { revalidatePath } from 'next/cache'
-import { hasSignedContractDoc, hasValidatedAuthorizationDoc } from './publish-guard'
+import {
+  getAuthorizationPublicationState,
+  hasSignedContractDoc,
+  hasValidatedAuthorizationDoc,
+  type AuthorizationPublicationState,
+} from './publish-guard'
 import { requireActiveUser } from '@/lib/auth'
+import { buildAmenitiesSnapshot } from '@/lib/maps/googlePlaces'
+import type { AmenitiesSnapshotData, PropertyLocationSource } from '@/lib/maps/types'
 
 export interface PublishResult {
   success: boolean
@@ -37,13 +44,15 @@ export async function publishProperty(propertyId: string): Promise<PublishResult
     return { success: false, error: 'Apenas admin/gestor podem aprovar publicações' }
   }
 
-  const hasAuthorization = await hasValidatedAuthorizationDoc(propertyId)
+  const authorizationState = await getAuthorizationPublicationState(propertyId)
+  const hasAuthorization = authorizationState.hasAuthorization
 
   if (!hasAuthorization) {
     return {
       success: false,
       error:
-        'Para publicar o imóvel, anexe e valide o Termo de Autorização do proprietário em "Imóveis → Documentos".',
+        authorizationState.reason ||
+        'Para publicar o imovel, envie a autorizacao digital e aguarde status assinado.',
     }
   }
 
@@ -111,6 +120,12 @@ export async function unpublishProperty(propertyId: string): Promise<PublishResu
 
 export async function checkAuthorizationDocument(propertyId: string): Promise<boolean> {
   return hasValidatedAuthorizationDoc(propertyId)
+}
+
+export async function getPublishAuthorizationState(
+  propertyId: string
+): Promise<AuthorizationPublicationState> {
+  return getAuthorizationPublicationState(propertyId)
 }
 
 export interface PropertyFeatureCatalogItem {
@@ -463,6 +478,8 @@ export interface UpdatePropertyPayload {
   postal_code?: string | null
   latitude?: number | string | null
   longitude?: number | string | null
+  location_source?: PropertyLocationSource | null
+  location_updated_at?: string | null
   price?: number | string | null
   rent_price?: number | string | null
   sale_value?: number | string | null
@@ -490,6 +507,9 @@ export interface UpdatePropertyPayload {
   rent_partner_split_percent?: number | string | null
   registry_number?: string | null
   registry_office?: string | null
+  authorization_started_at?: string | null
+  authorization_expires_at?: string | null
+  authorization_is_exclusive?: boolean | null
   iptu_value?: number | string | null
   iptu_year?: number | string | null
   iptu_is_paid?: boolean | null
@@ -624,6 +644,25 @@ export async function updatePropertyBasics(propertyId: string, payload: UpdatePr
     payload.owner_client_id = null
   }
 
+  if (payload.authorization_started_at === '') {
+    payload.authorization_started_at = null
+  }
+  if (payload.authorization_expires_at === '') {
+    payload.authorization_expires_at = null
+  }
+
+  if (typeof payload.authorization_is_exclusive !== 'undefined' && payload.authorization_is_exclusive !== null) {
+    payload.authorization_is_exclusive = Boolean(payload.authorization_is_exclusive)
+  }
+
+  if (payload.authorization_started_at && payload.authorization_expires_at) {
+    const startDate = new Date(String(payload.authorization_started_at))
+    const endDate = new Date(String(payload.authorization_expires_at))
+    if (!Number.isNaN(startDate.getTime()) && !Number.isNaN(endDate.getTime()) && startDate > endDate) {
+      throw new Error('Prazo da autorização inválido: início não pode ser maior que vencimento.')
+    }
+  }
+
   if (typeof payload.commission_percent === 'string') {
     const trimmed = payload.commission_percent.trim()
     payload.commission_percent = trimmed ? trimmed.replace(',', '.') : null
@@ -708,6 +747,236 @@ export async function updatePropertyBasics(propertyId: string, payload: UpdatePr
 
   revalidatePath(`/properties/${propertyId}`)
   revalidatePath('/properties')
+}
+
+type PropertyEditPermissionContext = {
+  actorId: string
+  actorRole: string
+  propertyOwnerUserId: string | null
+}
+
+function parseCoordinate(value: unknown, label: string): number {
+  const normalized = String(value ?? '')
+    .trim()
+    .replace(',', '.')
+  const parsed = Number(normalized)
+  if (!Number.isFinite(parsed)) {
+    throw new Error(`${label} inválida.`)
+  }
+  return parsed
+}
+
+function assertCoordinateRange(lat: number, lng: number) {
+  if (lat < -90 || lat > 90) {
+    throw new Error('Latitude fora do intervalo permitido (-90 a 90).')
+  }
+  if (lng < -180 || lng > 180) {
+    throw new Error('Longitude fora do intervalo permitido (-180 a 180).')
+  }
+}
+
+function hasPropertyEditPermission(context: PropertyEditPermissionContext): boolean {
+  const isManager = context.actorRole === 'admin' || context.actorRole === 'gestor'
+  const isOwner = context.propertyOwnerUserId === context.actorId
+  return isManager || isOwner
+}
+
+async function resolvePropertyEditContext(params: {
+  propertyId: string
+  actorId: string
+  actorRole: string
+}) {
+  const supabase = await createClient()
+
+  const { data: property, error: propertyError } = await supabase
+    .from('properties')
+    .select('id, owner_user_id')
+    .eq('id', params.propertyId)
+    .maybeSingle()
+
+  if (propertyError) {
+    throw new Error(propertyError.message || 'Erro ao validar imóvel.')
+  }
+  if (!property) {
+    throw new Error('Imóvel não encontrado.')
+  }
+
+  const context: PropertyEditPermissionContext = {
+    actorId: params.actorId,
+    actorRole: params.actorRole,
+    propertyOwnerUserId: property.owner_user_id ?? null,
+  }
+
+  if (!hasPropertyEditPermission(context)) {
+    throw new Error('Sem permissão: apenas responsável/admin/gestor.')
+  }
+
+  return { supabase, propertyOwnerUserId: property.owner_user_id ?? null }
+}
+
+export type UpdatePropertyLocationInput = {
+  latitude: number
+  longitude: number
+  source?: PropertyLocationSource | null
+  place_id?: string | null
+  formatted_address?: string | null
+}
+
+export async function updatePropertyLocation(
+  propertyId: string,
+  input: UpdatePropertyLocationInput
+): Promise<{ success: boolean; error?: string; data?: { latitude: number; longitude: number; source: PropertyLocationSource } }> {
+  try {
+    const actor = await requireActiveUser()
+    if (!propertyId) {
+      throw new Error('Imóvel inválido.')
+    }
+
+    const latitude = parseCoordinate(input.latitude, 'Latitude')
+    const longitude = parseCoordinate(input.longitude, 'Longitude')
+    assertCoordinateRange(latitude, longitude)
+
+    const source: PropertyLocationSource =
+      input.source === 'autocomplete' || input.source === 'device_gps' ? input.source : 'manual_pin'
+
+    const { supabase } = await resolvePropertyEditContext({
+      propertyId,
+      actorId: actor.id,
+      actorRole: actor.role,
+    })
+
+    const patch: Record<string, unknown> = {
+      latitude,
+      longitude,
+      location_source: source,
+      location_updated_at: new Date().toISOString(),
+    }
+
+    const formattedAddress = String(input.formatted_address || '').trim()
+    if (formattedAddress) {
+      patch.address = formattedAddress
+    }
+
+    const { error } = await supabase.from('properties').update(patch).eq('id', propertyId)
+    if (error) {
+      throw new Error(error.message || 'Erro ao salvar localização.')
+    }
+
+    revalidatePath(`/properties/${propertyId}`)
+    revalidatePath('/properties')
+    revalidatePath(`/imoveis/${propertyId}`)
+    revalidatePath('/imoveis/resultados')
+
+    return {
+      success: true,
+      data: {
+        latitude,
+        longitude,
+        source,
+      },
+    }
+  } catch (err) {
+    return {
+      success: false,
+      error: err instanceof Error ? err.message : 'Erro ao salvar localização.',
+    }
+  }
+}
+
+type AmenitiesSnapshotRow = {
+  id: string
+  property_id: string
+  radius_m: number
+  data: AmenitiesSnapshotData
+  generated_at: string
+  source: string
+  version: number
+}
+
+function sanitizeRadius(radiusM: number): number {
+  if (!Number.isFinite(radiusM)) return 1000
+  if (radiusM < 100) return 100
+  if (radiusM > 5000) return 5000
+  return Math.round(radiusM)
+}
+
+export async function generateAmenitiesSnapshot(
+  propertyId: string,
+  radiusM = 1000
+): Promise<{ success: boolean; error?: string; data?: AmenitiesSnapshotRow }> {
+  try {
+    const actor = await requireActiveUser()
+    if (!propertyId) {
+      throw new Error('Imóvel inválido.')
+    }
+
+    const normalizedRadius = sanitizeRadius(radiusM)
+    const { supabase } = await resolvePropertyEditContext({
+      propertyId,
+      actorId: actor.id,
+      actorRole: actor.role,
+    })
+
+    const { data: property, error: propertyError } = await supabase
+      .from('properties')
+      .select('latitude, longitude')
+      .eq('id', propertyId)
+      .maybeSingle()
+
+    if (propertyError) {
+      throw new Error(propertyError.message || 'Erro ao carregar localização do imóvel.')
+    }
+
+    const lat = Number(property?.latitude)
+    const lng = Number(property?.longitude)
+    if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
+      throw new Error('Defina latitude e longitude antes de atualizar proximidades.')
+    }
+    assertCoordinateRange(lat, lng)
+
+    const snapshot = await buildAmenitiesSnapshot({
+      lat,
+      lng,
+      radiusM: normalizedRadius,
+    })
+
+    const insertPayload = {
+      property_id: propertyId,
+      radius_m: normalizedRadius,
+      data: snapshot,
+      generated_by: actor.id,
+      source: 'google_places',
+      version: 1,
+    }
+
+    const { data, error } = await supabase
+      .from('property_amenities_snapshot')
+      .insert(insertPayload)
+      .select('id, property_id, radius_m, data, generated_at, source, version')
+      .single()
+
+    if (error || !data) {
+      throw new Error(
+        error?.message ||
+          'Erro ao salvar snapshot de proximidades. Verifique se a migration de mapas foi aplicada.'
+      )
+    }
+
+    revalidatePath(`/properties/${propertyId}`)
+    revalidatePath('/properties')
+    revalidatePath(`/imoveis/${propertyId}`)
+    revalidatePath('/imoveis/resultados')
+
+    return {
+      success: true,
+      data: data as AmenitiesSnapshotRow,
+    }
+  } catch (err) {
+    return {
+      success: false,
+      error: err instanceof Error ? err.message : 'Erro ao gerar proximidades.',
+    }
+  }
 }
 
 export interface GeneratePropertyMarketingCopyInput {
@@ -2941,6 +3210,7 @@ export async function transitionProposalStatus(input: ProposalTransitionInput) {
 
   return { success: false as const, error: 'Ação inválida.' }
 }
+
 
 
 

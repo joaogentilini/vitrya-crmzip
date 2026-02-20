@@ -1,9 +1,11 @@
-/* eslint-disable @next/next/no-img-element */
 import type { ReactNode } from 'react'
 import Link from 'next/link'
+import Image from 'next/image'
+import { unstable_cache } from 'next/cache'
 
 import { createPublicClient } from '@/lib/supabase/publicServer'
 import { buildWhatsAppLink, sanitizePhone } from '@/lib/whatsapp'
+import { PublicTopbarNav } from './PublicTopbarNav'
 
 import './public.css'
 
@@ -28,6 +30,16 @@ type IncorporationRow = {
   name: string
 }
 
+type PublicLayoutNavigationData = {
+  categories: CategoryRow[]
+  brokers: BrokerRow[]
+  developers: DeveloperRow[]
+  incorporations: IncorporationRow[]
+}
+
+export const revalidate = 300
+const VITRYA_WHATSAPP_NUMBER = '556692533011'
+
 function formatBrazilPhone(raw: string | null) {
   if (!raw) return null
   let digits = raw
@@ -37,114 +49,64 @@ function formatBrazilPhone(raw: string | null) {
   return raw
 }
 
-function brokerLabel(broker: BrokerRow): string {
-  return broker.public_name || broker.full_name || 'Corretor Vitrya'
-}
+const getPublicLayoutNavigation = unstable_cache(
+  async (): Promise<PublicLayoutNavigationData> => {
+    const supabase = createPublicClient()
+
+    const [categoriesRes, brokersRes, developersRes, incorporationsRes] = await Promise.all([
+      supabase.from('property_categories').select('id,name').eq('is_active', true).order('name', { ascending: true }).limit(8),
+      supabase.from('v_public_brokers').select('id,public_name,full_name').order('public_name', { ascending: true }).limit(8),
+      supabase.from('developers').select('id,name').eq('is_active', true).order('name', { ascending: true }).limit(6),
+      supabase.from('incorporations').select('slug,name').eq('is_active', true).order('created_at', { ascending: false }).limit(6),
+    ])
+
+    return {
+      categories: (categoriesRes.data || []) as CategoryRow[],
+      brokers: (brokersRes.data || []) as BrokerRow[],
+      developers: (developersRes.data || []) as DeveloperRow[],
+      incorporations: (incorporationsRes.data || []) as IncorporationRow[],
+    }
+  },
+  ['public-layout-navigation-v1'],
+  { revalidate: 300 }
+)
 
 export default async function PublicLayout({ children }: { children: ReactNode }) {
   const envPhone = sanitizePhone(process.env.NEXT_PUBLIC_WHATSAPP_NUMBER)
-  const whatsappLink = buildWhatsAppLink(envPhone, 'Ola! Quero falar com o Comercial Vitrya.')
-  const formattedPhone = formatBrazilPhone(envPhone)
-  const supabase = createPublicClient()
+  const whatsappPhone = sanitizePhone(VITRYA_WHATSAPP_NUMBER) || envPhone
+  const whatsappLink = buildWhatsAppLink(whatsappPhone, 'Olá! Quero falar com o Comercial Vitrya.')
+  const formattedPhone = formatBrazilPhone(whatsappPhone)
 
-  const [categoriesRes, brokersRes, developersRes, incorporationsRes] = await Promise.all([
-    supabase.from('property_categories').select('id,name').eq('is_active', true).order('name', { ascending: true }).limit(8),
-    supabase.from('v_public_brokers').select('id,public_name,full_name').order('public_name', { ascending: true }).limit(8),
-    supabase.from('developers').select('id,name').eq('is_active', true).order('name', { ascending: true }).limit(6),
-    supabase.from('incorporations').select('slug,name').eq('is_active', true).order('created_at', { ascending: false }).limit(6),
-  ])
-
-  const categories = (categoriesRes.data || []) as CategoryRow[]
-  const brokers = (brokersRes.data || []) as BrokerRow[]
-  const developers = (developersRes.data || []) as DeveloperRow[]
-  const incorporations = (incorporationsRes.data || []) as IncorporationRow[]
+  const { categories, brokers, developers, incorporations } = await getPublicLayoutNavigation()
 
   return (
     <div className="pv-shell">
       <header className="pv-header">
         <div className="pv-header-inner">
-          <Link className="pv-brand" href="/imóveis" aria-label="Vitrya Imóveis - Inicio">
-            <img src="/brand/logo_oficial.png" alt="Vitrya" className="pv-mark" />
+          <Link className="pv-brand" href="/imoveis" aria-label="Vitrya Imóveis - Início">
+            <Image
+              src="/brand/logo_oficial.png"
+              alt="Vitrya"
+              className="pv-mark"
+              width={216}
+              height={72}
+              priority
+              sizes="216px"
+            />
           </Link>
 
-          <nav className="pv-nav" aria-label="Navegacao principal">
-            <div className="pv-nav-row">
-              <Link className="pv-nav-link" href="/imóveis">
-                Inicio
-              </Link>
-
-              <div className="pv-nav-dropdown">
-                <span className="pv-nav-link pv-nav-trigger">Imóveis</span>
-                <div className="pv-nav-panel">
-                  <div className="pv-nav-group">
-                    <p className="pv-nav-title">Navegar</p>
-                    <Link href="/imóveis">Buscar imóveis</Link>
-                    <Link href="/imóveis/resultados">Todos os imóveis</Link>
-                  </div>
-                  {categories.length > 0 ? (
-                    <div className="pv-nav-group">
-                      <p className="pv-nav-title">Por categoria</p>
-                      {categories.map((category) => (
-                        <Link key={category.id} href={`/imóveis/resultados?category=${category.id}`}>
-                          {category.name || 'Categoria'}
-                        </Link>
-                      ))}
-                    </div>
-                  ) : null}
-                  <div className="pv-nav-group">
-                    <p className="pv-nav-title">Por corretor</p>
-                    {brokers.length > 0 ? (
-                      brokers.map((broker) => (
-                        <Link key={broker.id} href={`/imóveis/resultados?broker=${broker.id}`}>
-                          {brokerLabel(broker)}
-                        </Link>
-                      ))
-                    ) : (
-                      <span className="pv-nav-empty">Sem corretores publicados</span>
-                    )}
-                    <Link href="/corretores">Ver todos os corretores</Link>
-                  </div>
-                </div>
-              </div>
-
-              <div className="pv-nav-dropdown">
-                <span className="pv-nav-link pv-nav-trigger">Empreendimentos</span>
-                <div className="pv-nav-panel">
-                  <div className="pv-nav-group">
-                    <p className="pv-nav-title">Navegar</p>
-                    <Link href="/empreendimentos">Todos os empreendimentos</Link>
-                    <Link href="/empreendimentos/construtoras">Construtoras</Link>
-                  </div>
-                  {developers.length > 0 ? (
-                    <div className="pv-nav-group">
-                      <p className="pv-nav-title">Por construtora</p>
-                      {developers.map((developer) => (
-                        <Link key={developer.id} href={`/empreendimentos?developer=${developer.id}`}>
-                          {developer.name}
-                        </Link>
-                      ))}
-                    </div>
-                  ) : null}
-                  {incorporations.length > 0 ? (
-                    <div className="pv-nav-group">
-                      <p className="pv-nav-title">Empreendimentos em destaque</p>
-                      {incorporations.map((incorporation) => (
-                        <Link key={incorporation.slug} href={`/empreendimentos/${incorporation.slug}`}>
-                          {incorporation.name}
-                        </Link>
-                      ))}
-                    </div>
-                  ) : null}
-                </div>
-              </div>
-            </div>
-          </nav>
+          <PublicTopbarNav
+            categories={categories}
+            brokers={brokers}
+            developers={developers}
+            incorporations={incorporations}
+          />
 
           <div className="pv-actions">
-            <Link className="pv-btn pv-btn-topbar" href="/cliente">
+            <Link className="pv-nav-link pv-action-link" href="/cliente">
               Acesso Cliente
             </Link>
-            <Link className="pv-btn pv-btn-topbar" href="/crm/login">
+            <Link className="pv-nav-link pv-action-link" href="/crm/login">
               Acesso Corretor
             </Link>
           </div>
@@ -158,7 +120,12 @@ export default async function PublicLayout({ children }: { children: ReactNode }
           <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
             <strong>Comercial Vitrya</strong>
             <span className="pv-footer-sep">/</span>
-            <span>{formattedPhone ?? 'WhatsApp indisponivel'}</span>
+            <span>{formattedPhone ?? 'WhatsApp indisponível'}</span>
+            <span className="pv-footer-sep">/</span>
+            <div className="pv-footer-links">
+              <Link href="/privacidade">Privacidade</Link>
+              <Link href="/termos">Termos</Link>
+            </div>
           </div>
 
           {whatsappLink ? (
@@ -171,3 +138,5 @@ export default async function PublicLayout({ children }: { children: ReactNode }
     </div>
   )
 }
+
+

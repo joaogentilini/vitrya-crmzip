@@ -8,6 +8,17 @@ export const runtime = 'nodejs'
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!
 
+function normalizeAppBaseUrl(origin: string) {
+  const explicit = (process.env.NEXT_PUBLIC_SITE_URL || '').trim()
+  const base = (explicit || origin || 'http://localhost:3000').replace(/\/$/, '')
+  return base.replace('://0.0.0.0', '://localhost')
+}
+
+function buildInviteRedirectTo(request: NextRequest) {
+  const appBaseUrl = normalizeAppBaseUrl(request.nextUrl.origin)
+  return `${appBaseUrl}/auth/callback?next=${encodeURIComponent('/auth/reset')}`
+}
+
 async function getAdminSupabase() {
   if (!supabaseUrl || !supabaseServiceKey) {
     console.error('[getAdminSupabase] Missing SUPABASE_SERVICE_ROLE_KEY or NEXT_PUBLIC_SUPABASE_URL')
@@ -100,9 +111,9 @@ export async function POST(request: NextRequest) {
 
     const body = await request.json()
     log.debug('Request body', { email: body.email, role: body.role, full_name: body.full_name })
-    const { email, password, full_name, phone_e164, role } = body
+    const { email, full_name, phone_e164, role } = body
 
-    if (!email || !password || !full_name || !role) {
+    if (!email || !full_name || !role) {
       return NextResponse.json({ 
         error: 'Preencha todos os campos obrigatórios',
         requestId: log.requestId
@@ -117,20 +128,25 @@ export async function POST(request: NextRequest) {
     }
 
     const adminSupabase = await getAdminSupabase()
+    const inviteRedirectTo = buildInviteRedirectTo(request)
 
-    const { data: authUser, error: authError } = await adminSupabase.auth.admin.createUser({
+    const { data: authUser, error: authError } = await adminSupabase.auth.admin.inviteUserByEmail(
       email,
-      password,
-      email_confirm: true
-    })
-
+      {
+        redirectTo: inviteRedirectTo,
+        data: {
+          full_name,
+          role,
+        },
+      }
+    )
     if (authError) {
       log.error('Auth user creation failed', authError)
       let errorMsg = authError.message
-      if (authError.message.includes('already been registered')) {
+      if (authError.message.includes('already been registered') || authError.message.includes('already exists')) {
         errorMsg = 'Este email já está cadastrado'
-      } else if (authError.message.includes('password')) {
-        errorMsg = 'Senha inválida - use no mínimo 6 caracteres'
+      } else if (authError.message.toLowerCase().includes('redirect')) {
+        errorMsg = 'Falha no link de convite. Verifique SITE_URL/redirect no Supabase.'
       }
       return NextResponse.json({ 
         error: errorMsg,
@@ -150,6 +166,7 @@ export async function POST(request: NextRequest) {
       id: authUser.user.id,
       full_name,
       email,
+      phone_e164: typeof phone_e164 === 'string' && phone_e164.trim() ? phone_e164.trim() : null,
       role,
       is_active: true,
       updated_at: new Date().toISOString()
@@ -178,8 +195,8 @@ export async function POST(request: NextRequest) {
         .insert({
           actor_id: authResult.user.id,
           target_user_id: authUser.user.id,
-          action: 'user_created',
-          details: { role, email }
+          action: 'user_invited',
+          details: { role, email, invite_redirect_to: inviteRedirectTo }
         })
       if (auditError) {
         log.warn('Audit log failed (non-blocking)', auditError)
@@ -192,6 +209,7 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({ 
       success: true, 
+      invited: true,
       user: {
         id: authUser.user.id,
         email,

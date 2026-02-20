@@ -497,20 +497,14 @@ function CreateUserModal({ onClose, onSuccess, currentUserRole }: CreateUserModa
   const [formData, setFormData] = useState({
     full_name: '',
     email: '',
-    password: '',
     role: 'corretor' as UserRole
   })
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
-    
-    if (!formData.full_name || !formData.email || !formData.password) {
-      showError('Preencha todos os campos obrigatórios')
-      return
-    }
 
-    if (formData.password.length < 6) {
-      showError('A senha deve ter no mínimo 6 caracteres')
+    if (!formData.full_name || !formData.email) {
+      showError('Preencha todos os campos obrigatórios')
       return
     }
 
@@ -521,17 +515,17 @@ function CreateUserModal({ onClose, onSuccess, currentUserRole }: CreateUserModa
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(formData)
         })
-        
+
         const data = await resp.json().catch(() => ({ error: 'Erro de comunicação com servidor' }))
-        
+
         if (!resp.ok) {
           const requestId = data.error?.requestId || data.requestId
           const baseMsg = typeof data.error === 'string' ? data.error : (data.error?.message || data.details || 'Erro ao criar usuário')
           const errorMsg = requestId ? `${baseMsg} (ID: ${requestId})` : baseMsg
           throw new Error(errorMsg)
         }
-        
-        success('Usuário criado com sucesso')
+
+        success('Convite enviado por email com sucesso')
         onSuccess()
       } catch (err) {
         showError(err instanceof Error ? err.message : 'Erro ao criar usuário')
@@ -558,7 +552,7 @@ function CreateUserModal({ onClose, onSuccess, currentUserRole }: CreateUserModa
                 required
               />
             </div>
-            
+
             <div>
               <Label htmlFor="email">Email *</Label>
               <Input
@@ -570,20 +564,7 @@ function CreateUserModal({ onClose, onSuccess, currentUserRole }: CreateUserModa
                 required
               />
             </div>
-            
-            <div>
-              <Label htmlFor="password">Senha Temporária *</Label>
-              <Input
-                id="password"
-                type="password"
-                value={formData.password}
-                onChange={(e) => setFormData(prev => ({ ...prev, password: e.target.value }))}
-                placeholder="Mínimo 6 caracteres"
-                required
-                minLength={6}
-              />
-            </div>
-            
+
             <div>
               <Label htmlFor="role">Cargo *</Label>
               <select
@@ -600,12 +581,16 @@ function CreateUserModal({ onClose, onSuccess, currentUserRole }: CreateUserModa
               </select>
             </div>
 
+            <p className="text-xs text-[var(--muted-foreground)]">
+              O usuário receberá um convite por email para definir a senha e concluir o primeiro acesso.
+            </p>
+
             <div className="flex gap-2 pt-4">
               <Button type="button" variant="outline" onClick={onClose} className="flex-1">
                 Cancelar
               </Button>
               <Button type="submit" disabled={isPending} className="flex-1">
-                {isPending ? 'Criando...' : 'Criar Usuário'}
+                {isPending ? 'Enviando convite...' : 'Enviar Convite'}
               </Button>
             </div>
           </form>

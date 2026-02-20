@@ -7,8 +7,18 @@ import { supabase } from "@/lib/supabaseClient";
 import {
   publishProperty,
   unpublishProperty,
-  checkAuthorizationDocument,
+  getPublishAuthorizationState,
 } from "./actions";
+
+type PublishAuthorizationState = {
+  hasAuthorization: boolean;
+  source: "digital" | "legacy" | null;
+  status: string | null;
+  documentInstanceId: string | null;
+  signedAt: string | null;
+  dataChangedAfterSignature: boolean;
+  reason: string | null;
+};
 
 type UserRole = "admin" | "gestor" | "corretor" | string;
 
@@ -27,7 +37,15 @@ export default function PublishPanel({
 }) {
   const [status, setStatus] = useState(initialStatus);
   const [mediaCount, setMediaCount] = useState<number>(0);
-  const [hasAuthorization, setHasAuthorization] = useState<boolean>(false);
+  const [authorizationState, setAuthorizationState] = useState<PublishAuthorizationState>({
+    hasAuthorization: false,
+    source: null,
+    status: null,
+    documentInstanceId: null,
+    signedAt: null,
+    dataChangedAfterSignature: false,
+    reason: null,
+  });
   const [loading, setLoading] = useState<boolean>(true);
   const [busy, setBusy] = useState<boolean>(false);
   const [error, setError] = useState<string>("");
@@ -56,9 +74,9 @@ export default function PublishPanel({
         .eq("property_id", propertyId);
 
       // server action do doc
-      const authPromise = checkAuthorizationDocument(propertyId);
+      const authPromise = getPublishAuthorizationState(propertyId);
 
-      const [statusRes, mediaRes, authOk] = await Promise.all([
+      const [statusRes, mediaRes, authState] = await Promise.all([
         statusPromise,
         mediaPromise,
         authPromise,
@@ -80,7 +98,15 @@ export default function PublishPanel({
       }
 
       setMediaCount(mediaCountResolved);
-      setHasAuthorization(!!authOk);
+      setAuthorizationState({
+        hasAuthorization: !!authState?.hasAuthorization,
+        source: authState?.source ?? null,
+        status: authState?.status ?? null,
+        documentInstanceId: authState?.documentInstanceId ?? null,
+        signedAt: authState?.signedAt ?? null,
+        dataChangedAfterSignature: !!authState?.dataChangedAfterSignature,
+        reason: authState?.reason ?? null,
+      });
 
       // status
       const nextStatus = statusRes?.data?.status;
@@ -100,7 +126,7 @@ export default function PublishPanel({
   }, [propertyId]);
 
   const mediaOk = mediaCount > 0;
-  const authOk = hasAuthorization;
+  const authOk = authorizationState.hasAuthorization;
   const checklistOk = mediaOk && authOk;
 
   const approveEnabled = !loading && !busy && canApprove && checklistOk;
@@ -113,7 +139,12 @@ export default function PublishPanel({
     try {
       if (!canApprove) throw new Error("Apenas admin/gestor pode aprovar.");
       if (!mediaOk) throw new Error("Adicione pelo menos 1 mídia.");
-      if (!authOk) throw new Error("Anexe a Autorização do proprietário.");
+      if (!authOk) {
+        throw new Error(
+          authorizationState.reason ||
+            "A autorização digital assinada é obrigatória para publicar."
+        );
+      }
 
       await publishProperty(propertyId);
       await refresh();
@@ -148,8 +179,8 @@ export default function PublishPanel({
             Publicação
           </h2>
           <p className="mt-1 text-xs text-[var(--muted-foreground)]">
-            Regra Vitrya: para publicar, precisa ter pelo menos 1 mídia e o Termo
-            de Autorização anexado.
+            Regra Vitrya: para publicar, precisa ter pelo menos 1 mídia e
+            autorização digital assinada (válida para este cadastro).
           </p>
         </div>
 
@@ -176,13 +207,30 @@ export default function PublishPanel({
               detail={`Encontradas: ${mediaCount}`}
             />
             <ChecklistRow
-              label="Autorização do proprietário"
+              label="Autorização digital"
               ok={authOk}
-              detail={authOk ? "OK" : "Faltando"}
+              detail={
+                authOk
+                  ? `Assinada${
+                      authorizationState.signedAt
+                        ? ` em ${new Date(
+                            authorizationState.signedAt
+                          ).toLocaleDateString("pt-BR")}`
+                        : ""
+                    }`
+                  : authorizationState.reason || "Pendente"
+              }
             />
           </div>
         )}
       </div>
+
+      {!loading && authorizationState.dataChangedAfterSignature ? (
+        <div className="mt-3 rounded-xl border border-amber-500/30 bg-amber-500/10 p-3 text-xs text-[var(--foreground)]">
+          Dados do imóvel foram alterados após a assinatura. Reenvie a
+          autorização digital antes de publicar.
+        </div>
+      ) : null}
 
       {error ? (
         <div className="mt-3 rounded-xl border border-red-500/20 bg-red-500/10 p-3 text-sm text-[var(--foreground)]">
@@ -240,6 +288,16 @@ export default function PublishPanel({
           ].join(" ")}
         >
           <span>Recarregar</span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => {
+            window.location.search = "?tab=documents";
+          }}
+          className="px-4 py-2 rounded-xl text-sm font-semibold border border-[var(--border)] transition hover:bg-[var(--accent)]"
+        >
+          <span>Ir para Documentos</span>
         </button>
 
         {!canApprove ? (

@@ -1,33 +1,31 @@
-"use client";
+import { unstable_cache } from 'next/cache'
 
-import { useState, type FormEvent } from "react";
-import { useRouter } from "next/navigation";
+import { createPublicClient } from '@/lib/supabase/publicServer'
 
-export default function PublicSearchPage() {
-  const router = useRouter();
+type PublicCategoryRow = {
+  id: string
+  name: string | null
+}
 
-  const [query, setQuery] = useState("");
-  const [purpose, setPurpose] = useState("");
-  const [minPrice, setMinPrice] = useState("");
-  const [maxPrice, setMaxPrice] = useState("");
-  const [bedrooms, setBedrooms] = useState("");
+export const revalidate = 300
 
-  const handleSearch = (e: FormEvent<HTMLFormElement>) => {
-    e.preventDefault();
+const getPublicCategories = unstable_cache(
+  async (): Promise<PublicCategoryRow[]> => {
+    const supabase = createPublicClient()
+    const { data } = await supabase
+      .from('property_categories')
+      .select('id,name')
+      .eq('is_active', true)
+      .order('name', { ascending: true })
 
-    const params = new URLSearchParams();
+    return (data || []) as PublicCategoryRow[]
+  },
+  ['public-search-categories-v1'],
+  { revalidate: 300 }
+)
 
-    const q = query.trim();
-    if (q) params.set("query", q);
-    if (purpose) params.set("purpose", purpose);
-    if (minPrice) params.set("min", minPrice);
-    if (maxPrice) params.set("max", maxPrice);
-    if (bedrooms) params.set("bedrooms", bedrooms);
-
-    // Resultados em /imóveis/resultados
-    const qs = params.toString();
-    router.push(qs ? `/imóveis/resultados?${qs}` : "/imóveis/resultados");
-  };
+export default async function PublicSearchPage() {
+  const categories = await getPublicCategories()
 
   return (
     <main className="pv-main">
@@ -35,32 +33,37 @@ export default function PublicSearchPage() {
         <div className="pv-glass">
           <section className="pv-hero pv-hero-search">
             <h1 className="pv-title">Encontre seu imóvel ideal</h1>
-            <p className="pv-subtitle">
-              Busque por localização, preço e características
-            </p>
+            <p className="pv-subtitle">Busque por localização, preço e características</p>
 
-            <form onSubmit={handleSearch} className="pv-searchbar">
+            <form method="get" action="/imoveis/resultados" className="pv-searchbar">
               <div className="pv-field">
                 <div className="pv-label">Localização</div>
-                <input
-                  className="pv-input"
-                  type="text"
-                  placeholder="Rua, bairro ou código"
-                  value={query}
-                  onChange={(e) => setQuery(e.target.value)}
-                />
+                <input className="pv-input" type="text" name="query" placeholder="Rua ou bairro" />
               </div>
 
               <div className="pv-field">
-                <div className="pv-label">Tipo</div>
-                <select
-                  className="pv-select"
-                  value={purpose}
-                  onChange={(e) => setPurpose(e.target.value)}
-                >
+                <div className="pv-label">Código</div>
+                <input className="pv-input" type="text" name="cod" placeholder="Ex: COD-000123" />
+              </div>
+
+              <div className="pv-field">
+                <div className="pv-label">Negócio</div>
+                <select className="pv-select" name="purpose" defaultValue="">
                   <option value="">Comprar ou Alugar</option>
                   <option value="sale">Comprar</option>
                   <option value="rent">Alugar</option>
+                </select>
+              </div>
+
+              <div className="pv-field">
+                <div className="pv-label">Tipo de imóvel</div>
+                <select className="pv-select" name="category" defaultValue="">
+                  <option value="">Casa, apartamento, terreno...</option>
+                  {categories.map((category) => (
+                    <option key={category.id} value={category.id}>
+                      {category.name || 'Categoria'}
+                    </option>
+                  ))}
                 </select>
               </div>
 
@@ -70,9 +73,8 @@ export default function PublicSearchPage() {
                   className="pv-input"
                   type="number"
                   inputMode="numeric"
+                  name="min"
                   placeholder="Preço mínimo"
-                  value={minPrice}
-                  onChange={(e) => setMinPrice(e.target.value)}
                 />
               </div>
 
@@ -82,19 +84,14 @@ export default function PublicSearchPage() {
                   className="pv-input"
                   type="number"
                   inputMode="numeric"
+                  name="max"
                   placeholder="Preço máximo"
-                  value={maxPrice}
-                  onChange={(e) => setMaxPrice(e.target.value)}
                 />
               </div>
 
               <div className="pv-field">
                 <div className="pv-label">Quartos</div>
-                <select
-                  className="pv-select"
-                  value={bedrooms}
-                  onChange={(e) => setBedrooms(e.target.value)}
-                >
+                <select className="pv-select" name="bedrooms" defaultValue="">
                   <option value="">Quartos</option>
                   <option value="1">1+</option>
                   <option value="2">2+</option>
@@ -109,31 +106,27 @@ export default function PublicSearchPage() {
             </form>
           </section>
 
-          <section style={{ marginTop: 22, textAlign: "center" }}>
+          <section style={{ marginTop: 22, textAlign: 'center' }}>
             <h2 style={{ margin: 0 }}>Newsletter</h2>
-            <p style={{ margin: "8px 0 14px", opacity: 0.8 }}>
+            <p style={{ margin: '8px 0 14px', opacity: 0.8 }}>
               Inscreva-se para receber novidades sobre imóveis
             </p>
 
             <div
               style={{
-                display: "flex",
+                display: 'flex',
                 gap: 10,
-                justifyContent: "center",
-                flexWrap: "wrap",
+                justifyContent: 'center',
+                flexWrap: 'wrap',
               }}
             >
               <input
                 className="pv-input"
                 type="email"
                 placeholder="Seu email"
-                style={{ width: 320, maxWidth: "100%" }}
+                style={{ width: 320, maxWidth: '100%' }}
               />
-              <button
-                type="button"
-                className="pv-btn"
-                style={{ background: "var(--cobalt)", color: "white" }}
-              >
+              <button type="button" className="pv-btn" style={{ background: 'var(--cobalt)', color: 'white' }}>
                 Inscrever
               </button>
             </div>
@@ -141,5 +134,5 @@ export default function PublicSearchPage() {
         </div>
       </div>
     </main>
-  );
+  )
 }

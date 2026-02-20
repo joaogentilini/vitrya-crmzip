@@ -26,6 +26,16 @@ function safeNumber(value: unknown, fallback: number) {
   return Number.isFinite(parsed) ? parsed : fallback
 }
 
+function isMissingRelationError(message: string | undefined) {
+  const text = String(message || '').toLowerCase()
+  return (
+    text.includes('does not exist') ||
+    text.includes('relation') ||
+    text.includes('schema cache') ||
+    text.includes('column')
+  )
+}
+
 export default async function PropertyDetailPage({
   params,
   searchParams,
@@ -85,7 +95,15 @@ export default async function PropertyDetailPage({
   const ownerClientId = property.owner_client_id as string | null
   const createdById = property.created_by as string | null
 
-  const [ownerProfileRes, createdByProfileRes, ownerPersonRes, categoriesRes, features, commissionSettingsRes] =
+  const [
+    ownerProfileRes,
+    createdByProfileRes,
+    ownerPersonRes,
+    categoriesRes,
+    features,
+    commissionSettingsRes,
+    amenitiesSnapshotRes,
+  ] =
     await Promise.all([
       ownerUserId
         ? supabase
@@ -128,6 +146,13 @@ export default async function PropertyDetailPage({
         `
         )
         .eq('property_id', propertyId)
+        .maybeSingle(),
+      supabase
+        .from('property_amenities_snapshot')
+        .select('id, property_id, radius_m, data, generated_at, source, version')
+        .eq('property_id', propertyId)
+        .order('generated_at', { ascending: false })
+        .limit(1)
         .maybeSingle(),
     ])
 
@@ -182,6 +207,12 @@ export default async function PropertyDetailPage({
   const rentRecurringCommissionPercent = safeNumber(commissionSettings?.rent_recurring_commission_percent, 8)
   const rentBrokerSplitPercent = safeNumber(commissionSettings?.rent_broker_split_percent, 50)
   const rentPartnerSplitPercent = safeNumber(commissionSettings?.rent_partner_split_percent, 0)
+  const amenitiesSnapshotMissingRelation = isMissingRelationError(amenitiesSnapshotRes.error?.message)
+  if (amenitiesSnapshotRes.error && !amenitiesSnapshotMissingRelation) {
+    console.error('Erro ao carregar snapshot de proximidades:', amenitiesSnapshotRes.error.message)
+  }
+  const amenitiesSnapshotLatest =
+    amenitiesSnapshotRes.error && amenitiesSnapshotMissingRelation ? null : amenitiesSnapshotRes.data ?? null
 
   const propertyForTabs = {
     ...property,
@@ -202,8 +233,12 @@ export default async function PropertyDetailPage({
     can_view_legal_data: canViewLegalData,
     can_edit_overview_data: canEditOverviewData,
     can_edit_commission_percent: canEditOverviewData,
+    amenities_snapshot_latest: amenitiesSnapshotLatest,
     registry_number: canViewLegalData ? (property.registry_number ?? null) : null,
     registry_office: canViewLegalData ? (property.registry_office ?? null) : null,
+    authorization_started_at: canViewLegalData ? (property.authorization_started_at ?? null) : null,
+    authorization_expires_at: canViewLegalData ? (property.authorization_expires_at ?? null) : null,
+    authorization_is_exclusive: canViewLegalData ? Boolean(property.authorization_is_exclusive ?? false) : false,
   }
 
   const normalizedFeatures = normalizePropertyFeatures(features?.catalog ?? [], features?.values ?? [])
@@ -252,7 +287,7 @@ export default async function PropertyDetailPage({
           </div>
         </div>
         <Link
-          href={`${siteBase}/imóveis/${propertyId}`}
+          href={`${siteBase}/imoveis/${propertyId}`}
           target="_blank"
           rel="noreferrer"
           className="rounded-[var(--radius)] bg-[#17BEBB] px-4 py-2 text-sm font-medium text-white"

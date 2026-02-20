@@ -1,5 +1,5 @@
 import { createPublicClient } from "@/lib/supabase/publicServer";
-import { getSignedImageUrl } from "@/lib/media/getPublicImageUrl";
+import { getSignedImageUrlMap } from "@/lib/media/getPublicImageUrl";
 import SimilarCarouselClient from "./SimilarCarouselClient";
 
 function formatBRL(value: number | null | undefined) {
@@ -61,7 +61,11 @@ export default async function SimilarProperties({
     return { data: (data ?? []) as any[], error };
   };
 
-  const fetchSmart = async (filters: { city?: string | null; purpose?: string | null; propertyCategoryId?: string | null }) => {
+  const fetchSmart = async (filters: {
+    city?: string | null;
+    purpose?: string | null;
+    propertyCategoryId?: string | null;
+  }) => {
     const ext = await fetchFromView("v_public_properties_ext", filters);
     if (!ext.error) return { rows: ext.data };
 
@@ -82,7 +86,9 @@ export default async function SimilarProperties({
   const minNeeded = 8;
   let rows: any[] = [];
 
-  const attempts: Array<{ filters: { city?: string | null; purpose?: string | null; propertyCategoryId?: string | null } }> = [
+  const attempts: Array<{
+    filters: { city?: string | null; purpose?: string | null; propertyCategoryId?: string | null };
+  }> = [
     { filters: { city, purpose, propertyCategoryId } },
     { filters: { city, purpose, propertyCategoryId: null } },
     { filters: { city, purpose: null, propertyCategoryId: null } },
@@ -95,34 +101,39 @@ export default async function SimilarProperties({
     if (rows.length >= minNeeded) break;
   }
 
-  const items = await Promise.all(
-    rows.map(async (p) => {
-      const coverUrl = p.cover_media_url ? await getSignedImageUrl(p.cover_media_url) : null;
+  const coverPaths = rows
+    .map((p) => (p.cover_media_url ? String(p.cover_media_url) : ""))
+    .filter(Boolean);
+  const signedCoverMap = await getSignedImageUrlMap(coverPaths);
 
-      const location = [p.neighborhood, p.city].filter(Boolean).join(" • ") || "Localização";
+  const items = rows.map((p) => {
+    const location = [p.neighborhood, p.city].filter(Boolean).join(" • ") || "Localização";
+    const price = p.purpose === "rent" ? formatBRL(p.rent_price) : formatBRL(p.price);
+    const purposeLabel =
+      p.purpose === "sale" ? "Venda" : p.purpose === "rent" ? "Locação" : p.purpose ?? null;
 
-      const price = p.purpose === "rent" ? formatBRL(p.rent_price) : formatBRL(p.price);
+    const coverPath = p.cover_media_url ? String(p.cover_media_url) : "";
+    const coverUrl = coverPath ? signedCoverMap.get(coverPath) || null : null;
 
-      const purposeLabel =
-        p.purpose === "sale" ? "Venda" : p.purpose === "rent" ? "Locação" : p.purpose ?? null;
+    return {
+      id: String(p.id),
+      href: `/imoveis/${p.id}`,
+      title: p.title ?? "Imóvel",
+      location,
+      price,
+      purposeLabel,
+      area_m2: typeof p.area_m2 === "number" ? p.area_m2 : null,
+      bedrooms: typeof p.bedrooms === "number" ? p.bedrooms : null,
+      bathrooms: typeof p.bathrooms === "number" ? p.bathrooms : null,
+      parking: typeof p.parking === "number" ? p.parking : null,
+      coverUrl,
+    };
+  });
 
-      return {
-        id: String(p.id),
-        href: `/imóveis/${p.id}`,
-        title: p.title ?? "Imóvel",
-        location,
-        price,
-        purposeLabel,
-        area_m2: typeof p.area_m2 === "number" ? p.area_m2 : null,
-        bedrooms: typeof p.bedrooms === "number" ? p.bedrooms : null,
-        bathrooms: typeof p.bathrooms === "number" ? p.bathrooms : null,
-        parking: typeof p.parking === "number" ? p.parking : null,
-        coverUrl,
-      };
-    })
-  );
-
-  const whatsappE164 = process.env.NEXT_PUBLIC_VITRYA_WHATSAPP_E164 || process.env.NEXT_PUBLIC_WHATSAPP_NUMBER || "5565000000000";
+  const whatsappE164 =
+    process.env.NEXT_PUBLIC_VITRYA_WHATSAPP_E164 ||
+    process.env.NEXT_PUBLIC_WHATSAPP_NUMBER ||
+    "5565000000000";
   const whatsappLink = `https://wa.me/${String(whatsappE164).replace(/\D/g, "")}`;
 
   return (
@@ -136,7 +147,6 @@ export default async function SimilarProperties({
         boxShadow: "0 16px 40px rgba(0, 0, 0, 0)",
       }}
     >
-      {/* ✅ título centralizado e texto correto */}
       <h2 style={{ margin: "0 0 12px 0", fontSize: 20, textAlign: "center" }}>Imóveis similares</h2>
 
       <div
@@ -166,7 +176,6 @@ export default async function SimilarProperties({
                 Fale com nosso time pelo WhatsApp.
               </div>
 
-              {/* ✅ verde padrão igual card corretor */}
               <div
                 style={{
                   marginTop: 10,
@@ -194,3 +203,4 @@ export default async function SimilarProperties({
     </div>
   );
 }
+

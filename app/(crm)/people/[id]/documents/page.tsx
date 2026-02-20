@@ -2,6 +2,7 @@ import Link from 'next/link'
 import { createClient } from '@/lib/supabaseServer'
 import { requireActiveUser } from '@/lib/auth'
 import PersonDocumentsClient from './PersonDocumentsClient'
+import PersonDigitalDocumentsPanel from './PersonDigitalDocumentsPanel'
 
 export const dynamic = 'force-dynamic'
 export const revalidate = 0
@@ -60,6 +61,7 @@ export default async function PersonDocumentsPage({ params }: PageProps) {
         <p className="text-sm text-gray-500">Timeline e gestão de documentos vinculados.</p>
       </div>
 
+      <PersonDigitalDocumentsPanel personId={id} />
       <PersonDocumentsClient personId={id} />
     </main>
   )

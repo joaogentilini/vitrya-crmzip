@@ -24,10 +24,52 @@ interface PropertyDocumentsManagerProps {
   propertyId: string
 }
 
+type DigitalDocStatus = 'draft' | 'sent' | 'viewed' | 'signed' | 'refused' | 'voided' | 'error' | string
+
+interface DigitalAuthorizationDocument {
+  id: string
+  template_code: string | null
+  status: DigitalDocStatus
+  sent_at: string | null
+  signed_at: string | null
+  created_at: string
+  updated_at: string
+  pdf_signed_path: string | null
+  reason?: string | null
+}
+
+interface DigitalPreviewSigner {
+  role: string
+  name: string
+  email: string
+  phone?: string | null
+}
+
+interface DigitalAuthorizationPreviewData {
+  template_code: string
+  template_title: string
+  provider: string
+  provider_template_id: string | null
+  templateFields?: Record<string, unknown>
+  template_fields?: Record<string, unknown>
+  signers_suggested: DigitalPreviewSigner[]
+  missing_fields: string[]
+}
+
 const DOC_TYPE_LABELS: Record<DocumentType, string> = {
-  authorization: 'Termo de autorizacao',
-  management_contract: 'Contrato de gestao',
+  authorization: 'Termo de autorização',
+  management_contract: 'Contrato de gestão',
   other: 'Outro',
+}
+
+const DIGITAL_STATUS_LABELS: Record<string, string> = {
+  draft: 'Rascunho',
+  sent: 'Enviado',
+  viewed: 'Visualizado',
+  signed: 'Assinado',
+  refused: 'Recusado',
+  voided: 'Cancelado',
+  error: 'Erro',
 }
 
 function sanitizeFilename(filename: string): string {
@@ -56,12 +98,44 @@ function isDocTypeConstraintError(error: { message?: string } | null): boolean {
   return message.includes('property_documents_doc_type_check') || message.includes('check constraint')
 }
 
+function formatDateValue(value: unknown): string {
+  const raw = String(value ?? '').trim()
+  if (!raw) return 'Não informado'
+  const parsed = new Date(raw)
+  if (Number.isNaN(parsed.getTime())) return raw
+  return parsed.toLocaleDateString('pt-BR')
+}
+
+function formatCurrencyValue(value: unknown): string {
+  const parsed = Number(value)
+  if (!Number.isFinite(parsed)) return 'Não informado'
+  return parsed.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
+}
+
+function formatPercentValue(value: unknown): string {
+  const parsed = Number(value)
+  if (!Number.isFinite(parsed)) return 'Não informado'
+  return `${parsed.toLocaleString('pt-BR', { maximumFractionDigits: 2 })}%`
+}
+
+function formatTextValue(value: unknown): string {
+  if (typeof value === 'boolean') return value ? 'Sim' : 'Não'
+  const raw = String(value ?? '').trim()
+  return raw || 'Não informado'
+}
+
 export default function PropertyDocumentsManager({ propertyId }: PropertyDocumentsManagerProps) {
   const [documents, setDocuments] = useState<PropertyDocument[]>([])
   const [loading, setLoading] = useState(true)
+  const [digitalLoading, setDigitalLoading] = useState(true)
   const [uploading, setUploading] = useState(false)
+  const [sendingDigital, setSendingDigital] = useState(false)
+  const [previewLoading, setPreviewLoading] = useState(false)
+  const [previewModalOpen, setPreviewModalOpen] = useState(false)
+  const [previewData, setPreviewData] = useState<DigitalAuthorizationPreviewData | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState<string | null>(null)
+  const [digitalDocs, setDigitalDocs] = useState<DigitalAuthorizationDocument[]>([])
 
   const [docType, setDocType] = useState<DocumentType>('authorization')
   const [title, setTitle] = useState('')
@@ -86,9 +160,40 @@ export default function PropertyDocumentsManager({ propertyId }: PropertyDocumen
     setLoading(false)
   }, [propertyId])
 
+  const loadDigitalDocuments = useCallback(async () => {
+    setDigitalLoading(true)
+    try {
+      const { data, error: fetchError } = await supabase
+        .from('document_instances')
+        .select('id,template_code,status,sent_at,signed_at,created_at,updated_at,pdf_signed_path')
+        .eq('property_id', propertyId)
+        .in('template_code', ['AUT_VENDA_V1', 'AUT_GESTAO_V1'])
+        .order('created_at', { ascending: false })
+        .limit(20)
+
+      if (fetchError) {
+        const message = String(fetchError.message || '').toLowerCase()
+        const isMissingSchema =
+          message.includes('document_instances') ||
+          message.includes('does not exist') ||
+          message.includes('schema cache')
+
+        if (!isMissingSchema) {
+          setError(`Erro ao carregar autorizações digitais: ${fetchError.message}`)
+        }
+        setDigitalDocs([])
+        return
+      }
+
+      setDigitalDocs((data || []) as DigitalAuthorizationDocument[])
+    } finally {
+      setDigitalLoading(false)
+    }
+  }, [propertyId])
+
   useEffect(() => {
-    void loadDocuments()
-  }, [loadDocuments])
+    void Promise.all([loadDocuments(), loadDigitalDocuments()])
+  }, [loadDocuments, loadDigitalDocuments])
 
   async function handleUpload() {
     if (!selectedFile) {
@@ -187,7 +292,7 @@ export default function PropertyDocumentsManager({ propertyId }: PropertyDocumen
         await supabase.storage.from('property-documents').remove([path])
         if (docType === 'management_contract' && isDocTypeConstraintError(insertError)) {
           throw new Error(
-            'Banco sem suporte ao tipo "Contrato de gestao". Rode a migration 202602141030_commission_unification.sql.'
+            'Banco sem suporte ao tipo "Contrato de gestão". Rode a migration 202602141030_commission_unification.sql.'
           )
         }
         throw new Error(`Erro ao salvar registro: ${insertError.message}`)
@@ -201,12 +306,150 @@ export default function PropertyDocumentsManager({ propertyId }: PropertyDocumen
       const fileInput = document.getElementById('doc-file-input') as HTMLInputElement | null
       if (fileInput) fileInput.value = ''
 
-      await loadDocuments()
+      await Promise.all([loadDocuments(), loadDigitalDocuments()])
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Erro desconhecido no upload')
     } finally {
       setUploading(false)
     }
+  }
+
+  function getDigitalStatusBadge(status: DigitalDocStatus) {
+    const normalized = String(status || '').toLowerCase()
+    if (normalized === 'signed') return 'bg-green-100 text-green-700'
+    if (normalized === 'viewed') return 'bg-blue-100 text-blue-700'
+    if (normalized === 'sent') return 'bg-amber-100 text-amber-700'
+    if (normalized === 'refused') return 'bg-red-100 text-red-700'
+    if (normalized === 'error') return 'bg-red-100 text-red-700'
+    return 'bg-gray-200 text-gray-700'
+  }
+
+  async function handleOpenDigitalAuthorizationPreview() {
+    setPreviewLoading(true)
+    setError(null)
+    setSuccess(null)
+
+    try {
+      const query = new URLSearchParams({
+        template_code: 'AUT_VENDA_V1',
+        property_id: propertyId,
+        entity_type: 'property',
+        entity_id: propertyId,
+      })
+      const response = await fetch(`/api/docs/preview?${query.toString()}`, {
+        method: 'GET',
+        headers: { Accept: 'application/json' },
+        cache: 'no-store',
+      })
+
+      const json = (await response.json().catch(() => null)) as
+        | {
+            ok?: boolean
+            error?: string
+            data?: DigitalAuthorizationPreviewData
+            templateFields?: Record<string, unknown>
+            signers_suggested?: DigitalPreviewSigner[]
+            missing_fields?: string[]
+          }
+        | null
+
+      if (!response.ok || !json?.ok) {
+        throw new Error(json?.error || 'Falha ao montar a conferência da autorização digital.')
+      }
+
+      const payload = (json?.data || json || null) as DigitalAuthorizationPreviewData | null
+      if (!payload) {
+        throw new Error('Resposta de prévia inválida.')
+      }
+
+      const normalizedFields = payload.templateFields || payload.template_fields || {}
+      setPreviewData({
+        ...payload,
+        templateFields: normalizedFields,
+        template_fields: normalizedFields,
+        signers_suggested: Array.isArray(payload.signers_suggested) ? payload.signers_suggested : [],
+        missing_fields: Array.isArray(payload.missing_fields) ? payload.missing_fields : [],
+      })
+      setPreviewModalOpen(true)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Erro ao montar prévia da autorização digital.')
+    } finally {
+      setPreviewLoading(false)
+    }
+  }
+
+  async function handleGenerateDigitalAuthorization() {
+    setSendingDigital(true)
+    setError(null)
+    setSuccess(null)
+
+    try {
+      const response = await fetch('/api/docs/generate', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Accept: 'application/json',
+        },
+        body: JSON.stringify({
+          template_code: 'AUT_VENDA_V1',
+          property_id: propertyId,
+          entity_type: 'property',
+          entity_id: propertyId,
+        }),
+      })
+
+      const json = (await response.json().catch(() => null)) as
+        | {
+            ok?: boolean
+            error?: string
+            data?: { status?: string }
+          }
+        | null
+
+      if (!response.ok || !json?.ok) {
+        throw new Error(json?.error || 'Falha ao enviar autorização digital para assinatura.')
+      }
+
+      const statusLabel = String(json.data?.status || 'sent').toLowerCase()
+      if (statusLabel === 'signed') {
+        setSuccess('Autorização digital já retornou assinada e foi vinculada ao imóvel.')
+      } else {
+        setSuccess('Autorização digital enviada para assinatura.')
+      }
+
+      setPreviewModalOpen(false)
+      setPreviewData(null)
+      await loadDigitalDocuments()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Erro ao gerar autorização digital.')
+    } finally {
+      setSendingDigital(false)
+    }
+  }
+
+  async function handleOpenDigitalDocument(docId: string, kind: 'signed' | 'original' | 'audit' = 'signed') {
+    setError(null)
+    const response = await fetch(`/api/docs/${docId}/download?kind=${kind}`, {
+      method: 'GET',
+      headers: {
+        Accept: 'application/json',
+      },
+    })
+
+    const json = (await response.json().catch(() => null)) as
+      | {
+          ok?: boolean
+          error?: string
+          data?: { url?: string }
+        }
+      | null
+
+    if (!response.ok || !json?.ok || !json?.data?.url) {
+      setError(json?.error || 'Não foi possível abrir o arquivo assinado.')
+      return
+    }
+
+    window.open(json.data.url, '_blank')
   }
 
   async function handlePreview(doc: PropertyDocument) {
@@ -241,12 +484,15 @@ export default function PropertyDocumentsManager({ propertyId }: PropertyDocumen
       return
     }
 
-    setSuccess('Documento excluido com sucesso!')
-    await loadDocuments()
+    setSuccess('Documento excluído com sucesso!')
+    await Promise.all([loadDocuments(), loadDigitalDocuments()])
   }
 
   const hasAuthorization = documents.some((d) => d.doc_type === 'authorization')
   const hasManagementContract = documents.some((d) => d.doc_type === 'management_contract')
+  const previewFields = (previewData?.template_fields || {}) as Record<string, unknown>
+  const previewMissingFields = previewData?.missing_fields || []
+  const canConfirmPreview = Boolean(previewData) && previewMissingFields.length === 0 && !sendingDigital
 
   return (
     <div className="space-y-6">
@@ -255,6 +501,88 @@ export default function PropertyDocumentsManager({ propertyId }: PropertyDocumen
       {success ? (
         <div className="rounded-md border border-green-200 bg-green-50 p-3 text-sm text-green-700">{success}</div>
       ) : null}
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center justify-between gap-3">
+            <span className="flex items-center gap-2">
+              <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M9 12h6m-6 4h6M7 3h6l4 4v14H7a2 2 0 01-2-2V5a2 2 0 012-2z"
+                />
+              </svg>
+              Assinatura digital (ZapSign)
+            </span>
+            <Button onClick={handleOpenDigitalAuthorizationPreview} disabled={sendingDigital || previewLoading}>
+              {previewLoading ? 'Conferindo...' : sendingDigital ? 'Enviando...' : 'Enviar autorização para assinatura'}
+            </Button>
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <p className="text-xs text-gray-500">
+            Gera o documento com dados do imóvel e envia para assinatura. A publicação exige status assinado e dados
+            sem divergência após assinatura.
+          </p>
+
+          {digitalLoading ? (
+            <p className="text-sm text-gray-500">Carregando autorizações digitais...</p>
+          ) : digitalDocs.length === 0 ? (
+            <div className="rounded-lg border border-dashed border-gray-300 p-3 text-sm text-gray-500">
+              Nenhuma autorização digital gerada para este imóvel.
+            </div>
+          ) : (
+            <div className="space-y-2">
+              {digitalDocs.map((doc) => {
+                const statusKey = String(doc.status || '').toLowerCase()
+                const label = DIGITAL_STATUS_LABELS[statusKey] || doc.status || '—'
+                return (
+                  <div key={doc.id} className="rounded-lg border border-gray-200 bg-white p-3">
+                    <div className="flex flex-wrap items-start justify-between gap-3">
+                      <div>
+                        <p className="text-sm font-medium text-gray-900">
+                          {doc.template_code === 'AUT_GESTAO_V1' ? 'Autorização de gestão' : 'Autorização de venda'}
+                        </p>
+                        <p className="text-xs text-gray-500">
+                          Criado em {new Date(doc.created_at).toLocaleDateString('pt-BR')}
+                          {doc.signed_at
+                            ? ` · Assinado em ${new Date(doc.signed_at).toLocaleDateString('pt-BR')}`
+                            : doc.sent_at
+                            ? ` · Enviado em ${new Date(doc.sent_at).toLocaleDateString('pt-BR')}`
+                            : ''}
+                        </p>
+                      </div>
+                      <span className={`rounded-full px-2 py-1 text-xs font-semibold ${getDigitalStatusBadge(statusKey)}`}>
+                        {label}
+                      </span>
+                    </div>
+
+                    <div className="mt-2 flex flex-wrap gap-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => handleOpenDigitalDocument(doc.id, 'signed')}
+                        disabled={!doc.pdf_signed_path}
+                      >
+                        PDF assinado
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => handleOpenDigitalDocument(doc.id, 'audit')}
+                      >
+                        Trilha/auditoria
+                      </Button>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          )}
+        </CardContent>
+      </Card>
 
       <Card>
         <CardHeader>
@@ -281,8 +609,8 @@ export default function PropertyDocumentsManager({ propertyId }: PropertyDocumen
                 className="w-full rounded-md border border-gray-300 px-3 py-2 shadow-sm focus:border-[#294487] focus:ring-[#294487]"
                 disabled={uploading}
               >
-                <option value="authorization">Termo de autorizacao</option>
-                <option value="management_contract">Contrato de gestao</option>
+                <option value="authorization">Termo de autorização</option>
+                <option value="management_contract">Contrato de gestão</option>
                 <option value="other">Outro</option>
               </select>
             </div>
@@ -353,14 +681,14 @@ export default function PropertyDocumentsManager({ propertyId }: PropertyDocumen
                   hasAuthorization ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-700'
                 }`}
               >
-                {hasAuthorization ? 'Autorizacao OK' : 'Falta autorizacao'}
+                {hasAuthorization ? 'Autorização OK' : 'Falta autorização'}
               </span>
               <span
                 className={`rounded-full px-2 py-1 text-xs ${
                   hasManagementContract ? 'bg-blue-100 text-blue-700' : 'bg-amber-100 text-amber-700'
                 }`}
               >
-                {hasManagementContract ? 'Contrato gestao OK' : 'Falta contrato gestao'}
+                {hasManagementContract ? 'Contrato gestão OK' : 'Falta contrato gestão'}
               </span>
             </div>
           </CardTitle>
@@ -380,7 +708,7 @@ export default function PropertyDocumentsManager({ propertyId }: PropertyDocumen
                 />
               </svg>
               <p>Nenhum documento anexado.</p>
-              <p className="mt-1 text-sm">Use o formulario acima para enviar documentos.</p>
+              <p className="mt-1 text-sm">Use o formulário acima para enviar documentos.</p>
             </div>
           ) : (
             <div className="space-y-3">
@@ -474,6 +802,111 @@ export default function PropertyDocumentsManager({ propertyId }: PropertyDocumen
           </div>
         </CardContent>
       </Card>
+
+      {previewModalOpen ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="max-h-[90vh] w-full max-w-3xl overflow-auto rounded-2xl border border-gray-200 bg-white shadow-2xl">
+            <div className="flex items-center justify-between border-b border-gray-200 px-5 py-4">
+              <div>
+                <h3 className="text-base font-semibold text-gray-900">Conferência da autorização digital</h3>
+                <p className="mt-1 text-xs text-gray-500">
+                  Revise os dados antes de enviar para a ZapSign e evitar custo desnecessário.
+                </p>
+              </div>
+              <button
+                type="button"
+                className="rounded-md border border-gray-200 px-3 py-1 text-sm text-gray-600 hover:bg-gray-50"
+                onClick={() => {
+                  if (sendingDigital) return
+                  setPreviewModalOpen(false)
+                }}
+              >
+                Fechar
+              </button>
+            </div>
+
+            <div className="space-y-4 px-5 py-4">
+              {previewMissingFields.length > 0 ? (
+                <div className="rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
+                  Campos obrigatórios pendentes: {previewMissingFields.join(', ')}.
+                </div>
+              ) : null}
+
+              <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+                <div className="rounded-lg border border-gray-200 p-3">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">Matrícula/registro</p>
+                  <p className="mt-1 text-sm text-gray-900">{formatTextValue(previewFields.property_registry_number)}</p>
+                </div>
+                <div className="rounded-lg border border-gray-200 p-3">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">Endereço completo</p>
+                  <p className="mt-1 text-sm text-gray-900">{formatTextValue(previewFields.property_address)}</p>
+                </div>
+                <div className="rounded-lg border border-gray-200 p-3">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">Valor</p>
+                  <p className="mt-1 text-sm text-gray-900">{formatCurrencyValue(previewFields.property_sale_price)}</p>
+                </div>
+                <div className="rounded-lg border border-gray-200 p-3">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">Comissão (%)</p>
+                  <p className="mt-1 text-sm text-gray-900">{formatPercentValue(previewFields.commission_percent)}</p>
+                </div>
+                <div className="rounded-lg border border-gray-200 p-3">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">Prazo da autorização</p>
+                  <p className="mt-1 text-sm text-gray-900">{formatDateValue(previewFields.authorization_expires_at)}</p>
+                </div>
+                <div className="rounded-lg border border-gray-200 p-3">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">Exclusividade</p>
+                  <p className="mt-1 text-sm text-gray-900">
+                    {formatTextValue(previewFields.authorization_is_exclusive)}
+                  </p>
+                </div>
+                <div className="rounded-lg border border-gray-200 p-3">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">Proprietário</p>
+                  <p className="mt-1 text-sm text-gray-900">{formatTextValue(previewFields.owner_name)}</p>
+                </div>
+                <div className="rounded-lg border border-gray-200 p-3">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">Template</p>
+                  <p className="mt-1 text-sm text-gray-900">{formatTextValue(previewData?.template_title)}</p>
+                </div>
+              </div>
+
+              <div className="rounded-lg border border-gray-200 p-3">
+                <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">Assinantes sugeridos</p>
+                {previewData?.signers_suggested?.length ? (
+                  <div className="mt-2 space-y-2">
+                    {previewData.signers_suggested.map((signer, index) => (
+                      <div key={`${signer.email}-${index}`} className="rounded-md border border-gray-100 bg-gray-50 px-3 py-2">
+                        <p className="text-sm font-medium text-gray-900">
+                          {signer.name} <span className="text-xs font-normal text-gray-500">({signer.role})</span>
+                        </p>
+                        <p className="text-xs text-gray-600">{signer.email}</p>
+                        {signer.phone ? <p className="text-xs text-gray-600">{signer.phone}</p> : null}
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="mt-2 text-sm text-gray-600">Nenhum assinante sugerido automaticamente.</p>
+                )}
+              </div>
+            </div>
+
+            <div className="flex items-center justify-end gap-2 border-t border-gray-200 px-5 py-4">
+              <Button
+                variant="outline"
+                onClick={() => {
+                  if (sendingDigital) return
+                  setPreviewModalOpen(false)
+                }}
+                disabled={sendingDigital}
+              >
+                Cancelar
+              </Button>
+              <Button onClick={handleGenerateDigitalAuthorization} disabled={!canConfirmPreview}>
+                {sendingDigital ? 'Enviando...' : 'Confirmar e enviar'}
+              </Button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   )
 }

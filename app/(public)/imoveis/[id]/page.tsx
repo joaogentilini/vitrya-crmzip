@@ -1,10 +1,12 @@
 import type { Metadata } from "next";
-import { headers } from "next/headers";
 import { notFound } from "next/navigation";
+import { Suspense } from "react";
 
 import { createPublicClient } from "@/lib/supabase/publicServer";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { getSignedImageUrl } from "@/lib/media/getPublicImageUrl";
+import { getSignedImageUrlMap } from "@/lib/media/getPublicImageUrl";
+import type { AmenitiesSnapshotData } from "@/lib/maps/types";
+import PublicPropertyMapCard from "@/components/maps/PublicPropertyMapCard";
 
 import HeroBackgroundGalleryClient from "./HeroBackgroundGalleryClient";
 import { BrokerCard } from "./BrokerCard";
@@ -12,6 +14,8 @@ import ListingActionsClient from "./ListingActionsClient";
 import SimilarProperties from "./SimilarProperties";
 import { Icon } from "@/components/ui/Icon";
 import DescriptionToggleClient from "./DescriptionToggleClient";
+
+export const revalidate = 300;
 
 function formatBRL(value: number | null | undefined) {
   if (value === null || value === undefined) return null;
@@ -36,29 +40,6 @@ function isUuid(value: string) {
 function safeText(v: any) {
   const s = (v ?? "").toString().trim();
   return s.length ? s : null;
-}
-
-function isHttpUrl(v: string) {
-  return /^https?:\/\//i.test(v);
-}
-
-async function resolveMediaUrl(raw: string | null | undefined) {
-  const v = (raw ?? "").toString().trim();
-  if (!v) return null;
-  if (isHttpUrl(v)) return v;
-  try {
-    const signed = await getSignedImageUrl(v);
-    return signed ?? null;
-  } catch {
-    return null;
-  }
-}
-
-async function getMetadataBaseFromHeaders() {
-  const h = await headers();
-  const host = h.get("x-forwarded-host") || h.get("host") || "";
-  const proto = h.get("x-forwarded-proto") || "https";
-  return host ? new URL(`${proto}://${host}`) : null;
 }
 
 type ViewName = "v_public_properties_ext" | "v_public_properties";
@@ -115,15 +96,14 @@ export async function generateMetadata({
   const propertyId = resolvedParams?.id;
 
   const envBase = safeText(process.env.NEXT_PUBLIC_SITE_URL);
-  const metadataBase =
-    envBase ? new URL(envBase) : (await getMetadataBaseFromHeaders()) ?? undefined;
+  const metadataBase = envBase ? new URL(envBase) : undefined;
 
   const canonical =
     metadataBase && propertyId
-      ? new URL(`/imóveis/${propertyId}`, metadataBase).toString()
+      ? new URL(`/imoveis/${propertyId}`, metadataBase).toString()
       : undefined;
 
-  // ✅ Segurança: domínio provisório (sem NEXT_PUBLIC_SITE_URL) => noindex
+  // Segurança: domínio provisório (sem NEXT_PUBLIC_SITE_URL) => noindex
   const allowIndex = Boolean(envBase);
 
   if (!propertyId || !isUuid(propertyId)) {
@@ -159,7 +139,7 @@ export async function generateMetadata({
 
   const locationBits = [neighborhood, city].filter(Boolean).join(" • ");
   const headlineBits = [purposeLabel, category, locationBits].filter(Boolean).join(" | ");
-  const seoTitle = `${title}${headlineBits ? ` — ${headlineBits}` : ""} | Vitrya`;
+  const seoTitle = `${title}${headlineBits ? ` • ${headlineBits}` : ""} | Vitrya`;
 
   const rawDesc = safeText(p.description);
   const seoDesc =
@@ -168,7 +148,7 @@ export async function generateMetadata({
       purposeLabel ? ` para ${purposeLabel.toLowerCase()}` : ""
     }. Fotos, características e contato do corretor na Vitrya.`;
 
-  // ✅ OG image: como Storage é privado (signed), para SEO clássico é melhor omitir por enquanto
+  // OG image: como Storage é privado (signed), para SEO clássico é melhor omitir por enquanto
   const ogImage: string | null = null;
 
   return {
@@ -211,6 +191,25 @@ type FeatureValueRow = {
   value_text: string | null;
   value_json: any | null;
 };
+
+type PublicAmenitiesSnapshotRow = {
+  property_id: string;
+  radius_m: number;
+  data: AmenitiesSnapshotData;
+  generated_at: string | null;
+};
+
+function parseAmenitiesSnapshot(value: unknown): AmenitiesSnapshotData | null {
+  if (!value || typeof value !== "object") return null;
+  const row = value as Record<string, unknown>;
+  const categories = row.categories;
+  if (!Array.isArray(categories)) return null;
+  const radiusM = Number(row.radius_m);
+  return {
+    radius_m: Number.isFinite(radiusM) ? radiusM : 1000,
+    categories: categories as AmenitiesSnapshotData["categories"],
+  };
+}
 
 function buildAvailableFeatures(catalog: FeatureCatalogItem[], values: FeatureValueRow[]) {
   const byId = new Map<string, FeatureCatalogItem>();
@@ -312,6 +311,9 @@ export default async function PublicPropertyPage({
     rent_price,
     property_category_id,
     cover_media_url,
+    address,
+    latitude,
+    longitude,
     created_at,
     property_category_name,
     broker_id,
@@ -393,69 +395,23 @@ export default async function PublicPropertyPage({
 
   if (!property) return notFound();
 
-  // ✅ Share URL (runtime)
-  const headerList = await headers();
-  const host = headerList.get("x-forwarded-host") || headerList.get("host") || "";
-  const proto = headerList.get("x-forwarded-proto") || "https";
-  const shareUrl = host ? `${proto}://${host}/imóveis/${property.id}` : "";
+  //  Share URL (runtime)
+  const baseUrl = String(process.env.NEXT_PUBLIC_SITE_URL ?? "").trim().replace(/\/$/, "");
+  const canonicalUrl = baseUrl ? `${baseUrl}/imoveis/${property.id}` : "";
+  const shareUrl = canonicalUrl;
 
-  // ✅ Canonical base (SEO)
-  const baseUrlEnv = (process.env.NEXT_PUBLIC_SITE_URL ?? "").trim();
-  const baseUrl = baseUrlEnv || (host ? `${proto}://${host}` : "");
-  const canonicalUrl = baseUrl ? `${baseUrl}/imóveis/${property.id}` : shareUrl || "";
-
-  // ✅ Media (signed)
-  const { data: mediaRows, error: mediaError } = await supabase
-    .from("property_media")
-    .select("id, url, kind, position")
-    .eq("property_id", propertyId)
-    .order("position", { ascending: true });
-
-  let effectiveMediaRows = mediaRows ?? [];
-  if (!effectiveMediaRows.length) {
-    const admin = createAdminClient();
-    const { data: adminRows, error: adminErr } = await admin
+  const admin = createAdminClient();
+  const [amenitiesResult, mediaResult, catalogRes, valuesRes] = await Promise.all([
+    supabase
+      .from("v_public_property_amenities_latest")
+      .select("property_id, radius_m, data, generated_at")
+      .eq("property_id", propertyId)
+      .maybeSingle(),
+    admin
       .from("property_media")
       .select("id, url, kind, position")
       .eq("property_id", propertyId)
-      .order("position", { ascending: true });
-
-    if (adminErr) {
-      if (mediaError) console.error(mediaError);
-      console.error("Admin media fallback error:", adminErr);
-    } else {
-      effectiveMediaRows = adminRows ?? [];
-    }
-  }
-
-  const rawMediaItems =
-    effectiveMediaRows.map((m: any) => ({
-      id: String(m.id),
-      url: m?.url ? String(m.url) : null,
-      kind: m.kind,
-    })) ?? [];
-
-  const signedMediaItems = (
-    await Promise.all(
-      rawMediaItems.map(async (item) => {
-        const signedUrl = await resolveMediaUrl(item.url);
-        if (!signedUrl) return null;
-        return { ...item, url: signedUrl };
-      })
-    )
-  ).filter(Boolean) as { id: string; url: string; kind?: string }[];
-
-  const coverSignedUrl = await resolveMediaUrl(property.cover_media_url ?? null);
-  const mediaItems = [...signedMediaItems];
-
-  if (coverSignedUrl && !mediaItems.some((m) => m.url === coverSignedUrl)) {
-    mediaItems.unshift({ id: "cover", url: coverSignedUrl, kind: "image" });
-  }
-
-  const heroBgUrl = coverSignedUrl || mediaItems[0]?.url || null;
-
-  // ✅ Features
-  const [catalogRes, valuesRes] = await Promise.all([
+      .order("position", { ascending: true }),
     supabase
       .from("property_features")
       .select("id,key,label_pt,group,type,options,position")
@@ -467,16 +423,75 @@ export default async function PublicPropertyPage({
       .eq("property_id", propertyId),
   ]);
 
+  const amenitiesRes = amenitiesResult.data;
+  const amenitiesError = amenitiesResult.error;
+
+  if (amenitiesError) {
+    const message = String(amenitiesError.message || "").toLowerCase();
+    const isMissing =
+      message.includes("does not exist") ||
+      message.includes("relation") ||
+      message.includes("schema cache") ||
+      message.includes("view");
+    if (!isMissing) {
+      console.error("Erro ao carregar snapshot publico de proximidades:", amenitiesError);
+    }
+  }
+
+  const amenitiesSnapshotData = parseAmenitiesSnapshot((amenitiesRes as any)?.data ?? null);
+  const amenitiesSnapshot = amenitiesSnapshotData
+    ? ({
+        property_id: String((amenitiesRes as any)?.property_id || propertyId),
+        radius_m: Number((amenitiesRes as any)?.radius_m || amenitiesSnapshotData.radius_m || 1000),
+        data: amenitiesSnapshotData,
+        generated_at: String((amenitiesRes as any)?.generated_at || "") || null,
+      } as PublicAmenitiesSnapshotRow)
+    : null;
+
+  if (mediaResult.error) {
+    console.error("Erro ao carregar midias publicas:", mediaResult.error);
+  }
+
+  const rawMediaItems =
+    (mediaResult.data ?? []).map((m: any) => ({
+      id: String(m.id),
+      url: m?.url ? String(m.url) : null,
+      kind: m.kind,
+    })) ?? [];
+
+  const mediaPaths = rawMediaItems
+    .map((item) => item.url)
+    .filter((item): item is string => Boolean(item));
+  if (property.cover_media_url) mediaPaths.unshift(String(property.cover_media_url));
+
+  const signedUrlMap = await getSignedImageUrlMap(mediaPaths);
+  const signedMediaItems = rawMediaItems
+    .map((item) => {
+      const signedUrl = item.url ? signedUrlMap.get(item.url) || null : null;
+      if (!signedUrl) return null;
+      return { ...item, url: signedUrl };
+    })
+    .filter(Boolean) as { id: string; url: string; kind?: string }[];
+
+  const coverPath = property.cover_media_url ? String(property.cover_media_url) : "";
+  const coverSignedUrl = coverPath ? signedUrlMap.get(coverPath) || null : null;
+  const mediaItems = [...signedMediaItems];
+
+  if (coverSignedUrl && !mediaItems.some((m) => m.url === coverSignedUrl)) {
+    mediaItems.unshift({ id: "cover", url: coverSignedUrl, kind: "image" });
+  }
+
+  const heroBgUrl = coverSignedUrl || mediaItems[0]?.url || null;
+
   if (catalogRes.error || valuesRes.error) {
-    console.error("Erro ao carregar características:", catalogRes.error || valuesRes.error);
+    console.error("Erro ao carregar caracteristicas:", catalogRes.error || valuesRes.error);
   }
 
   const availableFeatures = buildAvailableFeatures(
     (catalogRes.data ?? []) as FeatureCatalogItem[],
     (valuesRes.data ?? []) as FeatureValueRow[]
   );
-
-  // ✅ Broker + WhatsApp
+  //  Broker + WhatsApp
   const brokerName = property?.broker_public_name || property?.broker_full_name || "Corretor";
 
   const initials =
@@ -536,7 +551,7 @@ export default async function PublicPropertyPage({
       ? property.price
       : null;
 
-  // ✅ JSON-LD
+  //  JSON-LD
   const jsonLd: any = {
     "@context": "https://schema.org",
     "@type": "RealEstateListing",
@@ -598,7 +613,7 @@ export default async function PublicPropertyPage({
       ========================== */}
       <div className="pv-hero-left-top" style={{ minWidth: 0 }}>
         <div style={{ opacity: 0.9, fontSize: 13 }}>
-          Início · {property.city || "—"} · {property.neighborhood || "—"}
+          Início • {property.city || "—"} • {property.neighborhood || "—"}
         </div>
 
         <h1 className="pv-title">{property.title || "Imóvel"}</h1>
@@ -618,14 +633,14 @@ export default async function PublicPropertyPage({
 
       {/* =========================
           MEIO (local + preço + métricas)
-          ✅ trava no “meio da tela”
+          trava no meio da tela
       ========================== */}
       <div
         className="pv-hero-left-mid"
         style={{
           minWidth: 0,
           marginTop: 14,
-          // 🔒 nunca passa do meio no desktop
+          //  nunca passa do meio no desktop
           maxWidth: "min(520px, 50vw)",
         }}
       >
@@ -656,7 +671,7 @@ export default async function PublicPropertyPage({
           className="pv-metrics-row"
           style={{
             marginTop: 16,
-            // ✅ trava: não deixa as pills “forçarem” largura
+            // trava: não deixa as pills forçarem largura
             maxWidth: "100%",
             display: "flex",
             flexWrap: "wrap",
@@ -748,7 +763,7 @@ export default async function PublicPropertyPage({
         </a>
       </div>
 
-      {/* ✅ Mobile: permite usar 100% da largura (sem cortar) */}
+      {/*  Mobile: permite usar 100% da largura (sem cortar) */}
       <style>{`
         @media (max-width: 980px){
           .pv-hero-left-mid{ max-width: 100% !important; }
@@ -818,41 +833,14 @@ export default async function PublicPropertyPage({
                 />
               ) : null}
 
-              <div
-                id="pv-map"
-                style={{
-                  marginTop: 14,
-                  borderRadius: 16,
-                  border: "1px solid rgba(23,26,33,0.1)",
-                  background: "linear-gradient(180deg, rgba(23,26,33,0.04), rgba(23,26,33,0.02))",
-                  padding: 12,
-                  minHeight: 150,
-                  display: "grid",
-                  gap: 8,
-                  scrollMarginTop: 90,
-                }}
-              >
-                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                  <Icon name="location_on" size={18} />
-                  <strong>Mapa premium em breve</strong>
-                </div>
-
-                <div
-                  style={{
-                    flex: 1,
-                    borderRadius: 12,
-                    border: "1px dashed rgba(23,26,33,0.2)",
-                    background: "rgba(255,255,255,0.7)",
-                    minHeight: 110,
-                    display: "grid",
-                    placeItems: "center",
-                    color: "rgba(23,26,33,0.6)",
-                    fontSize: 13,
-                  }}
-                >
-                  Área reservada para mapa
-                </div>
-              </div>
+              <PublicPropertyMapCard
+                title={property.title || "Imóvel"}
+                latitude={Number.isFinite(Number(property.latitude)) ? Number(property.latitude) : null}
+                longitude={Number.isFinite(Number(property.longitude)) ? Number(property.longitude) : null}
+                address={property.address || null}
+                amenitiesSnapshot={amenitiesSnapshot?.data ?? null}
+                amenitiesGeneratedAt={amenitiesSnapshot?.generated_at ?? null}
+              />
             </div>
           </div>
 
@@ -865,14 +853,31 @@ export default async function PublicPropertyPage({
         </div>
 
         <div style={{ marginTop: 22 }}>
-          <SimilarProperties
-            propertyId={String(property.id)}
-            city={property.city}
-            purpose={property.purpose}
-            propertyCategoryId={property.property_category_id}
-          />
+          <Suspense
+            fallback={
+              <div
+                style={{
+                  borderRadius: 20,
+                  border: "1px solid rgba(23,26,33,0.1)",
+                  padding: 18,
+                  fontSize: 13,
+                  opacity: 0.72,
+                }}
+              >
+                Carregando imóveis similares...
+              </div>
+            }
+          >
+            <SimilarProperties
+              propertyId={String(property.id)}
+              city={property.city}
+              purpose={property.purpose}
+              propertyCategoryId={property.property_category_id}
+            />
+          </Suspense>
         </div>
       </div>
     </>
   );
 }
+

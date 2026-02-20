@@ -1,5 +1,7 @@
 import { buildWhatsAppLink, sanitizePhone } from '@/lib/whatsapp'
 
+const DEFAULT_COMPANY_EMAIL = 'vitrya.imoveis@gmail.com'
+
 export type EmailDeliveryResult = {
   ok: boolean
   status: 'sent' | 'skipped' | 'error'
@@ -45,6 +47,9 @@ export async function sendProposalPdfByEmail(input: {
   html: string
   pdfFileName: string
   pdfBuffer: Buffer
+  cc?: string[] | null
+  fromEmail?: string | null
+  replyTo?: string | null
 }): Promise<EmailDeliveryResult> {
   const recipient = compact(input.to)
   if (!recipient) {
@@ -58,7 +63,25 @@ export async function sendProposalPdfByEmail(input: {
   }
 
   const apiKey = compact(process.env.RESEND_API_KEY)
-  const fromEmail = compact(process.env.RESEND_FROM_EMAIL) || 'onboarding@resend.dev'
+  const fromEmail =
+    compact(input.fromEmail) ||
+    compact(process.env.RESEND_FROM_EMAIL_COMMERCIAL) ||
+    compact(process.env.RESEND_FROM_EMAIL_COMERCIAL) ||
+    compact(process.env.RESEND_FROM_EMAIL) ||
+    DEFAULT_COMPANY_EMAIL
+  const replyTo =
+    compact(input.replyTo) ||
+    compact(process.env.RESEND_REPLY_TO_COMMERCIAL) ||
+    compact(process.env.RESEND_REPLY_TO_COMERCIAL) ||
+    compact(process.env.COMPANY_COMMERCIAL_EMAIL) ||
+    compact(process.env.COMPANY_COMERCIAL_EMAIL) ||
+    DEFAULT_COMPANY_EMAIL
+  const ccList = (input.cc || [])
+    .map((value) => compact(value))
+    .filter(Boolean)
+    .filter((value) => value.toLowerCase() !== recipient.toLowerCase())
+    .filter((value, index, arr) => arr.indexOf(value) === index)
+
   if (!apiKey) {
     return {
       ok: false,
@@ -72,6 +95,8 @@ export async function sendProposalPdfByEmail(input: {
   const payload = {
     from: fromEmail,
     to: [recipient],
+    ...(ccList.length ? { cc: ccList } : {}),
+    ...(replyTo ? { reply_to: [replyTo] } : {}),
     subject: input.subject,
     html: input.html,
     attachments: [
