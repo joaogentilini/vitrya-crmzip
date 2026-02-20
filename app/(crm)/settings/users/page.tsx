@@ -34,6 +34,16 @@ interface GoogleCalendarSummary {
   last_error: string | null
 }
 
+type UserIntegrationRow = {
+  user_id: string | null
+  google_email?: string | null
+  sync_enabled?: boolean | null
+  auto_create_from_tasks?: boolean | null
+  connected_at?: string | null
+  updated_at?: string | null
+  last_error?: string | null
+}
+
 export default async function UsersPage({
   searchParams,
 }: {
@@ -92,13 +102,17 @@ export default async function UsersPage({
 
   if (userIds.length > 0) {
     const adminSupabase = createAdminClient()
-    const { data: integrations } = await adminSupabase
+    const { data: integrationsRaw } = await adminSupabase
       .from('user_google_calendar_integrations')
       .select('user_id, google_email, sync_enabled, auto_create_from_tasks, connected_at, updated_at, last_error')
       .in('user_id', userIds)
+    const integrations = (integrationsRaw ?? []) as UserIntegrationRow[]
 
-    for (const integration of integrations || []) {
-      integrationMap[integration.user_id] = {
+    for (const integration of integrations) {
+      const uid = integration.user_id ?? null
+      if (!uid) continue
+
+      integrationMap[uid] = {
         connected: true,
         google_email: integration.google_email ?? null,
         sync_enabled: !!integration.sync_enabled,
