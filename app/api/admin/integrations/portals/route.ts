@@ -159,8 +159,8 @@ export async function PATCH(request: NextRequest) {
   patch.updated_at = new Date().toISOString()
 
   const admin = createAdminClient()
-  const portalIntegrationsTable = admin.from('portal_integrations') as any
-  const updateRes = await portalIntegrationsTable
+  const updateRes = await admin
+    .from('portal_integrations')
     .update(patch)
     .eq('provider', provider)
     .select('id, provider, is_enabled, settings, created_at, updated_at')
@@ -188,8 +188,7 @@ export async function PATCH(request: NextRequest) {
     },
     created_at: new Date().toISOString(),
   }
-  const auditLogsTable = admin.from('user_audit_logs') as any
-  await auditLogsTable.insert(audit)
+  await admin.from('user_audit_logs').insert(audit)
 
   return NextResponse.json({ ok: true, integration: updateRes.data || null })
 }

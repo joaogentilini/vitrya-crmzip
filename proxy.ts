@@ -16,6 +16,8 @@ const PROTECTED = [
 const isDev = process.env.NODE_ENV === "development";
 const ACCENTED_IMOVEIS = "/im\u00F3veis";
 const ENCODED_ACCENTED_IMOVEIS = "/im%C3%B3veis";
+const LATIN1_ENCODED_ACCENTED_IMOVEIS = "/im%F3veis";
+const LATIN1_ENCODED_ACCENTED_IMOVEIS_LOWER = "/im%f3veis";
 
 function isSupabaseAuthCookie(cookieName: string): boolean {
   if (!cookieName.startsWith("sb-")) return false;
@@ -37,10 +39,19 @@ function isSupabaseAuthCookie(cookieName: string): boolean {
 }
 
 function normalizeLegacyPath(pathname: string): string | null {
-  if (pathname === ENCODED_ACCENTED_IMOVEIS) return "/imoveis";
-  const encodedLegacyPrefix = `${ENCODED_ACCENTED_IMOVEIS}/`;
-  if (pathname.startsWith(encodedLegacyPrefix)) {
-    return `/imoveis/${pathname.slice(encodedLegacyPrefix.length)}`;
+  const encodedLegacyBases = [
+    ENCODED_ACCENTED_IMOVEIS,
+    LATIN1_ENCODED_ACCENTED_IMOVEIS,
+    LATIN1_ENCODED_ACCENTED_IMOVEIS_LOWER,
+  ];
+
+  for (const base of encodedLegacyBases) {
+    if (pathname === base) return "/imoveis";
+
+    const encodedLegacyPrefix = `${base}/`;
+    if (pathname.startsWith(encodedLegacyPrefix)) {
+      return `/imoveis/${pathname.slice(encodedLegacyPrefix.length)}`;
+    }
   }
 
   if (pathname === ACCENTED_IMOVEIS) return "/imoveis";
