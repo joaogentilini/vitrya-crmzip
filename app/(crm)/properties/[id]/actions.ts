@@ -11,6 +11,7 @@ import {
 import { requireActiveUser, requireRole } from '@/lib/auth'
 import { buildAmenitiesSnapshot } from '@/lib/maps/googlePlaces'
 import type { AmenitiesSnapshotData, PropertyLocationSource } from '@/lib/maps/types'
+import { ensureReceivablesForProposal } from '@/lib/finance/distributions'
 
 export interface PublishResult {
   success: boolean
@@ -2682,6 +2683,11 @@ type ProposalRow = {
   negotiation_id: string
   property_id: string | null
   person_id: string | null
+  lead_id?: string | null
+  lead_type_id?: string | null
+  lead_interest_id?: string | null
+  lead_source_id?: string | null
+  property_category_id?: string | null
   status: string | null
   requires_manager_approval: boolean | null
   approved_by_profile_id: string | null
@@ -2721,6 +2727,7 @@ type ProposalPaymentRow = {
   id: string
   proposal_id: string
   method: string
+  proposal_payment_method_id?: string | null
   amount: number
   due_date: string | null
   details: string | null
@@ -2844,6 +2851,19 @@ export type SaveProposalDraftBundleInput = {
   }>
 }
 
+function normalizeProposalPaymentMethodCode(value: string | null | undefined): 'cash' | 'installments' | 'financing' | 'consortium' | 'trade' | 'other' {
+  const method = String(value || '')
+    .trim()
+    .toLowerCase()
+  if (!method) return 'other'
+  if (method === 'cash' || method.includes('vista') || method.includes('dinhe')) return 'cash'
+  if (method === 'installments' || method.includes('parcel')) return 'installments'
+  if (method === 'financing' || method.includes('financ')) return 'financing'
+  if (method === 'consortium' || method.includes('consor')) return 'consortium'
+  if (method === 'trade' || method.includes('permuta')) return 'trade'
+  return 'other'
+}
+
 export async function saveProposalDraftBundle(input: SaveProposalDraftBundleInput) {
   await requireActiveUser()
 
@@ -2861,7 +2881,7 @@ export async function saveProposalDraftBundle(input: SaveProposalDraftBundleInpu
 
   const { data: negotiation, error: negotiationErr } = await supabase
     .from('property_negotiations')
-    .select('id, property_id, person_id, created_by_profile_id')
+    .select('id, property_id, person_id, lead_id, created_by_profile_id')
     .eq('id', input.negotiationId)
     .maybeSingle()
 
@@ -2869,18 +2889,35 @@ export async function saveProposalDraftBundle(input: SaveProposalDraftBundleInpu
     return { success: false as const, error: 'Negociação não encontrada.' }
   }
 
-  const [{ data: actorProfile }, { data: propertyOwner }, { data: personOwner }] = await Promise.all([
+  const [{ data: actorProfile }, { data: propertyContext }, { data: personOwner }, { data: leadSnapshot }] = await Promise.all([
     supabase.from('profiles').select('role').eq('id', actor).maybeSingle(),
     negotiation.property_id
-      ? supabase.from('properties').select('owner_user_id').eq('id', negotiation.property_id).maybeSingle()
+      ? supabase
+          .from('properties')
+          .select('owner_user_id, property_category_id, business_line_id')
+          .eq('id', negotiation.property_id)
+          .maybeSingle()
       : Promise.resolve({ data: null, error: null } as any),
     negotiation.person_id
       ? supabase.from('people').select('owner_profile_id').eq('id', negotiation.person_id).maybeSingle()
       : Promise.resolve({ data: null, error: null } as any),
+    (negotiation as any).lead_id
+      ? supabase
+          .from('leads')
+          .select('id, lead_type_id, lead_interest_id, lead_source_id')
+          .eq('id', (negotiation as any).lead_id)
+          .maybeSingle()
+      : Promise.resolve({ data: null, error: null } as any),
   ])
 
   const isManager = actorProfile?.role === 'admin' || actorProfile?.role === 'gestor'
-  const propertyOwnerUserId = propertyOwner?.owner_user_id ?? null
+  const propertyOwnerUserId = propertyContext?.owner_user_id ?? null
+  const propertyCategoryId = propertyContext?.property_category_id ?? null
+  const propertyBusinessLineId = propertyContext?.business_line_id ?? null
+  const leadId = leadSnapshot?.id ?? ((negotiation as any).lead_id ?? null)
+  const leadTypeId = leadSnapshot?.lead_type_id ?? null
+  const leadInterestId = leadSnapshot?.lead_interest_id ?? null
+  const leadSourceId = leadSnapshot?.lead_source_id ?? null
   const isPropertyOwner = propertyOwnerUserId === actor
   const isNegotiationCreator = (negotiation as any)?.created_by_profile_id === actor
   const isPersonOwner = personOwner?.owner_profile_id === actor
@@ -2953,6 +2990,12 @@ export async function saveProposalDraftBundle(input: SaveProposalDraftBundleInpu
       negotiation_id: input.negotiationId,
       property_id: (negotiation as any).property_id ?? null,
       person_id: (negotiation as any).person_id ?? null,
+      lead_id: leadId,
+      lead_type_id: leadTypeId,
+      lead_interest_id: leadInterestId,
+      lead_source_id: leadSourceId,
+      property_category_id: propertyCategoryId,
+      business_line_id: propertyBusinessLineId,
       status: 'draft',
       broker_seller_profile_id: propertyOwnerUserId,
       broker_buyer_profile_id: actor,
@@ -3015,6 +3058,12 @@ export async function saveProposalDraftBundle(input: SaveProposalDraftBundleInpu
     const updatePayload: Record<string, unknown> = {
       broker_seller_profile_id: existingProposal.broker_seller_profile_id ?? propertyOwnerUserId,
       broker_buyer_profile_id: existingProposal.broker_buyer_profile_id ?? actor,
+      lead_id: leadId ?? existingProposal.lead_id ?? null,
+      lead_type_id: leadTypeId ?? existingProposal.lead_type_id ?? null,
+      lead_interest_id: leadInterestId ?? existingProposal.lead_interest_id ?? null,
+      lead_source_id: leadSourceId ?? existingProposal.lead_source_id ?? null,
+      property_category_id: propertyCategoryId ?? existingProposal.property_category_id ?? null,
+      business_line_id: propertyBusinessLineId ?? existingProposal.business_line_id ?? null,
       title,
       description,
       commission_percent: commissionPercent,
@@ -3081,21 +3130,35 @@ export async function saveProposalDraftBundle(input: SaveProposalDraftBundleInpu
     return { success: false as const, error: deletePaymentsErr.message || 'Erro ao limpar pagamentos.' }
   }
 
+  const proposalMethodIdByCode = new Map<string, string>()
+  const proposalMethodMapRes = await supabase.from('proposal_payment_methods').select('id, code')
+  if (!proposalMethodMapRes.error) {
+    for (const row of (proposalMethodMapRes.data ?? []) as Array<{ id: string; code: string }>) {
+      const code = String(row.code || '').trim().toLowerCase()
+      if (!code || !row.id) continue
+      proposalMethodIdByCode.set(code, row.id)
+    }
+  }
+
   const paymentsInput = Array.isArray(input.payments) ? input.payments : []
-  const rowsToInsert = paymentsInput.map((payment) => ({
-    proposal_id: proposalId,
-    method: String(payment.method || '').trim(),
-    amount: Number.isFinite(Number(payment.amount)) ? Number(payment.amount) : 0,
-    due_date: payment.due_date ?? null,
-    details: payment.details ?? null,
-  }))
+  const rowsToInsert = paymentsInput.map((payment) => {
+    const normalizedMethodCode = normalizeProposalPaymentMethodCode(payment.method)
+    return {
+      proposal_id: proposalId,
+      method: String(payment.method || '').trim(),
+      proposal_payment_method_id: proposalMethodIdByCode.get(normalizedMethodCode) ?? null,
+      amount: Number.isFinite(Number(payment.amount)) ? Number(payment.amount) : 0,
+      due_date: payment.due_date ?? null,
+      details: payment.details ?? null,
+    }
+  })
 
   let createdPayments: Array<{ id: string; method: string }> = []
   if (rowsToInsert.length > 0) {
     const { data: insertedPayments, error: insertPaymentsErr } = await supabase
       .from('property_proposal_payments')
       .insert(rowsToInsert)
-      .select('id, method')
+      .select('id, method, proposal_payment_method_id')
 
     if (insertPaymentsErr) {
       return { success: false as const, error: insertPaymentsErr.message || 'Erro ao inserir pagamentos.' }
@@ -3351,7 +3414,18 @@ export async function transitionProposalStatus(input: ProposalTransitionInput) {
       return { success: false as const, error: approveErr.message || 'Erro ao aprovar proposta.' }
     }
 
-    // TODO: gerar PDF da proposta aprovada.
+    const receivableSync = await ensureReceivablesForProposal({
+      proposalId: proposal.id,
+      actorUserId: actor,
+    })
+
+    if (!receivableSync.ok) {
+      return {
+        success: false as const,
+        error: `Proposta aprovada, mas falhou ao gerar contas a receber: ${receivableSync.error}`,
+      }
+    }
+
     return { success: true as const }
   }
 
