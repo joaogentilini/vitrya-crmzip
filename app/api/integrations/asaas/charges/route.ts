@@ -15,7 +15,7 @@ export const runtime = 'nodejs'
 
 type ChargePostBody = {
   receivable_id?: string
-  method?: 'boleto' | 'pix' | 'boleto_pix'
+  method?: 'boleto' | 'pix'
   customer?: {
     name?: string
     email?: string
@@ -237,14 +237,14 @@ export async function POST(request: Request) {
 
   const body = (await request.json().catch(() => null)) as ChargePostBody | null
   const receivableId = String(body?.receivable_id || '').trim()
-  const method = String(body?.method || 'boleto_pix').trim()
+  const method = String(body?.method || 'boleto').trim()
   const normalizedMethod = method.toLowerCase()
 
   if (!receivableId) {
     return NextResponse.json({ ok: false, error: 'receivable_id é obrigatório.' }, { status: 400 })
   }
-  if (!['boleto', 'pix', 'boleto_pix'].includes(normalizedMethod)) {
-    return NextResponse.json({ ok: false, error: 'method inválido. Use boleto, pix ou boleto_pix.' }, { status: 400 })
+  if (!['boleto', 'pix'].includes(normalizedMethod)) {
+    return NextResponse.json({ ok: false, error: 'method inválido. Use boleto ou pix.' }, { status: 400 })
   }
 
   const admin = createAdminClient()
@@ -312,7 +312,7 @@ export async function POST(request: Request) {
     description: receivable.title || `Recebível ${receivable.id.slice(0, 8)}`,
     externalReference: receivable.id,
     walletId: account.asaas_wallet_id,
-    billingType: normalizedMethod === 'pix' ? 'PIX' : normalizedMethod === 'boleto' ? 'BOLETO' : null,
+    billingType: normalizedMethod === 'pix' ? 'PIX' : 'BOLETO',
   })
 
   if (!chargeCreateRes.ok) {
