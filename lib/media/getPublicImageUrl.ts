@@ -4,6 +4,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 
 const BUCKET = "property-media";
 const DEFAULT_TTL_SECONDS = 60 * 30;
+const SIGN_BATCH_SIZE = 100;
 
 function isHttpUrl(value: string) {
   return /^https?:\/\//i.test(value);
@@ -124,21 +125,40 @@ export async function getSignedImageUrlMap(
   if (storagePaths.length === 0) return output;
 
   const supabase = createAdminClient();
-  const { data, error } = await supabase.storage
-    .from(BUCKET)
-    .createSignedUrls(storagePaths, ttlSeconds);
+  const signedByPath = new Map<string, string>();
 
-  if (error) {
-    return output;
+  for (let offset = 0; offset < storagePaths.length; offset += SIGN_BATCH_SIZE) {
+    const chunk = storagePaths.slice(offset, offset + SIGN_BATCH_SIZE);
+    if (chunk.length === 0) continue;
+
+    const { data, error } = await supabase.storage
+      .from(BUCKET)
+      .createSignedUrls(chunk, ttlSeconds);
+
+    if (error) {
+      // Fallback item-a-item: evita perder todo o lote por causa de um path inválido.
+      for (const path of chunk) {
+        const { data: oneData, error: oneError } = await supabase.storage
+          .from(BUCKET)
+          .createSignedUrl(path, ttlSeconds);
+        if (oneError) continue;
+        const oneSignedUrl = normalizePath(oneData?.signedUrl);
+        if (!oneSignedUrl) continue;
+        signedByPath.set(path, oneSignedUrl);
+      }
+      continue;
+    }
+
+    for (const row of data || []) {
+      const storagePath = sanitizeStoragePath((row as any)?.path);
+      const signedUrl = normalizePath((row as any)?.signedUrl);
+      if (!storagePath || !signedUrl) continue;
+      signedByPath.set(storagePath, signedUrl);
+    }
   }
 
-  for (const row of data || []) {
-    const storagePath = sanitizeStoragePath((row as any)?.path);
-    const signedUrl = normalizePath((row as any)?.signedUrl);
-    if (!storagePath || !signedUrl) continue;
-
+  for (const [storagePath, signedUrl] of signedByPath.entries()) {
     output.set(storagePath, signedUrl);
-
     const originalKeys = originalKeysByStoragePath.get(storagePath) || [];
     for (const originalKey of originalKeys) {
       output.set(originalKey, signedUrl);
