@@ -2684,6 +2684,7 @@ export type PropertyDealProposalOption = {
   id: string
   negotiation_id: string | null
   lead_id: string | null
+  person_id: string | null
   title: string | null
   status: string | null
   updated_at: string | null
@@ -2691,7 +2692,7 @@ export type PropertyDealProposalOption = {
   total_value: number | null
 }
 
-export type PropertyConfirmedDealRow = {
+export type PropertyDealRow = {
   id: string
   property_id: string
   negotiation_id: string | null
@@ -2705,9 +2706,33 @@ export type PropertyConfirmedDealRow = {
   created_at: string | null
 }
 
+export type PropertyConfirmedDealRow = PropertyDealRow
+
+export type PropertyPersonOption = {
+  id: string
+  full_name: string | null
+  email: string | null
+  phone_e164: string | null
+}
+
+export type PropertyContractInProgressRow = {
+  document_instance_id: string
+  template_code: string | null
+  status: string | null
+  created_at: string | null
+  deal_id: string | null
+  deal_status: 'draft' | 'confirmed' | 'cancelled' | null
+  gross_value: number | null
+}
+
 export async function getPropertyDealCloseContext(propertyId: string): Promise<{
   proposals: PropertyDealProposalOption[]
-  latestConfirmedDeal: PropertyConfirmedDealRow | null
+  latestConfirmedDeal: PropertyDealRow | null
+  buyerOptions: PropertyPersonOption[]
+  sellerOptions: PropertyPersonOption[]
+  defaultBuyerPersonId: string | null
+  defaultSellerPersonId: string | null
+  contractInProgress: PropertyContractInProgressRow | null
 }> {
   await requireActiveUser()
 
@@ -2715,10 +2740,16 @@ export async function getPropertyDealCloseContext(propertyId: string): Promise<{
 
   const supabase = await createClient()
 
-  const [{ data: proposalRows, error: proposalErr }, { data: latestConfirmedDeal, error: dealErr }] = await Promise.all([
+  const [
+    { data: proposalRows, error: proposalErr },
+    { data: latestConfirmedDeal, error: dealErr },
+    { data: propertyRow, error: propertyErr },
+    { data: negotiationRows, error: negotiationErr },
+    { data: contractRows, error: contractErr },
+  ] = await Promise.all([
     supabase
       .from('property_proposals')
-      .select('id, negotiation_id, lead_id, title, status, updated_at, created_at')
+      .select('id, negotiation_id, lead_id, person_id, title, status, updated_at, created_at')
       .eq('property_id', propertyId)
       .order('updated_at', { ascending: false })
       .order('created_at', { ascending: false }),
@@ -2731,15 +2762,27 @@ export async function getPropertyDealCloseContext(propertyId: string): Promise<{
       .order('created_at', { ascending: false })
       .limit(1)
       .maybeSingle(),
+    supabase.from('properties').select('id, owner_client_id').eq('id', propertyId).maybeSingle(),
+    supabase.from('property_negotiations').select('id, person_id').eq('property_id', propertyId),
+    supabase
+      .from('document_instances')
+      .select('id, template_code, status, created_at, entity_type, entity_id')
+      .eq('property_id', propertyId)
+      .order('created_at', { ascending: false })
+      .limit(80),
   ])
 
   if (proposalErr) throw new Error(proposalErr.message || 'Erro ao carregar propostas para fechamento.')
   if (dealErr) throw new Error(dealErr.message || 'Erro ao carregar deal confirmado.')
+  if (propertyErr) throw new Error(propertyErr.message || 'Erro ao carregar proprietario do imovel.')
+  if (negotiationErr) throw new Error(negotiationErr.message || 'Erro ao carregar negociacoes para fechamento.')
+  if (contractErr) throw new Error(contractErr.message || 'Erro ao carregar contratos vinculados ao imovel.')
 
   const proposals: PropertyDealProposalOption[] = ((proposalRows ?? []) as Array<{
     id: string
     negotiation_id: string | null
     lead_id: string | null
+    person_id: string | null
     title: string | null
     status: string | null
     updated_at: string | null
@@ -2770,9 +2813,98 @@ export async function getPropertyDealCloseContext(propertyId: string): Promise<{
     }
   }
 
+  const propertyOwnerPersonId = String((propertyRow as { owner_client_id?: string | null } | null)?.owner_client_id || '').trim() || null
+
+  const negotiationPeople = (negotiationRows ?? []) as Array<{ id: string; person_id: string | null }>
+  const personIds = new Set<string>()
+  if (propertyOwnerPersonId) personIds.add(propertyOwnerPersonId)
+  for (const row of proposals) {
+    if (row.person_id) personIds.add(row.person_id)
+  }
+  for (const row of negotiationPeople) {
+    if (row.person_id) personIds.add(row.person_id)
+  }
+
+  let personRows: Array<{ id: string; full_name: string | null; email: string | null; phone_e164: string | null }> = []
+  if (personIds.size > 0) {
+    const { data, error } = await supabase
+      .from('people')
+      .select('id, full_name, email, phone_e164')
+      .in('id', Array.from(personIds))
+      .order('full_name', { ascending: true })
+
+    if (!error) {
+      personRows = (data ?? []) as Array<{ id: string; full_name: string | null; email: string | null; phone_e164: string | null }>
+    }
+  }
+
+  const personOptions: PropertyPersonOption[] = personRows.map((row) => ({
+    id: row.id,
+    full_name: row.full_name ?? null,
+    email: row.email ?? null,
+    phone_e164: row.phone_e164 ?? null,
+  }))
+
+  const defaultBuyerPersonId =
+    proposals.find((row) => !!row.person_id)?.person_id ??
+    negotiationPeople.find((row) => !!row.person_id)?.person_id ??
+    null
+  const defaultSellerPersonId = propertyOwnerPersonId
+
+  const contractCandidates = ((contractRows ?? []) as Array<{
+    id: string
+    template_code: string | null
+    status: string | null
+    created_at: string | null
+    entity_type: string | null
+    entity_id: string | null
+  }>).filter((row) => {
+    const templateCode = String(row.template_code || '').toUpperCase()
+    if (!templateCode) return false
+    if (templateCode === 'CONTRATO_CV_V1') return true
+    if (!templateCode.includes('CONTRATO')) return false
+    return templateCode.includes('CV') || templateCode.includes('COMPRA') || templateCode.includes('VENDA')
+  })
+
+  const latestContract = contractCandidates.find((row) => {
+    const status = String(row.status || '').toLowerCase()
+    return status === 'draft' || status === 'sent' || status === 'viewed'
+  })
+
+  let contractInProgress: PropertyContractInProgressRow | null = null
+  if (latestContract) {
+    let relatedDeal: { id: string; status: 'draft' | 'confirmed' | 'cancelled'; gross_value: number | null } | null = null
+    if (String(latestContract.entity_type || '').toLowerCase() === 'deal' && latestContract.entity_id) {
+      const { data: dealRow, error: dealLookupError } = await supabase
+        .from('deals')
+        .select('id, status, gross_value')
+        .eq('id', latestContract.entity_id)
+        .maybeSingle()
+
+      if (!dealLookupError && dealRow) {
+        relatedDeal = dealRow as { id: string; status: 'draft' | 'confirmed' | 'cancelled'; gross_value: number | null }
+      }
+    }
+
+    contractInProgress = {
+      document_instance_id: latestContract.id,
+      template_code: latestContract.template_code ?? null,
+      status: latestContract.status ?? null,
+      created_at: latestContract.created_at ?? null,
+      deal_id: relatedDeal?.id ?? null,
+      deal_status: relatedDeal?.status ?? null,
+      gross_value: relatedDeal?.gross_value ?? null,
+    }
+  }
+
   return {
     proposals,
-    latestConfirmedDeal: (latestConfirmedDeal as PropertyConfirmedDealRow | null) ?? null,
+    latestConfirmedDeal: (latestConfirmedDeal as PropertyDealRow | null) ?? null,
+    buyerOptions: personOptions,
+    sellerOptions: personOptions,
+    defaultBuyerPersonId,
+    defaultSellerPersonId,
+    contractInProgress,
   }
 }
 
@@ -2910,6 +3042,519 @@ export async function createConfirmedDeal(input: {
     success: true,
     deal: createdDeal as PropertyConfirmedDealRow,
   }
+}
+
+type SaleContractTemplateRow = {
+  id: string
+  code: string | null
+  title: string | null
+  provider: string | null
+}
+
+async function resolveSaleContractTemplate(
+  supabase: Awaited<ReturnType<typeof createClient>>
+): Promise<SaleContractTemplateRow | null> {
+  const { data, error } = await supabase
+    .from('document_templates')
+    .select('id, code, title, provider')
+    .eq('is_active', true)
+    .order('updated_at', { ascending: false })
+
+  if (error || !data || data.length === 0) return null
+
+  const rows = data as SaleContractTemplateRow[]
+
+  const byExactCode = rows.find((row) => String(row.code || '').toUpperCase() === 'CONTRATO_CV_V1')
+  if (byExactCode) return byExactCode
+
+  const bySlugLike = rows.find((row) => {
+    const code = String(row.code || '').toLowerCase()
+    return code.includes('contrato_compra_venda')
+  })
+  if (bySlugLike) return bySlugLike
+
+  const byCodeHeuristic = rows.find((row) => {
+    const code = String(row.code || '').toUpperCase()
+    if (!code.includes('CONTRATO')) return false
+    return code.includes('CV') || code.includes('COMPRA') || code.includes('VENDA')
+  })
+  if (byCodeHeuristic) return byCodeHeuristic
+
+  const byTitleHeuristic = rows.find((row) => {
+    const title = String(row.title || '').toLowerCase()
+    return title.includes('contrato') && title.includes('compra') && title.includes('venda')
+  })
+  if (byTitleHeuristic) return byTitleHeuristic
+
+  return null
+}
+
+export async function generateSaleContract(input: {
+  propertyId: string
+  grossValue: number
+  buyerPersonId: string
+  sellerPersonId: string
+  proposalId?: string | null
+  negotiationId?: string | null
+  leadId?: string | null
+  notes?: string | null
+}): Promise<{
+  success: boolean
+  error?: string
+  deal?: PropertyDealRow
+  contract?: PropertyContractInProgressRow
+}> {
+  const profile = await requireActiveUser()
+  const supabase = await createClient()
+
+  const actorId = profile.id
+  const isManager = profile.role === 'admin' || profile.role === 'gestor'
+  const isBroker = profile.role === 'corretor'
+
+  const propertyId = String(input.propertyId || '').trim()
+  if (!propertyId) return { success: false, error: 'Imovel invalido.' }
+
+  const grossValue = Number(input.grossValue)
+  if (!Number.isFinite(grossValue) || grossValue <= 0) {
+    return { success: false, error: 'Informe o valor bruto do negocio.' }
+  }
+
+  const buyerPersonIdInput = String(input.buyerPersonId || '').trim()
+  const sellerPersonIdInput = String(input.sellerPersonId || '').trim()
+  if (!buyerPersonIdInput) return { success: false, error: 'Selecione o comprador.' }
+  if (!sellerPersonIdInput) return { success: false, error: 'Selecione o vendedor/proprietario.' }
+
+  const { data: property, error: propertyErr } = await supabase
+    .from('properties')
+    .select('id, owner_user_id, owner_client_id')
+    .eq('id', propertyId)
+    .maybeSingle()
+
+  if (propertyErr) return { success: false, error: propertyErr.message || 'Erro ao validar imovel.' }
+  if (!property) return { success: false, error: 'Imovel nao encontrado.' }
+  if (!isManager && !isBroker && property.owner_user_id !== actorId) {
+    return { success: false, error: 'Sem permissao para gerar contrato neste imovel.' }
+  }
+
+  let resolvedNegotiationId = String(input.negotiationId || '').trim() || null
+  let resolvedProposalId = String(input.proposalId || '').trim() || null
+  let resolvedLeadId = String(input.leadId || '').trim() || null
+  let buyerPersonId = buyerPersonIdInput
+  const sellerPersonId = sellerPersonIdInput
+
+  if (resolvedNegotiationId) {
+    const { data: negotiation, error: negotiationErr } = await supabase
+      .from('property_negotiations')
+      .select('id, property_id, lead_id, person_id')
+      .eq('id', resolvedNegotiationId)
+      .maybeSingle()
+
+    if (negotiationErr) {
+      return { success: false, error: negotiationErr.message || 'Erro ao validar negociacao.' }
+    }
+    if (!negotiation || negotiation.property_id !== propertyId) {
+      return { success: false, error: 'Negociacao invalida para este imovel.' }
+    }
+
+    if (!resolvedLeadId) {
+      resolvedLeadId = String(negotiation.lead_id || '').trim() || null
+    }
+    if (!buyerPersonId) {
+      buyerPersonId = String(negotiation.person_id || '').trim() || buyerPersonId
+    }
+
+    const { data: existingConfirmed, error: existingErr } = await supabase
+      .from('deals')
+      .select('id')
+      .eq('negotiation_id', resolvedNegotiationId)
+      .eq('status', 'confirmed')
+      .maybeSingle()
+
+    if (existingErr) return { success: false, error: existingErr.message || 'Erro ao validar deal confirmado.' }
+    if (existingConfirmed?.id) {
+      return { success: false, error: 'Esta negociacao ja possui deal confirmado.' }
+    }
+  }
+
+  if (resolvedProposalId) {
+    const { data: proposal, error: proposalErr } = await supabase
+      .from('property_proposals')
+      .select('id, property_id, negotiation_id, lead_id, person_id')
+      .eq('id', resolvedProposalId)
+      .maybeSingle()
+
+    if (proposalErr) return { success: false, error: proposalErr.message || 'Erro ao validar proposta.' }
+    if (!proposal || proposal.property_id !== propertyId) {
+      return { success: false, error: 'Proposta invalida para este imovel.' }
+    }
+    if (resolvedNegotiationId && proposal.negotiation_id && proposal.negotiation_id !== resolvedNegotiationId) {
+      return { success: false, error: 'A proposta nao pertence a negociacao selecionada.' }
+    }
+
+    if (!resolvedNegotiationId) {
+      resolvedNegotiationId = String(proposal.negotiation_id || '').trim() || null
+    }
+    if (!resolvedLeadId) {
+      resolvedLeadId = String(proposal.lead_id || '').trim() || null
+    }
+    if (!buyerPersonId) {
+      buyerPersonId = String(proposal.person_id || '').trim() || buyerPersonId
+    }
+  }
+
+  const uniquePeopleIds = Array.from(new Set([buyerPersonId, sellerPersonId].filter(Boolean)))
+  const { data: peopleRows, error: peopleErr } = await supabase
+    .from('people')
+    .select('id, full_name, email, phone_e164')
+    .in('id', uniquePeopleIds)
+
+  if (peopleErr) return { success: false, error: peopleErr.message || 'Erro ao validar assinantes.' }
+
+  const peopleMap = new Map(
+    ((peopleRows ?? []) as Array<{ id: string; full_name: string | null; email: string | null; phone_e164: string | null }>).map((row) => [
+      row.id,
+      row,
+    ])
+  )
+
+  const buyerPerson = peopleMap.get(buyerPersonId)
+  const sellerPerson = peopleMap.get(sellerPersonId)
+
+  if (!buyerPerson) return { success: false, error: 'Comprador nao encontrado na base.' }
+  if (!sellerPerson) return { success: false, error: 'Vendedor/proprietario nao encontrado na base.' }
+  if (!buyerPerson.email) return { success: false, error: 'Comprador sem e-mail. Atualize o cadastro da pessoa.' }
+  if (!sellerPerson.email) return { success: false, error: 'Vendedor/proprietario sem e-mail. Atualize o cadastro da pessoa.' }
+
+  const notes = String(input.notes || '').trim() || null
+
+  const template = await resolveSaleContractTemplate(supabase)
+  if (!template) {
+    return { success: false, error: 'Template do Contrato de Compra e Venda nao encontrado em Document Templates.' }
+  }
+
+  let existingDraftDeal: PropertyDealRow | null = null
+  if (resolvedNegotiationId) {
+    const { data: rows, error } = await supabase
+      .from('deals')
+      .select('id, property_id, negotiation_id, proposal_id, lead_id, operation_type, status, closed_at, gross_value, notes, created_at')
+      .eq('property_id', propertyId)
+      .eq('negotiation_id', resolvedNegotiationId)
+      .eq('status', 'draft')
+      .order('updated_at', { ascending: false })
+      .order('created_at', { ascending: false })
+      .limit(1)
+
+    if (error) return { success: false, error: error.message || 'Erro ao buscar deal draft.' }
+    existingDraftDeal = ((rows ?? []) as PropertyDealRow[])[0] ?? null
+  } else if (resolvedProposalId) {
+    const { data: rows, error } = await supabase
+      .from('deals')
+      .select('id, property_id, negotiation_id, proposal_id, lead_id, operation_type, status, closed_at, gross_value, notes, created_at')
+      .eq('property_id', propertyId)
+      .eq('proposal_id', resolvedProposalId)
+      .eq('status', 'draft')
+      .order('updated_at', { ascending: false })
+      .order('created_at', { ascending: false })
+      .limit(1)
+
+    if (error) return { success: false, error: error.message || 'Erro ao buscar deal draft.' }
+    existingDraftDeal = ((rows ?? []) as PropertyDealRow[])[0] ?? null
+  }
+
+  const draftPayload = {
+    owner_user_id: actorId,
+    property_id: propertyId,
+    lead_id: resolvedLeadId,
+    negotiation_id: resolvedNegotiationId,
+    proposal_id: resolvedProposalId,
+    operation_type: 'sale' as DealOperationType,
+    status: 'draft' as const,
+    closed_at: null,
+    gross_value: grossValue,
+    notes,
+  }
+
+  let draftDeal: PropertyDealRow | null = null
+  if (existingDraftDeal) {
+    const { data, error } = await supabase
+      .from('deals')
+      .update(draftPayload)
+      .eq('id', existingDraftDeal.id)
+      .select('id, property_id, negotiation_id, proposal_id, lead_id, operation_type, status, closed_at, gross_value, notes, created_at')
+      .maybeSingle()
+
+    if (error || !data) {
+      return { success: false, error: error?.message || 'Nao foi possivel atualizar o deal draft.' }
+    }
+    draftDeal = data as PropertyDealRow
+  } else {
+    const { data, error } = await supabase
+      .from('deals')
+      .insert({
+        ...draftPayload,
+        created_by: actorId,
+      })
+      .select('id, property_id, negotiation_id, proposal_id, lead_id, operation_type, status, closed_at, gross_value, notes, created_at')
+      .single()
+
+    if (error || !data) {
+      return { success: false, error: error?.message || 'Nao foi possivel criar o deal draft.' }
+    }
+    draftDeal = data as PropertyDealRow
+  }
+
+  if (!draftDeal) {
+    return { success: false, error: 'Nao foi possivel preparar o deal para gerar contrato.' }
+  }
+
+  const { data: documentInstance, error: documentErr } = await supabase
+    .from('document_instances')
+    .insert({
+      template_id: template.id,
+      template_code: template.code,
+      status: 'draft',
+      provider: template.provider || 'zapsign',
+      entity_type: 'deal',
+      entity_id: draftDeal.id,
+      property_id: propertyId,
+      owner_person_id: sellerPersonId,
+      primary_person_id: buyerPersonId,
+      negotiation_id: resolvedNegotiationId,
+      authorization_snapshot: null,
+      audit_json: {
+        flow: 'sale_contract_generation',
+        metadata: {
+          deal_id: draftDeal.id,
+          property_id: propertyId,
+          proposal_id: resolvedProposalId,
+          negotiation_id: resolvedNegotiationId,
+          buyer_person_id: buyerPersonId,
+          seller_person_id: sellerPersonId,
+          gross_value: grossValue,
+        },
+      },
+      created_by: actorId,
+    })
+    .select('id, template_code, status, created_at')
+    .single()
+
+  if (documentErr || !documentInstance) {
+    return { success: false, error: documentErr?.message || 'Nao foi possivel criar a instancia do contrato.' }
+  }
+
+  const signerRows: Array<{
+    document_id: string
+    role: string
+    name: string
+    email: string
+    phone: string | null
+    status: 'pending'
+  }> = [
+    {
+      document_id: documentInstance.id,
+      role: 'buyer',
+      name: String(buyerPerson.full_name || buyerPerson.email || 'Comprador'),
+      email: String(buyerPerson.email).toLowerCase(),
+      phone: buyerPerson.phone_e164 || null,
+      status: 'pending',
+    },
+    {
+      document_id: documentInstance.id,
+      role: 'seller',
+      name: String(sellerPerson.full_name || sellerPerson.email || 'Vendedor'),
+      email: String(sellerPerson.email).toLowerCase(),
+      phone: sellerPerson.phone_e164 || null,
+      status: 'pending',
+    },
+  ]
+
+  const { data: companySettings } = await supabase
+    .from('company_settings')
+    .select('trade_name, legal_name, email, phone')
+    .limit(1)
+    .maybeSingle()
+
+  const companyEmail = String((companySettings as { email?: string | null } | null)?.email || profile.email || '').trim()
+  if (companyEmail) {
+    const emailNormalized = companyEmail.toLowerCase()
+    const alreadyIncluded = signerRows.some((row) => row.email === emailNormalized)
+    if (!alreadyIncluded) {
+      const companyName =
+        String((companySettings as { trade_name?: string | null } | null)?.trade_name || '').trim() ||
+        String((companySettings as { legal_name?: string | null } | null)?.legal_name || '').trim() ||
+        'Vitrya Imoveis'
+      const companyPhone = String((companySettings as { phone?: string | null } | null)?.phone || '').trim() || null
+      signerRows.push({
+        document_id: documentInstance.id,
+        role: 'vitrya',
+        name: companyName,
+        email: emailNormalized,
+        phone: companyPhone,
+        status: 'pending',
+      })
+    }
+  }
+
+  const { error: signerErr } = await supabase.from('document_signers').insert(signerRows)
+  if (signerErr) {
+    return { success: false, error: signerErr.message || 'Nao foi possivel criar assinantes do contrato.' }
+  }
+
+  const linkTargets: Array<{ entity_type: string; entity_id: string }> = [
+    { entity_type: 'property', entity_id: propertyId },
+    { entity_type: 'person', entity_id: buyerPersonId },
+    { entity_type: 'person', entity_id: sellerPersonId },
+    { entity_type: 'deal', entity_id: draftDeal.id },
+  ]
+
+  const uniqueLinks = new Map<string, { entity_type: string; entity_id: string }>()
+  for (const link of linkTargets) {
+    if (!link.entity_id) continue
+    uniqueLinks.set(`${link.entity_type}:${link.entity_id}`, link)
+  }
+
+  for (const link of uniqueLinks.values()) {
+    try {
+      const { error: linkError } = await supabase.from('document_links').insert({
+        document_id: documentInstance.id,
+        entity_type: link.entity_type,
+        entity_id: link.entity_id,
+      })
+      if (linkError && linkError.code !== '23505') {
+        const msg = String(linkError.message || '').toLowerCase()
+        if (!msg.includes('already exists') && !msg.includes('duplicate')) {
+          // non-blocking: contrato e assinantes ja foram criados
+        }
+      }
+    } catch {
+      // non-blocking para ambientes sem schema legado
+    }
+  }
+
+  revalidatePath(`/properties/${propertyId}`)
+  revalidatePath('/properties')
+  revalidatePath(`/people/${buyerPersonId}`)
+  revalidatePath(`/people/${sellerPersonId}`)
+  revalidatePath(`/pessoas/${buyerPersonId}`)
+  revalidatePath(`/pessoas/${sellerPersonId}`)
+
+  return {
+    success: true,
+    deal: draftDeal,
+    contract: {
+      document_instance_id: documentInstance.id,
+      template_code: documentInstance.template_code ?? null,
+      status: documentInstance.status ?? null,
+      created_at: documentInstance.created_at ?? null,
+      deal_id: draftDeal.id,
+      deal_status: draftDeal.status,
+      gross_value: draftDeal.gross_value,
+    },
+  }
+}
+
+export async function markAsSold(input: {
+  propertyId: string
+  negotiationId?: string | null
+}): Promise<{ success: boolean; error?: string; deal?: PropertyDealRow }> {
+  const profile = await requireActiveUser()
+  const supabase = await createClient()
+
+  const actorId = profile.id
+  const isManager = profile.role === 'admin' || profile.role === 'gestor'
+
+  const propertyId = String(input.propertyId || '').trim()
+  if (!propertyId) return { success: false, error: 'Imovel invalido.' }
+
+  const { data: property, error: propertyErr } = await supabase
+    .from('properties')
+    .select('id, owner_user_id')
+    .eq('id', propertyId)
+    .maybeSingle()
+
+  if (propertyErr) return { success: false, error: propertyErr.message || 'Erro ao validar imovel.' }
+  if (!property) return { success: false, error: 'Imovel nao encontrado.' }
+  if (!isManager && property.owner_user_id !== actorId) {
+    return { success: false, error: 'Sem permissao para confirmar vendido neste imovel.' }
+  }
+
+  const negotiationId = String(input.negotiationId || '').trim() || null
+  if (negotiationId) {
+    const { data: negotiation, error: negotiationErr } = await supabase
+      .from('property_negotiations')
+      .select('id, property_id')
+      .eq('id', negotiationId)
+      .maybeSingle()
+
+    if (negotiationErr) return { success: false, error: negotiationErr.message || 'Erro ao validar negociacao.' }
+    if (!negotiation || negotiation.property_id !== propertyId) {
+      return { success: false, error: 'Negociacao invalida para este imovel.' }
+    }
+  }
+
+  let dealsQuery = supabase
+    .from('deals')
+    .select('id, property_id, negotiation_id, proposal_id, lead_id, operation_type, status, closed_at, gross_value, notes, created_at')
+    .eq('property_id', propertyId)
+    .order('created_at', { ascending: false })
+
+  if (negotiationId) {
+    dealsQuery = dealsQuery.eq('negotiation_id', negotiationId)
+  }
+
+  const { data: dealRows, error: dealsErr } = await dealsQuery
+  if (dealsErr) return { success: false, error: dealsErr.message || 'Erro ao carregar deals do imovel.' }
+
+  const deals = (dealRows ?? []) as PropertyDealRow[]
+  const existingConfirmed = deals.find((row) => row.status === 'confirmed') ?? null
+  const existingDraft = deals.find((row) => row.status === 'draft') ?? null
+
+  if (!existingConfirmed && !existingDraft) {
+    return { success: false, error: 'Gere o contrato antes de marcar como vendido.' }
+  }
+
+  let targetDeal = existingConfirmed ?? existingDraft
+  if (!targetDeal) {
+    return { success: false, error: 'Nao foi possivel localizar o deal para confirmar venda.' }
+  }
+
+  const hadToConfirmDeal = targetDeal.status !== 'confirmed'
+  const previousStatus = targetDeal.status
+  const previousClosedAt = targetDeal.closed_at
+
+  if (hadToConfirmDeal) {
+    const { data: updatedDeal, error: updateDealErr } = await supabase
+      .from('deals')
+      .update({
+        status: 'confirmed',
+        closed_at: new Date().toISOString(),
+      })
+      .eq('id', targetDeal.id)
+      .select('id, property_id, negotiation_id, proposal_id, lead_id, operation_type, status, closed_at, gross_value, notes, created_at')
+      .single()
+
+    if (updateDealErr || !updatedDeal) {
+      if (updateDealErr?.code === '23505') {
+        return { success: false, error: 'Ja existe um deal confirmado para esta negociacao.' }
+      }
+      return { success: false, error: updateDealErr?.message || 'Nao foi possivel confirmar o deal.' }
+    }
+
+    targetDeal = updatedDeal as PropertyDealRow
+  }
+
+  const soldResult = await updatePropertyDealStatus(propertyId, 'sold')
+  if (!soldResult.success) {
+    if (hadToConfirmDeal) {
+      await supabase.from('deals').update({ status: previousStatus, closed_at: previousClosedAt }).eq('id', targetDeal.id)
+    }
+    return { success: false, error: soldResult.error || 'Nao foi possivel marcar o imovel como vendido.' }
+  }
+
+  revalidatePath(`/properties/${propertyId}`)
+  revalidatePath('/properties')
+
+  return { success: true, deal: targetDeal }
 }
 
 type ProposalRow = {
