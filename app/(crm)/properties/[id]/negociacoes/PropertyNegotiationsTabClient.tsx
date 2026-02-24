@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import Link from 'next/link'
 import { supabase } from '@/lib/supabaseClient'
 import AdminDeleteActionButton from '@/components/admin/AdminDeleteActionButton'
+import { useToast } from '@/components/ui/Toast'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
 import { Badge } from '@/components/ui/Badge'
@@ -13,9 +14,14 @@ import {
   getPropertyNegotiations,
   searchPeople,
   getProposalBundleByNegotiation,
+  getPropertyDealCloseContext,
   saveProposalDraftBundle,
   transitionProposalStatus,
+  createConfirmedDeal,
   deletePropertyNegotiationAction,
+  type DealOperationType,
+  type PropertyDealProposalOption,
+  type PropertyConfirmedDealRow,
   type PersonSearchRow,
 } from '../actions'
 
@@ -42,6 +48,12 @@ const PAYMENT_LABELS: Record<PaymentKey, string> = {
   consortium: 'Consorcio',
   trade: 'Permuta',
   other: 'Outro',
+}
+
+const DEAL_OPERATION_LABELS: Record<DealOperationType, string> = {
+  sale: 'Venda',
+  development: 'Incorporacao',
+  rent: 'Aluguel',
 }
 
 type DraftProposal = {
@@ -205,13 +217,23 @@ export default function PropertyNegotiationsTabClient({
   initialProposalId,
   createCommissionAction,
 }: Props) {
+  const { success: showSuccess, error: showError } = useToast()
   const [property, setProperty] = useState<PropertyRow | null>(null)
   const [negotiations, setNegotiations] = useState<NegotiationRow[]>([])
   const [loading, setLoading] = useState(true)
 
   const [savingDeal, setSavingDeal] = useState(false)
+  const [closingDeal, setClosingDeal] = useState(false)
   const [creatingNegotiation, setCreatingNegotiation] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [closeDealOpen, setCloseDealOpen] = useState(false)
+  const [closeDealNegotiation, setCloseDealNegotiation] = useState<NegotiationRow | null>(null)
+  const [closeDealOperationType, setCloseDealOperationType] = useState<DealOperationType>('sale')
+  const [closeDealGrossValue, setCloseDealGrossValue] = useState<string>('')
+  const [closeDealProposalId, setCloseDealProposalId] = useState<string>('')
+  const [closeDealNotes, setCloseDealNotes] = useState<string>('')
+  const [dealProposalOptions, setDealProposalOptions] = useState<PropertyDealProposalOption[]>([])
+  const [latestConfirmedDeal, setLatestConfirmedDeal] = useState<PropertyConfirmedDealRow | null>(null)
 
   // comissão (UI)
   const [commissionGross, setCommissionGross] = useState<number>(0)
@@ -337,6 +359,70 @@ export default function PropertyNegotiationsTabClient({
     return `Proposta acima em ${formatCurrency(Math.abs(proposalTotals.diff))}.`
   }, [proposalTotals])
 
+  function inferDealOperationType(prop: PropertyRow | null, empreendimento: boolean): DealOperationType {
+    const purpose = String(prop?.purpose || '').toLowerCase()
+    if (purpose.includes('rent') || purpose.includes('loca')) return 'rent'
+    if (empreendimento) return 'development'
+    return 'sale'
+  }
+
+  function openCloseDealModal(negotiation: NegotiationRow) {
+    const operationType = inferDealOperationType(property, isEmpreendimento)
+    const defaultGrossValue = propertyValue ?? negotiation.proposal?.total_value ?? null
+
+    setCloseDealNegotiation(negotiation)
+    setCloseDealOperationType(operationType)
+    setCloseDealGrossValue(defaultGrossValue !== null && defaultGrossValue !== undefined ? String(defaultGrossValue) : '')
+    setCloseDealProposalId(negotiation.proposal?.id ?? '')
+    setCloseDealNotes('')
+    setCloseDealOpen(true)
+  }
+
+  function closeCloseDealModal() {
+    setCloseDealOpen(false)
+    setCloseDealNegotiation(null)
+    setCloseDealProposalId('')
+    setCloseDealNotes('')
+  }
+
+  async function handleCloseDealSubmit() {
+    if (!property || !closeDealNegotiation) return
+
+    setClosingDeal(true)
+    setError(null)
+
+    try {
+      const grossValue = closeDealGrossValue.trim() === '' ? null : Number(closeDealGrossValue)
+      if (grossValue !== null && (!Number.isFinite(grossValue) || grossValue < 0)) {
+        throw new Error('Informe um valor bruto valido.')
+      }
+
+      const result = await createConfirmedDeal({
+        propertyId: property.id,
+        operationType: closeDealOperationType,
+        grossValue,
+        proposalId: closeDealProposalId || null,
+        negotiationId: closeDealNegotiation.id,
+        leadId: closeDealNegotiation.lead_id ?? null,
+        notes: closeDealNotes || null,
+      })
+
+      if (!result.success) {
+        throw new Error(result.error || 'Nao foi possivel marcar como fechado.')
+      }
+
+      showSuccess('Negocio fechado')
+      closeCloseDealModal()
+      await loadAll()
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Nao foi possivel marcar como fechado.'
+      setError(message)
+      showError(message)
+    } finally {
+      setClosingDeal(false)
+    }
+  }
+
  async function loadAll() {
   setLoading(true)
   setError(null)
@@ -381,6 +467,10 @@ export default function PropertyNegotiationsTabClient({
       // agora lista pela tabela certa
       const negs = await getPropertyNegotiations(propertyId)
       setNegotiations(negs ?? [])
+
+      const dealContext = await getPropertyDealCloseContext(propertyId)
+      setDealProposalOptions(dealContext.proposals ?? [])
+      setLatestConfirmedDeal(dealContext.latestConfirmedDeal ?? null)
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Erro ao carregar negociações.'
       setError(message)
@@ -894,6 +984,22 @@ export default function PropertyNegotiationsTabClient({
                 ) : null}
               </div>
             ) : null}
+
+            {latestConfirmedDeal ? (
+              <div className="mt-2 flex flex-wrap items-center gap-2">
+                <span className="inline-flex items-center rounded-full bg-emerald-600 px-3 py-1 text-xs font-bold text-white">
+                  Deal confirmado
+                </span>
+                <span className="text-xs text-[var(--muted-foreground)]">
+                  Fechado em {formatDateTime(latestConfirmedDeal.closed_at)}
+                </span>
+                {latestConfirmedDeal.gross_value !== null ? (
+                  <span className="text-xs font-semibold text-[var(--foreground)]">
+                    {formatCurrency(latestConfirmedDeal.gross_value)}
+                  </span>
+                ) : null}
+              </div>
+            ) : null}
           </div>
 
           <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
@@ -932,6 +1038,19 @@ export default function PropertyNegotiationsTabClient({
             >
               Vendido
             </Button>
+
+            <Button
+              variant="outline"
+              disabled={savingDeal || closingDeal || !canEditDeal || negotiations.length === 0}
+              onClick={() => {
+                const targetNegotiation = negotiations[0]
+                if (!targetNegotiation) return
+                openCloseDealModal(targetNegotiation)
+              }}
+              title={!canEditDeal ? 'Somente responsavel/admin/gestor pode fechar negocio.' : undefined}
+            >
+              Marcar como fechado
+            </Button>
           </div>
         </CardHeader>
 
@@ -945,7 +1064,7 @@ export default function PropertyNegotiationsTabClient({
             </div>
           ) : null}
 
-          <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+          <div className="grid grid-cols-1 gap-3 md:grid-cols-4">
             <div className="rounded-[var(--radius)] border border-[var(--border)] p-3">
               <div className="text-xs text-[var(--muted-foreground)]">Valor referencia</div>
               <div className="text-lg font-extrabold text-[var(--foreground)]">{formatCurrency(propertyValue)}</div>
@@ -966,6 +1085,20 @@ export default function PropertyNegotiationsTabClient({
               <div className="text-xs text-[var(--muted-foreground)]">Regra vitrine</div>
               <div className="text-sm font-semibold text-[var(--foreground)]">Vendido fica 7 dias na vitrine</div>
               <div className="mt-1 text-xs text-[var(--muted-foreground)]">Depois some automaticamente (pela VIEW pública).</div>
+            </div>
+            <div className="rounded-[var(--radius)] border border-[var(--border)] p-3">
+              <div className="text-xs text-[var(--muted-foreground)]">Deal</div>
+              <div className="text-lg font-extrabold text-[var(--foreground)]">
+                {latestConfirmedDeal ? 'Confirmed' : '-'}
+              </div>
+              <div className="mt-1 text-xs text-[var(--muted-foreground)]">
+                {latestConfirmedDeal?.closed_at ? `fechado em ${formatDate(latestConfirmedDeal.closed_at)}` : ''}
+              </div>
+              {latestConfirmedDeal && latestConfirmedDeal.gross_value !== null ? (
+                <div className="mt-1 text-xs font-semibold text-[var(--foreground)]">
+                  {formatCurrency(latestConfirmedDeal.gross_value)}
+                </div>
+              ) : null}
             </div>
           </div>
 
@@ -1033,6 +1166,21 @@ export default function PropertyNegotiationsTabClient({
                     <div className="flex items-center gap-2">
                       <Button variant="outline" onClick={() => void openProposalAndMarkAsRead(n)} disabled={!n.person_id}>
                         {n.proposal ? 'Abrir proposta' : 'Montar proposta'}
+                      </Button>
+
+                      <Button
+                        variant="outline"
+                        onClick={() => openCloseDealModal(n)}
+                        disabled={closingDeal || !canEditDeal || latestConfirmedDeal?.negotiation_id === n.id}
+                        title={
+                          latestConfirmedDeal?.negotiation_id === n.id
+                            ? 'Negocio ja fechado para esta negociacao.'
+                            : !canEditDeal
+                            ? 'Somente responsavel/admin/gestor pode fechar negocio.'
+                            : undefined
+                        }
+                      >
+                        {latestConfirmedDeal?.negotiation_id === n.id ? 'Fechado' : 'Marcar como fechado'}
                       </Button>
 
                       {userRole === 'admin' ? (
@@ -1165,6 +1313,107 @@ export default function PropertyNegotiationsTabClient({
                 </Button>
               </div>
               <p className="text-xs text-black/60">Cadastre a pessoa e volte aqui para pesquisar.</p>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {/* Modal - Marcar como fechado */}
+      {closeDealOpen && closeDealNegotiation ? (
+        <div className="fixed inset-0 z-[60] overflow-y-auto bg-black/40 p-4">
+          <div className="mx-auto my-4 w-full max-w-2xl rounded-2xl bg-white shadow-xl border border-black/10">
+            <div className="p-4 border-b border-black/10 flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <div className="text-xs text-black/60">Fechamento manual</div>
+                <div className="text-lg font-extrabold text-black/90">Marcar como fechado</div>
+                <div className="mt-1 text-xs text-black/60">
+                  Negociacao: <b>{closeDealNegotiation.id.slice(0, 12)}</b>
+                </div>
+              </div>
+              <Button variant="outline" onClick={closeCloseDealModal} disabled={closingDeal}>
+                Fechar
+              </Button>
+            </div>
+
+            <div className="p-4 space-y-4">
+              <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+                <div>
+                  <div className="text-xs text-black/60">Tipo de operacao</div>
+                  <select
+                    value={closeDealOperationType}
+                    onChange={(e) => setCloseDealOperationType(e.target.value as DealOperationType)}
+                    disabled={closingDeal}
+                    className="mt-1 w-full rounded-xl border border-black/10 bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-black/10 disabled:bg-black/5"
+                  >
+                    {(['sale', 'development', 'rent'] as DealOperationType[]).map((option) => (
+                      <option key={option} value={option}>
+                        {DEAL_OPERATION_LABELS[option]}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <div className="text-xs text-black/60">Valor bruto</div>
+                  <input
+                    type="number"
+                    step="0.01"
+                    value={closeDealGrossValue}
+                    onChange={(e) => setCloseDealGrossValue(e.target.value)}
+                    disabled={closingDeal}
+                    className="mt-1 w-full rounded-xl border border-black/10 bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-black/10 disabled:bg-black/5"
+                    placeholder="0,00"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <div className="text-xs text-black/60">Proposta (opcional)</div>
+                <select
+                  value={closeDealProposalId}
+                  onChange={(e) => setCloseDealProposalId(e.target.value)}
+                  disabled={closingDeal}
+                  className="mt-1 w-full rounded-xl border border-black/10 bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-black/10 disabled:bg-black/5"
+                >
+                  <option value="">Sem proposta vinculada</option>
+                  {dealProposalOptions.map((proposal) => {
+                    const stamp = proposal.updated_at ?? proposal.created_at
+                    return (
+                      <option key={proposal.id} value={proposal.id}>
+                        {`${proposal.title || `Proposta ${proposal.id.slice(0, 8)}`} - ${getProposalStatusLabel(
+                          proposal.status
+                        )} - ${formatCurrency(proposal.total_value)} - ${formatDateTime(stamp)}`}
+                      </option>
+                    )
+                  })}
+                </select>
+              </div>
+
+              <div>
+                <div className="text-xs text-black/60">Observacoes</div>
+                <textarea
+                  value={closeDealNotes}
+                  onChange={(e) => setCloseDealNotes(e.target.value)}
+                  disabled={closingDeal}
+                  className="mt-1 w-full min-h-[96px] rounded-xl border border-black/10 bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-black/10 disabled:bg-black/5"
+                  placeholder="Observacoes internas do fechamento (opcional)."
+                />
+              </div>
+
+              <div className="rounded-xl border border-black/10 bg-black/5 p-3 text-xs text-black/70">
+                <div>Property ID: {property?.id}</div>
+                <div>Negotiation ID: {closeDealNegotiation.id}</div>
+                <div>Lead ID: {closeDealNegotiation.lead_id || '-'}</div>
+              </div>
+
+              <div className="flex items-center justify-end gap-2">
+                <Button variant="outline" onClick={closeCloseDealModal} disabled={closingDeal}>
+                  Cancelar
+                </Button>
+                <Button onClick={handleCloseDealSubmit} disabled={closingDeal}>
+                  {closingDeal ? 'Fechando...' : 'Confirmar fechamento'}
+                </Button>
+              </div>
             </div>
           </div>
         </div>

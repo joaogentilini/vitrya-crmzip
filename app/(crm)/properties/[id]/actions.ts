@@ -2678,6 +2678,240 @@ export async function getPropertyNegotiations(propertyId: string): Promise<Prope
   })
 }
 
+export type DealOperationType = 'sale' | 'development' | 'rent'
+
+export type PropertyDealProposalOption = {
+  id: string
+  negotiation_id: string | null
+  lead_id: string | null
+  title: string | null
+  status: string | null
+  updated_at: string | null
+  created_at: string | null
+  total_value: number | null
+}
+
+export type PropertyConfirmedDealRow = {
+  id: string
+  property_id: string
+  negotiation_id: string | null
+  proposal_id: string | null
+  lead_id: string | null
+  operation_type: DealOperationType
+  status: 'draft' | 'confirmed' | 'cancelled'
+  closed_at: string | null
+  gross_value: number | null
+  notes: string | null
+  created_at: string | null
+}
+
+export async function getPropertyDealCloseContext(propertyId: string): Promise<{
+  proposals: PropertyDealProposalOption[]
+  latestConfirmedDeal: PropertyConfirmedDealRow | null
+}> {
+  await requireActiveUser()
+
+  if (!propertyId) throw new Error('Imovel invalido.')
+
+  const supabase = await createClient()
+
+  const [{ data: proposalRows, error: proposalErr }, { data: latestConfirmedDeal, error: dealErr }] = await Promise.all([
+    supabase
+      .from('property_proposals')
+      .select('id, negotiation_id, lead_id, title, status, updated_at, created_at')
+      .eq('property_id', propertyId)
+      .order('updated_at', { ascending: false })
+      .order('created_at', { ascending: false }),
+    supabase
+      .from('deals')
+      .select('id, property_id, negotiation_id, proposal_id, lead_id, operation_type, status, closed_at, gross_value, notes, created_at')
+      .eq('property_id', propertyId)
+      .eq('status', 'confirmed')
+      .order('closed_at', { ascending: false })
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle(),
+  ])
+
+  if (proposalErr) throw new Error(proposalErr.message || 'Erro ao carregar propostas para fechamento.')
+  if (dealErr) throw new Error(dealErr.message || 'Erro ao carregar deal confirmado.')
+
+  const proposals: PropertyDealProposalOption[] = ((proposalRows ?? []) as Array<{
+    id: string
+    negotiation_id: string | null
+    lead_id: string | null
+    title: string | null
+    status: string | null
+    updated_at: string | null
+    created_at: string | null
+  }>).map((row): PropertyDealProposalOption => ({
+    ...row,
+    total_value: null,
+  }))
+
+  const proposalIds = proposals.map((row) => row.id).filter(Boolean)
+  if (proposalIds.length > 0) {
+    const { data: paymentRows, error: paymentErr } = await supabase
+      .from('property_proposal_payments')
+      .select('proposal_id, amount')
+      .in('proposal_id', proposalIds)
+
+    if (!paymentErr) {
+      const totalByProposalId = new Map<string, number>()
+      for (const payment of (paymentRows ?? []) as Array<{ proposal_id: string; amount: number | null }>) {
+        const amount = Number(payment.amount ?? 0)
+        if (!Number.isFinite(amount)) continue
+        totalByProposalId.set(payment.proposal_id, (totalByProposalId.get(payment.proposal_id) ?? 0) + amount)
+      }
+
+      for (const proposal of proposals) {
+        proposal.total_value = totalByProposalId.get(proposal.id) ?? null
+      }
+    }
+  }
+
+  return {
+    proposals,
+    latestConfirmedDeal: (latestConfirmedDeal as PropertyConfirmedDealRow | null) ?? null,
+  }
+}
+
+export async function createConfirmedDeal(input: {
+  propertyId: string
+  operationType: DealOperationType
+  grossValue?: number | null
+  proposalId?: string | null
+  negotiationId?: string | null
+  leadId?: string | null
+  notes?: string | null
+}): Promise<{ success: boolean; error?: string; deal?: PropertyConfirmedDealRow }> {
+  const profile = await requireActiveUser()
+  const supabase = await createClient()
+
+  const actorId = profile.id
+  const isManager = profile.role === 'admin' || profile.role === 'gestor'
+
+  const propertyId = String(input.propertyId || '').trim()
+  if (!propertyId) return { success: false, error: 'Imovel invalido.' }
+
+  const operationType = String(input.operationType || '').trim() as DealOperationType
+  if (!['sale', 'development', 'rent'].includes(operationType)) {
+    return { success: false, error: 'Tipo de operacao invalido.' }
+  }
+
+  const { data: property, error: propertyErr } = await supabase
+    .from('properties')
+    .select('id, owner_user_id')
+    .eq('id', propertyId)
+    .maybeSingle()
+
+  if (propertyErr) return { success: false, error: propertyErr.message || 'Erro ao validar imovel.' }
+  if (!property) return { success: false, error: 'Imovel nao encontrado.' }
+
+  if (!isManager && property.owner_user_id !== actorId) {
+    return { success: false, error: 'Sem permissao para fechar negocio deste imovel.' }
+  }
+
+  const negotiationId = String(input.negotiationId || '').trim() || null
+  const proposalId = String(input.proposalId || '').trim() || null
+  let resolvedLeadId = String(input.leadId || '').trim() || null
+
+  if (negotiationId) {
+    const { data: negotiation, error: negotiationErr } = await supabase
+      .from('property_negotiations')
+      .select('id, property_id, lead_id')
+      .eq('id', negotiationId)
+      .maybeSingle()
+
+    if (negotiationErr) {
+      return { success: false, error: negotiationErr.message || 'Erro ao validar negociacao.' }
+    }
+    if (!negotiation || negotiation.property_id !== propertyId) {
+      return { success: false, error: 'Negociacao invalida para este imovel.' }
+    }
+
+    resolvedLeadId = String(negotiation.lead_id || '').trim() || resolvedLeadId
+
+    const { data: existingConfirmed, error: existingErr } = await supabase
+      .from('deals')
+      .select('id')
+      .eq('negotiation_id', negotiationId)
+      .eq('status', 'confirmed')
+      .maybeSingle()
+
+    if (existingErr) return { success: false, error: existingErr.message || 'Erro ao validar fechamento existente.' }
+    if (existingConfirmed?.id) {
+      return { success: false, error: 'Ja existe um negocio fechado para esta negociacao.' }
+    }
+  }
+
+  if (proposalId) {
+    const { data: proposal, error: proposalErr } = await supabase
+      .from('property_proposals')
+      .select('id, property_id, negotiation_id, lead_id')
+      .eq('id', proposalId)
+      .maybeSingle()
+
+    if (proposalErr) return { success: false, error: proposalErr.message || 'Erro ao validar proposta.' }
+    if (!proposal || proposal.property_id !== propertyId) {
+      return { success: false, error: 'Proposta invalida para este imovel.' }
+    }
+    if (negotiationId && proposal.negotiation_id && proposal.negotiation_id !== negotiationId) {
+      return { success: false, error: 'Proposta nao pertence a negociacao selecionada.' }
+    }
+
+    if (!resolvedLeadId) {
+      resolvedLeadId = String(proposal.lead_id || '').trim() || null
+    }
+  }
+
+  const grossValue =
+    input.grossValue === null || input.grossValue === undefined || input.grossValue === ('' as any)
+      ? null
+      : Number(input.grossValue)
+
+  if (grossValue !== null && (!Number.isFinite(grossValue) || grossValue < 0)) {
+    return { success: false, error: 'Valor bruto invalido.' }
+  }
+
+  const notes = String(input.notes || '').trim() || null
+
+  const payload: any = {
+    owner_user_id: actorId,
+    created_by: actorId,
+    property_id: propertyId,
+    lead_id: resolvedLeadId,
+    negotiation_id: negotiationId,
+    proposal_id: proposalId,
+    operation_type: operationType,
+    status: 'confirmed',
+    closed_at: new Date().toISOString(),
+    gross_value: grossValue,
+    notes,
+  }
+
+  const { data: createdDeal, error: createErr } = await supabase
+    .from('deals')
+    .insert(payload)
+    .select('id, property_id, negotiation_id, proposal_id, lead_id, operation_type, status, closed_at, gross_value, notes, created_at')
+    .single()
+
+  if (createErr) {
+    if (createErr.code === '23505') {
+      return { success: false, error: 'Esta negociacao ja possui um negocio fechado confirmado.' }
+    }
+    return { success: false, error: createErr.message || 'Nao foi possivel marcar como fechado.' }
+  }
+
+  revalidatePath(`/properties/${propertyId}`)
+  revalidatePath('/properties')
+
+  return {
+    success: true,
+    deal: createdDeal as PropertyConfirmedDealRow,
+  }
+}
+
 type ProposalRow = {
   id: string
   negotiation_id: string
