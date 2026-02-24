@@ -207,13 +207,17 @@ export async function POST(request: Request) {
 
   const receivableContextRes = await admin
     .from('receivables')
-    .select('id, business_line_id, property_id, property_category_id, broker_user_id, proposal_payment_method_id, collection_method_id')
+    .select(
+      'id, amount_total, amount_open, business_line_id, property_id, property_category_id, broker_user_id, proposal_payment_method_id, collection_method_id'
+    )
     .eq('id', charge.receivable_id)
     .maybeSingle()
 
   const receivableContext = (receivableContextRes.data ?? null) as
     | {
         id: string
+        amount_total: number | null
+        amount_open: number | null
         business_line_id: string | null
         property_id: string | null
         property_category_id: string | null
@@ -223,10 +227,15 @@ export async function POST(request: Request) {
       }
     | null
 
-  const paymentAmount = Math.max(
+  const payloadAmount = Math.max(
     toNumber(paymentNode?.value) || toNumber(paymentNode?.netValue) || toNumber(paymentNode?.originalValue),
     0
   )
+  const receivableAmountFallback = Math.max(
+    toNumber(receivableContext?.amount_open) || toNumber(receivableContext?.amount_total),
+    0
+  )
+  const paymentAmount = payloadAmount > 0 ? payloadAmount : receivableAmountFallback
 
   let paymentId: string | null = null
   const existingPaymentRes = await admin

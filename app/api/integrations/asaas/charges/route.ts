@@ -259,7 +259,11 @@ export async function POST(request: Request) {
   if (receivableRes.error || !receivableRes.data) {
     if (isMissingRelationError(receivableRes.error)) {
       return NextResponse.json(
-        { ok: false, error: 'Schema financeiro não encontrado. Aplique a migration 202602221530_finance_erp_asaas_mvp.sql.' },
+        {
+          ok: false,
+          error:
+            'Schema financeiro não encontrado. Aplique as migrations 202602221530_finance_erp_asaas_mvp.sql, 20260224_1100_split_proposal_vs_collection_methods.sql, 20260224_1115_financial_traceability_lead_dimensions_v2.sql, 20260224_1145_financial_methods_rls_and_grants_v2.sql e 20260224_1215_financial_traceability_hotfix_missing_columns.sql.',
+        },
         { status: 500 }
       )
     }

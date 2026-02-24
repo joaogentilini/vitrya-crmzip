@@ -137,7 +137,11 @@ export function FinanceSettingsClient({
         </CardHeader>
         <CardContent>
           <p className="text-sm text-[var(--muted-foreground)]">
-            Schema financeiro pendente. Aplique a migration <code>202602221530_finance_erp_asaas_mvp.sql</code>.
+            Schema financeiro pendente. Aplique as migrations <code>202602221530_finance_erp_asaas_mvp.sql</code>,
+            <code>20260224_1100_split_proposal_vs_collection_methods.sql</code>,
+            <code>20260224_1115_financial_traceability_lead_dimensions_v2.sql</code>,
+            <code>20260224_1145_financial_methods_rls_and_grants_v2.sql</code> e
+            <code>20260224_1215_financial_traceability_hotfix_missing_columns.sql</code>.
           </p>
         </CardContent>
       </Card>
