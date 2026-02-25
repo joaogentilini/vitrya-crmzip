@@ -346,6 +346,10 @@ export default function PropertyNegotiationsTabClient({
     return null
   }, [property?.deal_status])
 
+  const isReservedActive = property?.deal_status === 'reserved'
+  const isSoldActive = property?.deal_status === 'sold' || latestConfirmedDeal?.status === 'confirmed'
+  const isClearActive = !isReservedActive && !isSoldActive
+
   const proposalTotals = useMemo(() => {
     const enabled = proposalDraft.enabled || {}
     const amounts = proposalDraft.amounts || {}
@@ -1104,6 +1108,11 @@ export default function PropertyNegotiationsTabClient({
               variant="outline"
               disabled={savingDeal || !canEditDeal}
               onClick={() => setDealStatus(null)}
+              className={
+                isClearActive
+                  ? 'border-zinc-900 bg-zinc-900 text-white hover:border-zinc-800 hover:bg-zinc-800 hover:text-white'
+                  : undefined
+              }
               title={!canEditDeal ? 'Somente responsável/admin/gestor pode marcar status comercial.' : 'Limpar status comercial'}
             >
               Limpar
@@ -1113,23 +1122,14 @@ export default function PropertyNegotiationsTabClient({
               variant="outline"
               disabled={savingDeal || !canEditDeal}
               onClick={() => setDealStatus('reserved')}
+              className={
+                isReservedActive
+                  ? 'border-amber-500 bg-amber-500 text-white hover:border-amber-500 hover:bg-amber-500 hover:text-white'
+                  : undefined
+              }
               title={!canEditDeal ? 'Somente responsável/admin/gestor pode marcar status comercial.' : 'Marca como reservado'}
             >
               Reservado
-            </Button>
-
-            <Button
-              disabled={savingDeal || isEmpreendimento || !canEditDeal}
-              onClick={() => void handleMarkAsSold(null)}
-              title={
-                !canEditDeal
-                  ? 'Somente responsável/admin/gestor pode marcar status comercial.'
-                  : isEmpreendimento
-                  ? 'Empreendimento: por enquanto, venda por unidade (entra em negociacao).'
-                  : 'Marca como vendido'
-              }
-            >
-              Vendido
             </Button>
 
             <Button
@@ -1143,6 +1143,26 @@ export default function PropertyNegotiationsTabClient({
               title={!canGenerateContract ? 'Sem permissao para gerar contrato.' : undefined}
             >
               Gerar contrato
+            </Button>
+
+            <Button
+              variant="outline"
+              disabled={savingDeal || isEmpreendimento || !canEditDeal}
+              onClick={() => void handleMarkAsSold(null)}
+              className={
+                isSoldActive
+                  ? 'border-emerald-600 bg-emerald-600 text-white hover:border-emerald-600 hover:bg-emerald-600 hover:text-white'
+                  : undefined
+              }
+              title={
+                !canEditDeal
+                  ? 'Somente responsável/admin/gestor pode marcar status comercial.'
+                  : isEmpreendimento
+                  ? 'Empreendimento: por enquanto, venda por unidade (entra em negociacao).'
+                  : 'Marca como vendido'
+              }
+            >
+              Vendido
             </Button>
           </div>
         </CardHeader>
@@ -1864,6 +1884,10 @@ export default function PropertyNegotiationsTabClient({
     </>
   )
 }
+
+
+
+
 
 
 
