@@ -2742,7 +2742,7 @@ export async function getPropertyDealCloseContext(propertyId: string): Promise<{
 
   const [
     { data: proposalRows, error: proposalErr },
-    { data: latestConfirmedDeal, error: dealErr },
+    { data: confirmedDealsRows, error: dealErr },
     { data: propertyRow, error: propertyErr },
     { data: negotiationRows, error: negotiationErr },
     { data: contractRows, error: contractErr },
@@ -2755,13 +2755,12 @@ export async function getPropertyDealCloseContext(propertyId: string): Promise<{
       .order('created_at', { ascending: false }),
     supabase
       .from('deals')
-      .select('id, property_id, negotiation_id, proposal_id, lead_id, operation_type, status, closed_at, gross_value, notes, created_at')
+      .select(DEAL_SELECT_COLUMNS)
       .eq('property_id', propertyId)
       .eq('status', 'confirmed')
       .order('closed_at', { ascending: false })
       .order('created_at', { ascending: false })
-      .limit(1)
-      .maybeSingle(),
+      .limit(20),
     supabase.from('properties').select('id, owner_client_id').eq('id', propertyId).maybeSingle(),
     supabase.from('property_negotiations').select('id, person_id').eq('property_id', propertyId),
     supabase
@@ -2777,6 +2776,9 @@ export async function getPropertyDealCloseContext(propertyId: string): Promise<{
   if (propertyErr) throw new Error(propertyErr.message || 'Erro ao carregar proprietario do imovel.')
   if (negotiationErr) throw new Error(negotiationErr.message || 'Erro ao carregar negociacoes para fechamento.')
   if (contractErr) throw new Error(contractErr.message || 'Erro ao carregar contratos vinculados ao imovel.')
+
+  const confirmedDeals = (confirmedDealsRows ?? []) as PropertyDealRow[]
+  let latestConfirmedDeal: PropertyDealRow | null = confirmedDeals[0] ?? null
 
   const proposals: PropertyDealProposalOption[] = ((proposalRows ?? []) as Array<{
     id: string
@@ -2873,27 +2875,33 @@ export async function getPropertyDealCloseContext(propertyId: string): Promise<{
 
   let contractInProgress: PropertyContractInProgressRow | null = null
   if (latestContract) {
-    let relatedDeal: { id: string; status: 'draft' | 'confirmed' | 'cancelled'; gross_value: number | null } | null = null
+    let relatedDeal: PropertyDealRow | null = null
     if (String(latestContract.entity_type || '').toLowerCase() === 'deal' && latestContract.entity_id) {
       const { data: dealRow, error: dealLookupError } = await supabase
         .from('deals')
-        .select('id, status, gross_value')
+        .select(DEAL_SELECT_COLUMNS)
         .eq('id', latestContract.entity_id)
         .maybeSingle()
 
       if (!dealLookupError && dealRow) {
-        relatedDeal = dealRow as { id: string; status: 'draft' | 'confirmed' | 'cancelled'; gross_value: number | null }
+        relatedDeal = dealRow as PropertyDealRow
       }
     }
 
-    contractInProgress = {
-      document_instance_id: latestContract.id,
-      template_code: latestContract.template_code ?? null,
-      status: latestContract.status ?? null,
-      created_at: latestContract.created_at ?? null,
-      deal_id: relatedDeal?.id ?? null,
-      deal_status: relatedDeal?.status ?? null,
-      gross_value: relatedDeal?.gross_value ?? null,
+    if (relatedDeal?.status === 'confirmed') {
+      latestConfirmedDeal = relatedDeal
+    }
+
+    if (!latestConfirmedDeal || relatedDeal?.id === latestConfirmedDeal.id) {
+      contractInProgress = {
+        document_instance_id: latestContract.id,
+        template_code: latestContract.template_code ?? null,
+        status: latestContract.status ?? null,
+        created_at: latestContract.created_at ?? null,
+        deal_id: relatedDeal?.id ?? null,
+        deal_status: relatedDeal?.status ?? null,
+        gross_value: relatedDeal?.gross_value ?? null,
+      }
     }
   }
 
@@ -3051,6 +3059,69 @@ type SaleContractTemplateRow = {
   provider: string | null
 }
 
+const DEAL_SELECT_COLUMNS =
+  'id, property_id, owner_user_id, negotiation_id, proposal_id, lead_id, operation_type, status, closed_at, gross_value, notes, created_at'
+
+type DealContextLookupResult = {
+  confirmedDeal: PropertyDealRow | null
+  draftDeal: PropertyDealRow | null
+  latestDeal: PropertyDealRow | null
+}
+
+async function findDealContext(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  params: {
+    propertyId: string
+    ownerUserId: string
+    negotiationId?: string | null
+  }
+): Promise<DealContextLookupResult> {
+  const propertyId = String(params.propertyId || '').trim()
+  const ownerUserId = String(params.ownerUserId || '').trim()
+  const negotiationId = String(params.negotiationId || '').trim() || null
+
+  if (!propertyId || !ownerUserId) {
+    return { confirmedDeal: null, draftDeal: null, latestDeal: null }
+  }
+
+  if (negotiationId) {
+    const { data, error } = await supabase
+      .from('deals')
+      .select(DEAL_SELECT_COLUMNS)
+      .eq('negotiation_id', negotiationId)
+      .neq('status', 'cancelled')
+      .order('updated_at', { ascending: false })
+      .order('created_at', { ascending: false })
+      .limit(20)
+
+    if (error) throw new Error(error.message || 'Erro ao buscar deals da negociacao.')
+
+    const rows = (data ?? []) as PropertyDealRow[]
+    const confirmedDeal = rows.find((row) => row.status === 'confirmed') ?? null
+    const draftDeal = rows.find((row) => row.status === 'draft') ?? null
+    const latestDeal = rows[0] ?? null
+    return { confirmedDeal, draftDeal, latestDeal }
+  }
+
+  const { data, error } = await supabase
+    .from('deals')
+    .select(DEAL_SELECT_COLUMNS)
+    .eq('property_id', propertyId)
+    .eq('owner_user_id', ownerUserId)
+    .in('status', ['draft', 'confirmed'])
+    .order('updated_at', { ascending: false })
+    .order('created_at', { ascending: false })
+    .limit(20)
+
+  if (error) throw new Error(error.message || 'Erro ao buscar deals do imovel.')
+
+  const rows = (data ?? []) as PropertyDealRow[]
+  const confirmedDeal = rows.find((row) => row.status === 'confirmed') ?? null
+  const draftDeal = rows.find((row) => row.status === 'draft') ?? null
+  const latestDeal = rows[0] ?? null
+  return { confirmedDeal, draftDeal, latestDeal }
+}
+
 async function resolveSaleContractTemplate(
   supabase: Awaited<ReturnType<typeof createClient>>
 ): Promise<SaleContractTemplateRow | null> {
@@ -3162,18 +3233,6 @@ export async function generateSaleContract(input: {
     if (!buyerPersonId) {
       buyerPersonId = String(negotiation.person_id || '').trim() || buyerPersonId
     }
-
-    const { data: existingConfirmed, error: existingErr } = await supabase
-      .from('deals')
-      .select('id')
-      .eq('negotiation_id', resolvedNegotiationId)
-      .eq('status', 'confirmed')
-      .maybeSingle()
-
-    if (existingErr) return { success: false, error: existingErr.message || 'Erro ao validar deal confirmado.' }
-    if (existingConfirmed?.id) {
-      return { success: false, error: 'Esta negociacao ja possui deal confirmado.' }
-    }
   }
 
   if (resolvedProposalId) {
@@ -3232,33 +3291,24 @@ export async function generateSaleContract(input: {
     return { success: false, error: 'Template do Contrato de Compra e Venda nao encontrado em Document Templates.' }
   }
 
-  let existingDraftDeal: PropertyDealRow | null = null
-  if (resolvedNegotiationId) {
-    const { data: rows, error } = await supabase
-      .from('deals')
-      .select('id, property_id, negotiation_id, proposal_id, lead_id, operation_type, status, closed_at, gross_value, notes, created_at')
-      .eq('property_id', propertyId)
-      .eq('negotiation_id', resolvedNegotiationId)
-      .eq('status', 'draft')
-      .order('updated_at', { ascending: false })
-      .order('created_at', { ascending: false })
-      .limit(1)
+  let existingContext: DealContextLookupResult
+  try {
+    existingContext = await findDealContext(supabase, {
+      propertyId,
+      ownerUserId: actorId,
+      negotiationId: resolvedNegotiationId,
+    })
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'Erro ao validar deal existente.'
+    return { success: false, error: message }
+  }
 
-    if (error) return { success: false, error: error.message || 'Erro ao buscar deal draft.' }
-    existingDraftDeal = ((rows ?? []) as PropertyDealRow[])[0] ?? null
-  } else if (resolvedProposalId) {
-    const { data: rows, error } = await supabase
-      .from('deals')
-      .select('id, property_id, negotiation_id, proposal_id, lead_id, operation_type, status, closed_at, gross_value, notes, created_at')
-      .eq('property_id', propertyId)
-      .eq('proposal_id', resolvedProposalId)
-      .eq('status', 'draft')
-      .order('updated_at', { ascending: false })
-      .order('created_at', { ascending: false })
-      .limit(1)
-
-    if (error) return { success: false, error: error.message || 'Erro ao buscar deal draft.' }
-    existingDraftDeal = ((rows ?? []) as PropertyDealRow[])[0] ?? null
+  if (existingContext.confirmedDeal) {
+    return {
+      success: false,
+      error: 'Este negocio ja esta confirmado como vendido para este contexto.',
+      deal: existingContext.confirmedDeal,
+    }
   }
 
   const draftPayload = {
@@ -3275,12 +3325,12 @@ export async function generateSaleContract(input: {
   }
 
   let draftDeal: PropertyDealRow | null = null
-  if (existingDraftDeal) {
+  if (existingContext.draftDeal) {
     const { data, error } = await supabase
       .from('deals')
       .update(draftPayload)
-      .eq('id', existingDraftDeal.id)
-      .select('id, property_id, negotiation_id, proposal_id, lead_id, operation_type, status, closed_at, gross_value, notes, created_at')
+      .eq('id', existingContext.draftDeal.id)
+      .select(DEAL_SELECT_COLUMNS)
       .maybeSingle()
 
     if (error || !data) {
@@ -3294,7 +3344,7 @@ export async function generateSaleContract(input: {
         ...draftPayload,
         created_by: actorId,
       })
-      .select('id, property_id, negotiation_id, proposal_id, lead_id, operation_type, status, closed_at, gross_value, notes, created_at')
+      .select(DEAL_SELECT_COLUMNS)
       .single()
 
     if (error || !data) {
@@ -3305,6 +3355,42 @@ export async function generateSaleContract(input: {
 
   if (!draftDeal) {
     return { success: false, error: 'Nao foi possivel preparar o deal para gerar contrato.' }
+  }
+
+  const { data: existingContractRows, error: existingContractErr } = await supabase
+    .from('document_instances')
+    .select('id, template_code, status, created_at')
+    .eq('entity_type', 'deal')
+    .eq('entity_id', draftDeal.id)
+    .in('status', ['draft', 'sent', 'viewed'])
+    .order('created_at', { ascending: false })
+    .limit(1)
+
+  if (!existingContractErr) {
+    const existingContract = ((existingContractRows ?? []) as Array<{
+      id: string
+      template_code: string | null
+      status: string | null
+      created_at: string | null
+    }>)[0]
+
+    if (existingContract) {
+      revalidatePath(`/properties/${propertyId}`)
+      revalidatePath('/properties')
+      return {
+        success: true,
+        deal: draftDeal,
+        contract: {
+          document_instance_id: existingContract.id,
+          template_code: existingContract.template_code ?? null,
+          status: existingContract.status ?? null,
+          created_at: existingContract.created_at ?? null,
+          deal_id: draftDeal.id,
+          deal_status: draftDeal.status,
+          gross_value: draftDeal.gross_value,
+        },
+      }
+    }
   }
 
   const { data: documentInstance, error: documentErr } = await supabase
@@ -3468,7 +3554,7 @@ export async function markAsSold(input: {
 
   const { data: property, error: propertyErr } = await supabase
     .from('properties')
-    .select('id, owner_user_id')
+    .select('id, owner_user_id, purpose, price, rent_price')
     .eq('id', propertyId)
     .maybeSingle()
 
@@ -3479,10 +3565,11 @@ export async function markAsSold(input: {
   }
 
   const negotiationId = String(input.negotiationId || '').trim() || null
+  let negotiationLeadId: string | null = null
   if (negotiationId) {
     const { data: negotiation, error: negotiationErr } = await supabase
       .from('property_negotiations')
-      .select('id, property_id')
+      .select('id, property_id, lead_id')
       .eq('id', negotiationId)
       .maybeSingle()
 
@@ -3490,63 +3577,127 @@ export async function markAsSold(input: {
     if (!negotiation || negotiation.property_id !== propertyId) {
       return { success: false, error: 'Negociacao invalida para este imovel.' }
     }
+    negotiationLeadId = String(negotiation.lead_id || '').trim() || null
   }
 
-  let dealsQuery = supabase
-    .from('deals')
-    .select('id, property_id, negotiation_id, proposal_id, lead_id, operation_type, status, closed_at, gross_value, notes, created_at')
-    .eq('property_id', propertyId)
-    .order('created_at', { ascending: false })
+  let dealContext: DealContextLookupResult
+  try {
+    dealContext = await findDealContext(supabase, {
+      propertyId,
+      ownerUserId: actorId,
+      negotiationId,
+    })
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'Erro ao carregar deal do contexto.'
+    return { success: false, error: message }
+  }
 
+  let targetDeal: PropertyDealRow | null = null
   if (negotiationId) {
-    dealsQuery = dealsQuery.eq('negotiation_id', negotiationId)
+    targetDeal = dealContext.draftDeal ?? dealContext.confirmedDeal ?? dealContext.latestDeal
+    if (!targetDeal) {
+      return { success: false, error: 'Gere o contrato antes de marcar como vendido.' }
+    }
+    if (dealContext.confirmedDeal && targetDeal.id !== dealContext.confirmedDeal.id) {
+      targetDeal = dealContext.confirmedDeal
+    }
+  } else {
+    targetDeal = dealContext.draftDeal ?? dealContext.confirmedDeal ?? null
+    if (!targetDeal) {
+      const purpose = String(property.purpose || '').toLowerCase()
+      const operationType: DealOperationType = purpose.includes('rent') || purpose.includes('loca') ? 'rent' : 'sale'
+      const grossFallback = operationType === 'rent' ? Number(property.rent_price ?? 0) : Number(property.price ?? 0)
+
+      const { data: createdDeal, error: createErr } = await supabase
+        .from('deals')
+        .insert({
+          owner_user_id: actorId,
+          created_by: actorId,
+          property_id: propertyId,
+          lead_id: negotiationLeadId,
+          negotiation_id: negotiationId,
+          operation_type: operationType,
+          status: 'draft',
+          gross_value: Number.isFinite(grossFallback) && grossFallback > 0 ? grossFallback : null,
+        })
+        .select(DEAL_SELECT_COLUMNS)
+        .single()
+
+      if (createErr || !createdDeal) {
+        return { success: false, error: createErr?.message || 'Nao foi possivel preparar deal para confirmar venda.' }
+      }
+      targetDeal = createdDeal as PropertyDealRow
+    }
   }
 
-  const { data: dealRows, error: dealsErr } = await dealsQuery
-  if (dealsErr) return { success: false, error: dealsErr.message || 'Erro ao carregar deals do imovel.' }
-
-  const deals = (dealRows ?? []) as PropertyDealRow[]
-  const existingConfirmed = deals.find((row) => row.status === 'confirmed') ?? null
-  const existingDraft = deals.find((row) => row.status === 'draft') ?? null
-
-  if (!existingConfirmed && !existingDraft) {
-    return { success: false, error: 'Gere o contrato antes de marcar como vendido.' }
-  }
-
-  let targetDeal = existingConfirmed ?? existingDraft
   if (!targetDeal) {
-    return { success: false, error: 'Nao foi possivel localizar o deal para confirmar venda.' }
+    return { success: false, error: 'Nao foi possivel localizar deal para confirmar venda.' }
   }
 
-  const hadToConfirmDeal = targetDeal.status !== 'confirmed'
   const previousStatus = targetDeal.status
   const previousClosedAt = targetDeal.closed_at
+  const previousGrossValue = targetDeal.gross_value
 
-  if (hadToConfirmDeal) {
+  const purpose = String(property.purpose || '').toLowerCase()
+  const fallbackGrossValue = (purpose.includes('rent') || purpose.includes('loca')
+    ? Number(property.rent_price ?? 0)
+    : Number(property.price ?? 0)) as number
+  const nextGrossValue =
+    targetDeal.gross_value !== null && targetDeal.gross_value !== undefined
+      ? targetDeal.gross_value
+      : Number.isFinite(fallbackGrossValue) && fallbackGrossValue > 0
+      ? fallbackGrossValue
+      : null
+
+  let updatedDealInThisFlow = false
+  const needsDealUpdate =
+    targetDeal.status !== 'confirmed' || !targetDeal.closed_at || (targetDeal.gross_value === null && nextGrossValue !== null)
+
+  if (needsDealUpdate) {
+    const closedAt = targetDeal.closed_at || new Date().toISOString()
     const { data: updatedDeal, error: updateDealErr } = await supabase
       .from('deals')
       .update({
         status: 'confirmed',
-        closed_at: new Date().toISOString(),
+        closed_at: closedAt,
+        gross_value: nextGrossValue,
       })
       .eq('id', targetDeal.id)
-      .select('id, property_id, negotiation_id, proposal_id, lead_id, operation_type, status, closed_at, gross_value, notes, created_at')
+      .select(DEAL_SELECT_COLUMNS)
       .single()
 
     if (updateDealErr || !updatedDeal) {
-      if (updateDealErr?.code === '23505') {
-        return { success: false, error: 'Ja existe um deal confirmado para esta negociacao.' }
+      if (updateDealErr?.code === '23505' && negotiationId) {
+        const conflict = await findDealContext(supabase, {
+          propertyId,
+          ownerUserId: actorId,
+          negotiationId,
+        })
+        if (conflict.confirmedDeal) {
+          targetDeal = conflict.confirmedDeal
+        } else {
+          return { success: false, error: 'Ja existe um deal confirmado para esta negociacao.' }
+        }
+      } else {
+        return { success: false, error: updateDealErr?.message || 'Nao foi possivel confirmar o deal.' }
       }
-      return { success: false, error: updateDealErr?.message || 'Nao foi possivel confirmar o deal.' }
+    } else {
+      targetDeal = updatedDeal as PropertyDealRow
+      updatedDealInThisFlow = true
     }
-
-    targetDeal = updatedDeal as PropertyDealRow
   }
 
   const soldResult = await updatePropertyDealStatus(propertyId, 'sold')
   if (!soldResult.success) {
-    if (hadToConfirmDeal) {
-      await supabase.from('deals').update({ status: previousStatus, closed_at: previousClosedAt }).eq('id', targetDeal.id)
+    if (updatedDealInThisFlow) {
+      await supabase
+        .from('deals')
+        .update({
+          status: previousStatus,
+          closed_at: previousClosedAt,
+          gross_value: previousGrossValue,
+        })
+        .eq('id', targetDeal.id)
     }
     return { success: false, error: soldResult.error || 'Nao foi possivel marcar o imovel como vendido.' }
   }
@@ -4335,7 +4486,4 @@ export async function transitionProposalStatus(input: ProposalTransitionInput) {
 
   return { success: false as const, error: 'Ação inválida.' }
 }
-
-
-
 

@@ -1077,8 +1077,12 @@ export default function PropertyNegotiationsTabClient({
 
             {contractInProgress ? (
               <div className="mt-2 flex flex-wrap items-center gap-2">
-                <span className="inline-flex items-center rounded-full bg-blue-600 px-3 py-1 text-xs font-bold text-white">
-                  Contrato em andamento
+                <span
+                  className={`inline-flex items-center rounded-full px-3 py-1 text-xs font-bold text-white ${
+                    latestConfirmedDeal ? 'bg-emerald-700' : 'bg-blue-600'
+                  }`}
+                >
+                  {latestConfirmedDeal ? 'Contrato do deal confirmado' : 'Contrato em andamento'}
                 </span>
                 <span className="text-xs text-[var(--muted-foreground)]">
                   {contractInProgress.template_code || 'Contrato de Compra e Venda'} -{' '}
@@ -1151,7 +1155,7 @@ export default function PropertyNegotiationsTabClient({
               onClick={() => void handleMarkAsSold(null)}
               className={
                 isSoldActive
-                  ? 'border-emerald-600 bg-emerald-600 text-white hover:border-emerald-600 hover:bg-emerald-600 hover:text-white'
+                  ? 'border-emerald-600 bg-emerald-50 text-[var(--foreground)] hover:border-emerald-600 hover:bg-emerald-50 hover:text-[var(--foreground)]'
                   : undefined
               }
               title={
