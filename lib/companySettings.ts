@@ -26,6 +26,50 @@ export type CompanySettingsRow = {
   updated_at: string
 }
 
+function cleanText(value: unknown): string {
+  return String(value ?? '').trim()
+}
+
+function joinNonEmpty(parts: Array<string | null | undefined>, separator: string): string {
+  return parts
+    .map((item) => cleanText(item))
+    .filter(Boolean)
+    .join(separator)
+}
+
+export function buildCompanyFullAddress(settings: CompanySettingsRow | null): string {
+  if (!settings) return ''
+
+  const street = cleanText(settings.address_street)
+  const number = cleanText(settings.address_number)
+  const complement = cleanText(settings.address_complement)
+  const neighborhood = cleanText(settings.address_neighborhood)
+  const city = cleanText(settings.address_city)
+  const state = cleanText(settings.address_state)
+  const zip = cleanText(settings.address_zip)
+
+  const streetBase = joinNonEmpty([street, number], ', ')
+  const streetWithComplement = joinNonEmpty([streetBase, complement], ' ')
+  const district = neighborhood ? `- ${neighborhood}` : ''
+  const cityState = joinNonEmpty([city, state], '/')
+  const zipLabel = zip ? `CEP ${zip}` : ''
+
+  return joinNonEmpty(
+    [streetWithComplement, district, cityState, zipLabel].filter(Boolean).map((item) => cleanText(item)),
+    ', '
+  )
+}
+
+export function getCompanyDocumentsEmail(
+  settings: CompanySettingsRow | null,
+  actorEmail?: string | null
+): string | null {
+  const envEmail = cleanText(process.env.COMPANY_DOCUMENTS_EMAIL)
+  const companyEmail = cleanText(settings?.email)
+  const actor = cleanText(actorEmail)
+  return envEmail || companyEmail || actor || null
+}
+
 export async function getCompanySettingsAdmin(): Promise<CompanySettingsRow | null> {
   try {
     const admin = createAdminClient()

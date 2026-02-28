@@ -517,14 +517,14 @@ export default function PropertyDocumentsManager({ propertyId }: PropertyDocumen
               Assinatura digital (ZapSign)
             </span>
             <Button onClick={handleOpenDigitalAuthorizationPreview} disabled={sendingDigital || previewLoading}>
-              {previewLoading ? 'Conferindo...' : sendingDigital ? 'Enviando...' : 'Enviar autorização para assinatura'}
+              {previewLoading ? 'Conferindo...' : sendingDigital ? 'Enviando...' : 'Pre-visualizar autorizacao'}
             </Button>
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-3">
           <p className="text-xs text-gray-500">
-            Gera o documento com dados do imóvel e envia para assinatura. A publicação exige status assinado e dados
-            sem divergência após assinatura.
+            Confira os dados e assinantes antes de enviar para assinatura. A publicacao exige status assinado e dados
+            sem divergencia apos assinatura.
           </p>
 
           {digitalLoading ? (
@@ -828,44 +828,86 @@ export default function PropertyDocumentsManager({ propertyId }: PropertyDocumen
             <div className="space-y-4 px-5 py-4">
               {previewMissingFields.length > 0 ? (
                 <div className="rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
-                  Campos obrigatórios pendentes: {previewMissingFields.join(', ')}.
+                  Campos obrigatorios pendentes: {previewMissingFields.join(', ')}.
                 </div>
               ) : null}
 
+              <div className="rounded-lg border border-gray-200 p-3">
+                <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">Empresa (Company Settings)</p>
+                <div className="mt-2 grid grid-cols-1 gap-3 md:grid-cols-2">
+                  <div>
+                    <p className="text-xs text-gray-500">Nome fantasia</p>
+                    <p className="text-sm text-gray-900">{formatTextValue(previewFields.company_trade_name)}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-gray-500">Razao social</p>
+                    <p className="text-sm text-gray-900">{formatTextValue(previewFields.company_legal_name)}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-gray-500">CNPJ</p>
+                    <p className="text-sm text-gray-900">{formatTextValue(previewFields.company_cnpj)}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-gray-500">Endereco completo</p>
+                    <p className="text-sm text-gray-900">{formatTextValue(previewFields.company_full_address)}</p>
+                  </div>
+                </div>
+              </div>
+
               <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
                 <div className="rounded-lg border border-gray-200 p-3">
-                  <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">Matrícula/registro</p>
+                  <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">Matricula/registro</p>
                   <p className="mt-1 text-sm text-gray-900">{formatTextValue(previewFields.property_registry_number)}</p>
                 </div>
                 <div className="rounded-lg border border-gray-200 p-3">
-                  <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">Endereço completo</p>
+                  <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">Endereco completo</p>
                   <p className="mt-1 text-sm text-gray-900">{formatTextValue(previewFields.property_address)}</p>
                 </div>
                 <div className="rounded-lg border border-gray-200 p-3">
-                  <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">Valor</p>
-                  <p className="mt-1 text-sm text-gray-900">{formatCurrencyValue(previewFields.property_sale_price)}</p>
+                  <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">Valor de venda</p>
+                  <p className="mt-1 text-sm text-gray-900">{formatTextValue(previewFields.property_sale_price_brl)}</p>
                 </div>
                 <div className="rounded-lg border border-gray-200 p-3">
-                  <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">Comissão (%)</p>
-                  <p className="mt-1 text-sm text-gray-900">{formatPercentValue(previewFields.commission_percent)}</p>
+                  <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">Comissao (%)</p>
+                  <p className="mt-1 text-sm text-gray-900">{formatTextValue(previewFields.commission_percent_label)}</p>
                 </div>
                 <div className="rounded-lg border border-gray-200 p-3">
-                  <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">Prazo da autorização</p>
-                  <p className="mt-1 text-sm text-gray-900">{formatDateValue(previewFields.authorization_expires_at)}</p>
+                  <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">Prazo da autorizacao</p>
+                  <p className="mt-1 text-sm text-gray-900">{formatTextValue(previewFields.authorization_expires_at_br)}</p>
                 </div>
                 <div className="rounded-lg border border-gray-200 p-3">
-                  <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">Exclusividade</p>
-                  <p className="mt-1 text-sm text-gray-900">
-                    {formatTextValue(previewFields.authorization_is_exclusive)}
-                  </p>
+                  <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">Gestao centralizada</p>
+                  <p className="mt-1 text-sm text-gray-900">{formatTextValue(previewFields.management_centralized_label)}</p>
                 </div>
                 <div className="rounded-lg border border-gray-200 p-3">
-                  <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">Proprietário</p>
+                  <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">Taxa 1o aluguel (%)</p>
+                  <p className="mt-1 text-sm text-gray-900">{formatTextValue(previewFields.rent_first_month_fee_percent)}</p>
+                </div>
+                <div className="rounded-lg border border-gray-200 p-3">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">Taxa administracao (%)</p>
+                  <p className="mt-1 text-sm text-gray-900">{formatTextValue(previewFields.rent_admin_fee_percent)}</p>
+                </div>
+                <div className="rounded-lg border border-gray-200 p-3">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">Proprietario</p>
                   <p className="mt-1 text-sm text-gray-900">{formatTextValue(previewFields.owner_name)}</p>
                 </div>
                 <div className="rounded-lg border border-gray-200 p-3">
                   <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">Template</p>
                   <p className="mt-1 text-sm text-gray-900">{formatTextValue(previewData?.template_title)}</p>
+                </div>
+              </div>
+
+              <div className="rounded-lg border border-gray-200 p-3">
+                <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">Sistema</p>
+                <div className="mt-2 grid grid-cols-1 gap-3 md:grid-cols-2">
+                  <div>
+                    <p className="text-xs text-gray-500">Numero do documento</p>
+                    <p className="text-sm text-gray-900">{formatTextValue(previewFields.document_number)}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-gray-500">Link de verificacao</p>
+                    <p className="truncate text-sm text-gray-900">{formatTextValue(previewFields.verify_url)}</p>
+                  </div>
                 </div>
               </div>
 
