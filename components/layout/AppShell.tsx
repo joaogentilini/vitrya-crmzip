@@ -548,7 +548,7 @@ export function AppShell({
               </svg>
             ),
           },
-          ...(isManager
+          ...(userRole === 'admin'
             ? [
                 {
                   href: '/settings/company',

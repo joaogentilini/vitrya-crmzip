@@ -43,7 +43,7 @@ function toDigits(value: unknown): string {
 export async function upsertCompanySettingsAction(
   input: CompanySettingsInput
 ): Promise<{ ok: boolean; error?: string; data?: CompanySettingsRow }> {
-  await requireRole(['admin', 'gestor'])
+  await requireRole(['admin'])
 
   const legalName = toTrimmed(input.legal_name)
   const cnpj = toTrimmed(input.cnpj)

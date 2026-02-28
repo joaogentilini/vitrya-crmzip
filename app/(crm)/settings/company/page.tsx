@@ -12,7 +12,7 @@ export default async function CompanySettingsPage() {
   const profile = await ensureUserProfile()
   if (!profile) redirect('/')
   if (profile.is_active === false) redirect('/blocked')
-  if (profile.role !== 'admin' && profile.role !== 'gestor') redirect('/dashboard')
+  if (profile.role !== 'admin') redirect('/dashboard')
 
   const settings = await getCompanySettingsAdmin()
 
