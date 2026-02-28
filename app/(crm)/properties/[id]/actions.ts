@@ -12,6 +12,11 @@ import { requireActiveUser, requireRole } from '@/lib/auth'
 import { buildAmenitiesSnapshot } from '@/lib/maps/googlePlaces'
 import type { AmenitiesSnapshotData, PropertyLocationSource } from '@/lib/maps/types'
 import { ensureReceivablesForProposal } from '@/lib/finance/distributions'
+import {
+  AUTHORIZATION_TEMPLATE_CODES,
+  buildAuthorizationSnapshot,
+  hasAuthorizationSnapshotMismatch,
+} from '@/lib/documents/esign'
 
 export interface PublishResult {
   success: boolean
@@ -500,12 +505,19 @@ export interface UpdatePropertyPayload {
   condo_fee?: number | string | null
   commission_percent?: number | string | null
   sale_commission_percent?: number | string | null
+  rent_commission_percent?: number | string | null
+  rent_first_month_fee_enabled?: boolean | null
+  rent_first_month_fee_percent?: number | string | null
+  rent_admin_fee_enabled?: boolean | null
+  rent_admin_fee_percent?: number | string | null
   sale_broker_split_percent?: number | string | null
   sale_partner_split_percent?: number | string | null
   rent_initial_commission_percent?: number | string | null
   rent_recurring_commission_percent?: number | string | null
   rent_broker_split_percent?: number | string | null
   rent_partner_split_percent?: number | string | null
+  contract_forum_city?: string | null
+  contract_forum_state?: string | null
   registry_number?: string | null
   registry_office?: string | null
   authorization_started_at?: string | null
@@ -541,7 +553,9 @@ export async function updatePropertyBasics(propertyId: string, payload: UpdatePr
 
   const { data: propertyOwner, error: propertyError } = await supabase
     .from('properties')
-    .select('owner_user_id')
+    .select(
+      'owner_user_id,registry_number,address,address_number,address_complement,neighborhood,city,state,postal_code,price,commission_percent,sale_commission_percent,authorization_started_at,authorization_expires_at,authorization_is_exclusive,rent_commission_percent,rent_first_month_fee_enabled,rent_first_month_fee_percent,rent_admin_fee_enabled,rent_admin_fee_percent,contract_forum_city,contract_forum_state'
+    )
     .eq('id', propertyId)
     .maybeSingle()
 
@@ -581,14 +595,42 @@ export async function updatePropertyBasics(propertyId: string, payload: UpdatePr
     return parsed
   }
 
+  const hasPayloadKey = (key: keyof UpdatePropertyPayload): boolean =>
+    Object.prototype.hasOwnProperty.call(payload, key)
+
+  const toNumberOrNull = (value: unknown): number | null => {
+    if (typeof value === 'number' && Number.isFinite(value)) return value
+    if (typeof value === 'string') {
+      const trimmed = value.trim()
+      if (!trimmed) return null
+      const parsed = Number(trimmed.replace(',', '.'))
+      return Number.isFinite(parsed) ? parsed : null
+    }
+    return null
+  }
+
+  const isBlank = (value: unknown): boolean =>
+    value === null || value === undefined || (typeof value === 'string' && value.trim() === '')
+
+  const isMissingRelationError = (message?: string): boolean => {
+    const text = String(message || '').toLowerCase()
+    return text.includes('does not exist') || text.includes('relation') || text.includes('schema cache')
+  }
+
   const commissionSettingsUpdate: Record<string, number | string> = {}
   const saleCommissionPercent = parsePercentField(payload.sale_commission_percent, 'Comissão de venda (%)')
   if (typeof saleCommissionPercent === 'number') {
     commissionSettingsUpdate.sale_commission_percent = saleCommissionPercent
     // Mantem coluna legada sincronizada.
     payload.commission_percent = saleCommissionPercent
+    payload.sale_commission_percent = saleCommissionPercent
   }
 
+  const rentCommissionPercent = parsePercentField(payload.rent_commission_percent, 'Comissão aluguel (%)')
+  if (typeof rentCommissionPercent === 'number') {
+    commissionSettingsUpdate.rent_initial_commission_percent = rentCommissionPercent
+    payload.rent_commission_percent = rentCommissionPercent
+  }
   const saleBrokerSplitPercent = parsePercentField(payload.sale_broker_split_percent, 'Split corretor venda (%)')
   if (typeof saleBrokerSplitPercent === 'number') {
     commissionSettingsUpdate.sale_broker_split_percent = saleBrokerSplitPercent
@@ -605,6 +647,7 @@ export async function updatePropertyBasics(propertyId: string, payload: UpdatePr
   )
   if (typeof rentInitialCommissionPercent === 'number') {
     commissionSettingsUpdate.rent_initial_commission_percent = rentInitialCommissionPercent
+    payload.rent_commission_percent = rentInitialCommissionPercent
   }
 
   const rentRecurringCommissionPercent = parsePercentField(
@@ -625,6 +668,41 @@ export async function updatePropertyBasics(propertyId: string, payload: UpdatePr
     commissionSettingsUpdate.rent_partner_split_percent = rentPartnerSplitPercent
   }
 
+
+  if (
+    typeof payload.rent_first_month_fee_enabled !== 'undefined' &&
+    payload.rent_first_month_fee_enabled !== null
+  ) {
+    payload.rent_first_month_fee_enabled = Boolean(payload.rent_first_month_fee_enabled)
+  }
+
+  const rentFirstMonthFeePercent = parsePercentField(
+    payload.rent_first_month_fee_percent,
+    'Taxa primeiro aluguel (%)'
+  )
+  if (typeof rentFirstMonthFeePercent === 'number') {
+    payload.rent_first_month_fee_percent = rentFirstMonthFeePercent
+  }
+
+  if (typeof payload.rent_admin_fee_enabled !== 'undefined' && payload.rent_admin_fee_enabled !== null) {
+    payload.rent_admin_fee_enabled = Boolean(payload.rent_admin_fee_enabled)
+  }
+
+  const rentAdminFeePercent = parsePercentField(payload.rent_admin_fee_percent, 'Taxa administracao (%)')
+  if (typeof rentAdminFeePercent === 'number') {
+    payload.rent_admin_fee_percent = rentAdminFeePercent
+  }
+
+  if (typeof payload.contract_forum_city === 'string') {
+    const forumCity = payload.contract_forum_city.trim()
+    payload.contract_forum_city = forumCity || null
+  }
+
+  if (typeof payload.contract_forum_state === 'string') {
+    const forumState = payload.contract_forum_state.trim().toUpperCase()
+    payload.contract_forum_state = forumState || null
+  }
+
   if (
     typeof saleBrokerSplitPercent === 'number' &&
     typeof salePartnerSplitPercent === 'number' &&
@@ -641,6 +719,124 @@ export async function updatePropertyBasics(propertyId: string, payload: UpdatePr
     throw new Error('A soma dos splits de aluguel não pode ultrapassar 100%.')
   }
 
+  type FinancialTermsSnapshot = {
+    sale_commission_percent: number | null
+    rent_commission_percent: number | null
+    rent_first_month_fee_enabled: boolean
+    rent_first_month_fee_percent: number | null
+    rent_admin_fee_enabled: boolean
+    rent_admin_fee_percent: number | null
+  }
+
+  const currentFinancialTerms: FinancialTermsSnapshot = {
+    sale_commission_percent: toNumberOrNull(propertyOwner.sale_commission_percent ?? propertyOwner.commission_percent),
+    rent_commission_percent: toNumberOrNull(propertyOwner.rent_commission_percent),
+    rent_first_month_fee_enabled: Boolean(propertyOwner.rent_first_month_fee_enabled),
+    rent_first_month_fee_percent: toNumberOrNull(propertyOwner.rent_first_month_fee_percent),
+    rent_admin_fee_enabled: Boolean(propertyOwner.rent_admin_fee_enabled),
+    rent_admin_fee_percent: toNumberOrNull(propertyOwner.rent_admin_fee_percent),
+  }
+
+  const nextFinancialTerms: FinancialTermsSnapshot = {
+    ...currentFinancialTerms,
+  }
+
+  if (typeof saleCommissionPercent === 'number') {
+    nextFinancialTerms.sale_commission_percent = saleCommissionPercent
+  } else if (hasPayloadKey('sale_commission_percent') && isBlank(payload.sale_commission_percent)) {
+    nextFinancialTerms.sale_commission_percent = null
+  }
+
+  if (typeof rentCommissionPercent === 'number') {
+    nextFinancialTerms.rent_commission_percent = rentCommissionPercent
+  } else if (hasPayloadKey('rent_commission_percent') && isBlank(payload.rent_commission_percent)) {
+    nextFinancialTerms.rent_commission_percent = null
+  }
+
+  if (hasPayloadKey('rent_first_month_fee_enabled') && payload.rent_first_month_fee_enabled !== null) {
+    nextFinancialTerms.rent_first_month_fee_enabled = Boolean(payload.rent_first_month_fee_enabled)
+  }
+  if (typeof rentFirstMonthFeePercent === 'number') {
+    nextFinancialTerms.rent_first_month_fee_percent = rentFirstMonthFeePercent
+  } else if (hasPayloadKey('rent_first_month_fee_percent') && isBlank(payload.rent_first_month_fee_percent)) {
+    nextFinancialTerms.rent_first_month_fee_percent = null
+  }
+
+  if (hasPayloadKey('rent_admin_fee_enabled') && payload.rent_admin_fee_enabled !== null) {
+    nextFinancialTerms.rent_admin_fee_enabled = Boolean(payload.rent_admin_fee_enabled)
+  }
+  if (typeof rentAdminFeePercent === 'number') {
+    nextFinancialTerms.rent_admin_fee_percent = rentAdminFeePercent
+  } else if (hasPayloadKey('rent_admin_fee_percent') && isBlank(payload.rent_admin_fee_percent)) {
+    nextFinancialTerms.rent_admin_fee_percent = null
+  }
+
+  const trackedFinancialKeys: Array<keyof FinancialTermsSnapshot> = [
+    'sale_commission_percent',
+    'rent_commission_percent',
+    'rent_first_month_fee_enabled',
+    'rent_first_month_fee_percent',
+    'rent_admin_fee_enabled',
+    'rent_admin_fee_percent',
+  ]
+
+  const changedFinancialKeys = trackedFinancialKeys.filter((key) => {
+    const before = currentFinancialTerms[key]
+    const after = nextFinancialTerms[key]
+    return before !== after
+  })
+
+  const hasProtectedFinancialChanges = changedFinancialKeys.length > 0
+  let signedAuthorizationDoc: { id: string; authorization_snapshot: unknown } | null = null
+  let shouldLockFinancialTerms = false
+
+  if (hasProtectedFinancialChanges) {
+    const signedDocRes = await supabase
+      .from('document_instances')
+      .select('id, authorization_snapshot')
+      .eq('property_id', propertyId)
+      .in('template_code', AUTHORIZATION_TEMPLATE_CODES as unknown as string[])
+      .eq('status', 'signed')
+      .order('signed_at', { ascending: false })
+      .order('created_at', { ascending: false })
+      .limit(1)
+
+    if (signedDocRes.error && !isMissingRelationError(signedDocRes.error.message)) {
+      throw new Error(signedDocRes.error.message || 'Erro ao validar autorizacao digital assinada.')
+    }
+
+    signedAuthorizationDoc = ((signedDocRes.data ?? []) as Array<{ id: string; authorization_snapshot: unknown }>)[0] ?? null
+
+    if (signedAuthorizationDoc) {
+      const currentAuthorizationSnapshot = buildAuthorizationSnapshot({
+        registry_number: propertyOwner.registry_number,
+        address: propertyOwner.address,
+        address_number: propertyOwner.address_number,
+        address_complement: propertyOwner.address_complement,
+        neighborhood: propertyOwner.neighborhood,
+        city: propertyOwner.city,
+        state: propertyOwner.state,
+        postal_code: propertyOwner.postal_code,
+        sale_price: propertyOwner.price,
+        commission_percent: currentFinancialTerms.sale_commission_percent,
+        authorization_started_at: propertyOwner.authorization_started_at,
+        authorization_expires_at: propertyOwner.authorization_expires_at,
+        authorization_is_exclusive: propertyOwner.authorization_is_exclusive,
+      })
+
+      shouldLockFinancialTerms = !hasAuthorizationSnapshotMismatch({
+        snapshot: signedAuthorizationDoc.authorization_snapshot,
+        current: currentAuthorizationSnapshot,
+      })
+    }
+
+    if (shouldLockFinancialTerms && !isManager) {
+      throw new Error(
+        'Comissoes e taxas estao bloqueadas apos autorizacao digital assinada. Solicite ajuste para gestor/admin.'
+      )
+    }
+  }
+
   if (payload.owner_client_id === '') {
     payload.owner_client_id = null
   }
@@ -654,6 +850,14 @@ export async function updatePropertyBasics(propertyId: string, payload: UpdatePr
 
   if (typeof payload.authorization_is_exclusive !== 'undefined' && payload.authorization_is_exclusive !== null) {
     payload.authorization_is_exclusive = Boolean(payload.authorization_is_exclusive)
+  }
+
+  if (payload.authorization_started_at && !payload.authorization_expires_at) {
+    const startDate = new Date(String(payload.authorization_started_at))
+    if (!Number.isNaN(startDate.getTime())) {
+      startDate.setDate(startDate.getDate() + 180)
+      payload.authorization_expires_at = startDate.toISOString()
+    }
   }
 
   if (payload.authorization_started_at && payload.authorization_expires_at) {
@@ -722,7 +926,6 @@ export async function updatePropertyBasics(propertyId: string, payload: UpdatePr
 
   const updatePayload: Record<string, unknown> = { ...payload }
   const commissionSettingKeys = [
-    'sale_commission_percent',
     'sale_broker_split_percent',
     'sale_partner_split_percent',
     'rent_initial_commission_percent',
@@ -745,6 +948,28 @@ export async function updatePropertyBasics(propertyId: string, payload: UpdatePr
   if (error) {
     throw new Error(error.message || 'Erro ao atualizar imóvel.')
   }
+  if (hasProtectedFinancialChanges && shouldLockFinancialTerms && isManager && signedAuthorizationDoc?.id) {
+    const { error: auditError } = await supabase.from('document_events').insert({
+      document_id: signedAuthorizationDoc.id,
+      event_type: 'financial_terms_changed_after_signed_authorization',
+      payload: {
+        property_id: propertyId,
+        actor_user_id: actorProfile.id,
+        actor_role: actorProfile.role,
+        changed_fields: changedFinancialKeys,
+        before: currentFinancialTerms,
+        after: nextFinancialTerms,
+      },
+    })
+
+    if (auditError && !isMissingRelationError(auditError.message)) {
+      console.error(
+        'Falha ao registrar auditoria de comissao/taxas apos autorizacao assinada:',
+        auditError.message
+      )
+    }
+  }
+
 
   revalidatePath(`/properties/${propertyId}`)
   revalidatePath('/properties')
@@ -4486,4 +4711,3 @@ export async function transitionProposalStatus(input: ProposalTransitionInput) {
 
   return { success: false as const, error: 'Ação inválida.' }
 }
-

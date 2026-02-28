@@ -340,8 +340,11 @@ export default function PropertyFullEditorClient({
     sale_commission_percent: String((property as any).sale_commission_percent ?? (property as any).commission_percent ?? 5),
     sale_broker_split_percent: String((property as any).sale_broker_split_percent ?? 50),
     sale_partner_split_percent: String((property as any).sale_partner_split_percent ?? 0),
-    rent_initial_commission_percent: String((property as any).rent_initial_commission_percent ?? 10),
-    rent_recurring_commission_percent: String((property as any).rent_recurring_commission_percent ?? 8),
+    rent_commission_percent: String((property as any).rent_commission_percent ?? (property as any).rent_initial_commission_percent ?? 10),
+    rent_first_month_fee_enabled: Boolean((property as any).rent_first_month_fee_enabled ?? false),
+    rent_first_month_fee_percent: String((property as any).rent_first_month_fee_percent ?? ''),
+    rent_admin_fee_enabled: Boolean((property as any).rent_admin_fee_enabled ?? false),
+    rent_admin_fee_percent: String((property as any).rent_admin_fee_percent ?? ''),
     rent_broker_split_percent: String((property as any).rent_broker_split_percent ?? 50),
     rent_partner_split_percent: String((property as any).rent_partner_split_percent ?? 0),
     accepts_financing: Boolean((property as any).accepts_financing ?? false),
@@ -365,6 +368,8 @@ export default function PropertyFullEditorClient({
     authorization_started_at: String(property.authorization_started_at ?? '').slice(0, 10),
     authorization_expires_at: String(property.authorization_expires_at ?? '').slice(0, 10),
     authorization_is_exclusive: Boolean(property.authorization_is_exclusive ?? false),
+    contract_forum_city: String((property as any).contract_forum_city ?? ''),
+    contract_forum_state: String((property as any).contract_forum_state ?? ''),
     iptu_value: formatBRL(property.iptu_value as number | null),
     iptu_year: String(property.iptu_year ?? ''),
     iptu_is_paid: Boolean(property.iptu_is_paid ?? false),
@@ -472,14 +477,22 @@ export default function PropertyFullEditorClient({
     () => parseDecimalOrNull(form.sale_commission_percent) ?? 0,
     [form.sale_commission_percent]
   )
-  const rentInitialCommissionPercent = useMemo(
-    () => parseDecimalOrNull(form.rent_initial_commission_percent) ?? 0,
-    [form.rent_initial_commission_percent]
+  const rentCommissionPercent = useMemo(
+    () => parseDecimalOrNull(form.rent_commission_percent) ?? 0,
+    [form.rent_commission_percent]
   )
-  const rentRecurringCommissionPercent = useMemo(
-    () => parseDecimalOrNull(form.rent_recurring_commission_percent) ?? 0,
-    [form.rent_recurring_commission_percent]
+  const rentFirstMonthFeePercent = useMemo(
+    () => parseDecimalOrNull(form.rent_first_month_fee_percent) ?? 0,
+    [form.rent_first_month_fee_percent]
   )
+  const rentAdminFeePercent = useMemo(
+    () => parseDecimalOrNull(form.rent_admin_fee_percent) ?? 0,
+    [form.rent_admin_fee_percent]
+  )
+  const isRentPurpose = useMemo(() => {
+    const purpose = String(form.purpose || '').toLowerCase()
+    return purpose.includes('rent') || purpose.includes('alug') || purpose.includes('loca')
+  }, [form.purpose])
 
   const saleReferenceValue = useMemo(
     () => parseBRL(form.price) ?? parseBRL(form.sale_value) ?? 0,
@@ -495,13 +508,17 @@ export default function PropertyFullEditorClient({
     () => saleReferenceValue - saleCommissionValue,
     [saleReferenceValue, saleCommissionValue]
   )
-  const rentInitialCommissionValue = useMemo(
-    () => (rentReferenceValue * rentInitialCommissionPercent) / 100,
-    [rentReferenceValue, rentInitialCommissionPercent]
+  const rentCommissionValue = useMemo(
+    () => (rentReferenceValue * rentCommissionPercent) / 100,
+    [rentReferenceValue, rentCommissionPercent]
   )
-  const rentRecurringCommissionValue = useMemo(
-    () => (rentReferenceValue * rentRecurringCommissionPercent) / 100,
-    [rentReferenceValue, rentRecurringCommissionPercent]
+  const rentFirstMonthFeeValue = useMemo(
+    () => (rentReferenceValue * rentFirstMonthFeePercent) / 100,
+    [rentReferenceValue, rentFirstMonthFeePercent]
+  )
+  const rentAdminFeeValue = useMemo(
+    () => (rentReferenceValue * rentAdminFeePercent) / 100,
+    [rentReferenceValue, rentAdminFeePercent]
   )
 
   const loadOwnerPicker = async (query: string) => {
@@ -581,6 +598,11 @@ export default function PropertyFullEditorClient({
         'sale_commission_percent',
         'sale_broker_split_percent',
         'sale_partner_split_percent',
+        'rent_commission_percent',
+        'rent_first_month_fee_enabled',
+        'rent_first_month_fee_percent',
+        'rent_admin_fee_enabled',
+        'rent_admin_fee_percent',
         'rent_initial_commission_percent',
         'rent_recurring_commission_percent',
         'rent_broker_split_percent',
@@ -606,6 +628,8 @@ export default function PropertyFullEditorClient({
         'authorization_started_at',
         'authorization_expires_at',
         'authorization_is_exclusive',
+        'contract_forum_city',
+        'contract_forum_state',
         'iptu_value',
         'iptu_year',
         'iptu_is_paid',
@@ -930,9 +954,14 @@ export default function PropertyFullEditorClient({
 
         if (canEditCommissionPercent) {
           payload.sale_commission_percent = parseDecimalOrNull(form.sale_commission_percent)
-          payload.rent_initial_commission_percent = parseDecimalOrNull(form.rent_initial_commission_percent)
-          payload.rent_recurring_commission_percent = parseDecimalOrNull(form.rent_recurring_commission_percent)
+          payload.rent_commission_percent = parseDecimalOrNull(form.rent_commission_percent)
+          payload.rent_initial_commission_percent = parseDecimalOrNull(form.rent_commission_percent)
         }
+
+        payload.rent_first_month_fee_enabled = form.rent_first_month_fee_enabled
+        payload.rent_first_month_fee_percent = parseDecimalOrNull(form.rent_first_month_fee_percent)
+        payload.rent_admin_fee_enabled = form.rent_admin_fee_enabled
+        payload.rent_admin_fee_percent = parseDecimalOrNull(form.rent_admin_fee_percent)
 
         if (canViewLegalData) {
           payload.registry_number = form.registry_number || null
@@ -940,6 +969,8 @@ export default function PropertyFullEditorClient({
           payload.authorization_started_at = form.authorization_started_at || null
           payload.authorization_expires_at = form.authorization_expires_at || null
           payload.authorization_is_exclusive = form.authorization_is_exclusive
+          payload.contract_forum_city = form.contract_forum_city || null
+          payload.contract_forum_state = form.contract_forum_state || null
         }
 
         await updatePropertyBasics(String(property.id), payload as any)
@@ -995,6 +1026,12 @@ export default function PropertyFullEditorClient({
           authorization_is_exclusive: canViewLegalData
             ? form.authorization_is_exclusive
             : Boolean((property as any).authorization_is_exclusive ?? false),
+          contract_forum_city: canViewLegalData
+            ? form.contract_forum_city || null
+            : (property as any).contract_forum_city ?? null,
+          contract_forum_state: canViewLegalData
+            ? form.contract_forum_state || null
+            : (property as any).contract_forum_state ?? null,
           iptu_value: parseBRL(form.iptu_value),
           iptu_year: parseNumberOrNull(form.iptu_year),
           iptu_is_paid: form.iptu_is_paid,
@@ -1002,14 +1039,19 @@ export default function PropertyFullEditorClient({
           sale_commission_percent: canEditCommissionPercent
             ? parseDecimalOrNull(form.sale_commission_percent)
             : (property as any).sale_commission_percent ?? (property as any).commission_percent ?? null,
+          rent_commission_percent: canEditCommissionPercent
+            ? parseDecimalOrNull(form.rent_commission_percent)
+            : (property as any).rent_commission_percent ?? (property as any).rent_initial_commission_percent ?? null,
+          rent_first_month_fee_enabled: form.rent_first_month_fee_enabled,
+          rent_first_month_fee_percent: parseDecimalOrNull(form.rent_first_month_fee_percent),
+          rent_admin_fee_enabled: form.rent_admin_fee_enabled,
+          rent_admin_fee_percent: parseDecimalOrNull(form.rent_admin_fee_percent),
           sale_broker_split_percent: (property as any).sale_broker_split_percent ?? null,
           sale_partner_split_percent: (property as any).sale_partner_split_percent ?? null,
           rent_initial_commission_percent: canEditCommissionPercent
-            ? parseDecimalOrNull(form.rent_initial_commission_percent)
+            ? parseDecimalOrNull(form.rent_commission_percent)
             : (property as any).rent_initial_commission_percent ?? null,
-          rent_recurring_commission_percent: canEditCommissionPercent
-            ? parseDecimalOrNull(form.rent_recurring_commission_percent)
-            : (property as any).rent_recurring_commission_percent ?? null,
+          rent_recurring_commission_percent: (property as any).rent_recurring_commission_percent ?? null,
           rent_broker_split_percent: (property as any).rent_broker_split_percent ?? null,
           rent_partner_split_percent: (property as any).rent_partner_split_percent ?? null,
           commission_percent: canEditCommissionPercent
@@ -1570,74 +1612,114 @@ export default function PropertyFullEditorClient({
             </div>
           </div>
 
-          <div className="space-y-3">
-            <SectionHeader
-              title="Dados de aluguel"
-              subtitle="Parâmetros de locação mensal e temporada com comissões específicas."
-              icon={
-                <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M8 11V7a4 4 0 118 0v4m-9 0h10a2 2 0 012 2v5a2 2 0 01-2 2H7a2 2 0 01-2-2v-5a2 2 0 012-2z"
+          {isRentPurpose ? (
+            <div className="space-y-3">
+              <SectionHeader
+                title="Dados de aluguel"
+                subtitle="Comissao de locacao e taxas operacionais do contrato."
+                icon={
+                  <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M8 11V7a4 4 0 118 0v4m-9 0h10a2 2 0 012 2v5a2 2 0 01-2 2H7a2 2 0 01-2-2v-5a2 2 0 012-2z"
+                    />
+                  </svg>
+                }
+              />
+              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                <MoneyInput
+                  label="Aluguel anunciado"
+                  value={form.rent_price}
+                  disabled={!isEditing}
+                  onChange={(value) => setForm((prev) => ({ ...prev, rent_price: value }))}
+                  onBlur={() =>
+                    setForm((prev) => ({
+                      ...prev,
+                      rent_price: formatBRL(parseBRL(prev.rent_price) ?? null)
+                    }))
+                  }
+                />
+                <Input
+                  label="Comissao aluguel (%)"
+                  value={form.rent_commission_percent}
+                  type="number"
+                  inputMode="decimal"
+                  min="0"
+                  step="0.01"
+                  disabled={!isEditing || !canEditCommissionPercent}
+                  onChange={(event) =>
+                    setForm((prev) => ({ ...prev, rent_commission_percent: event.target.value }))
+                  }
+                />
+                <label className="flex items-center gap-2 text-sm text-[var(--foreground)]">
+                  <input
+                    type="checkbox"
+                    checked={form.rent_first_month_fee_enabled}
+                    disabled={!isEditing || !canEditCommissionPercent}
+                    onChange={(event) =>
+                      setForm((prev) => ({ ...prev, rent_first_month_fee_enabled: event.target.checked }))
+                    }
                   />
-                </svg>
-              }
-            />
-            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-              <MoneyInput
-                label="Aluguel anunciado"
-                value={form.rent_price}
-                disabled={!isEditing}
-                onChange={(value) => setForm((prev) => ({ ...prev, rent_price: value }))}
-                onBlur={() =>
-                  setForm((prev) => ({
-                    ...prev,
-                    rent_price: formatBRL(parseBRL(prev.rent_price) ?? null)
-                  }))
-                }
-              />
-              <Input
-                label="Comissão aluguel (%)"
-                value={form.rent_initial_commission_percent}
-                type="number"
-                inputMode="decimal"
-                min="0"
-                step="0.01"
-                disabled={!isEditing || !canEditCommissionPercent}
-                onChange={(event) =>
-                  setForm((prev) => ({ ...prev, rent_initial_commission_percent: event.target.value }))
-                }
-              />
-              <Input
-                label="Comissão aluguel Temporada (%)"
-                value={form.rent_recurring_commission_percent}
-                type="number"
-                inputMode="decimal"
-                min="0"
-                step="0.01"
-                disabled={!isEditing || !canEditCommissionPercent}
-                onChange={(event) =>
-                  setForm((prev) => ({ ...prev, rent_recurring_commission_percent: event.target.value }))
-                }
-              />
-            </div>
-            <div className="grid gap-3">
-              <div className="rounded-[var(--radius)] border border-[var(--border)] p-3">
-                <p className="text-xs text-[var(--muted-foreground)]">Resumo aluguel</p>
-                <p className="mt-1 text-sm font-medium text-[var(--foreground)]">
-                  Base mensal: {rentReferenceValue > 0 ? `R$ ${formatBRL(rentReferenceValue)}` : '-'}
-                </p>
-                <p className="text-sm text-[var(--foreground)]">
-                  Comissão inicial: {rentInitialCommissionValue > 0 ? `R$ ${formatBRL(rentInitialCommissionValue)}` : '-'}
-                </p>
-                <p className="text-sm text-[var(--foreground)]">
-                  Comissão recorrente: {rentRecurringCommissionValue > 0 ? `R$ ${formatBRL(rentRecurringCommissionValue)}` : '-'}
-                </p>
+                  Taxa 1o aluguel ativa
+                </label>
+                <Input
+                  label="Taxa 1o aluguel (%)"
+                  value={form.rent_first_month_fee_percent}
+                  type="number"
+                  inputMode="decimal"
+                  min="0"
+                  step="0.01"
+                  disabled={!isEditing || !canEditCommissionPercent || !form.rent_first_month_fee_enabled}
+                  onChange={(event) =>
+                    setForm((prev) => ({ ...prev, rent_first_month_fee_percent: event.target.value }))
+                  }
+                />
+                <label className="flex items-center gap-2 text-sm text-[var(--foreground)]">
+                  <input
+                    type="checkbox"
+                    checked={form.rent_admin_fee_enabled}
+                    disabled={!isEditing || !canEditCommissionPercent}
+                    onChange={(event) =>
+                      setForm((prev) => ({ ...prev, rent_admin_fee_enabled: event.target.checked }))
+                    }
+                  />
+                  Taxa administracao ativa
+                </label>
+                <Input
+                  label="Taxa administracao (%)"
+                  value={form.rent_admin_fee_percent}
+                  type="number"
+                  inputMode="decimal"
+                  min="0"
+                  step="0.01"
+                  disabled={!isEditing || !canEditCommissionPercent || !form.rent_admin_fee_enabled}
+                  onChange={(event) =>
+                    setForm((prev) => ({ ...prev, rent_admin_fee_percent: event.target.value }))
+                  }
+                />
+              </div>
+              <div className="grid gap-3">
+                <div className="rounded-[var(--radius)] border border-[var(--border)] p-3">
+                  <p className="text-xs text-[var(--muted-foreground)]">Resumo aluguel</p>
+                  <p className="mt-1 text-sm font-medium text-[var(--foreground)]">
+                    Base mensal: {rentReferenceValue > 0 ? `R$ ${formatBRL(rentReferenceValue)}` : '-'}
+                  </p>
+                  <p className="text-sm text-[var(--foreground)]">
+                    Comissao aluguel: {rentCommissionValue > 0 ? `R$ ${formatBRL(rentCommissionValue)}` : '-'}
+                  </p>
+                  <p className="text-sm text-[var(--foreground)]">
+                    Taxa 1o aluguel: {form.rent_first_month_fee_enabled && rentFirstMonthFeeValue > 0 ? `R$ ${formatBRL(rentFirstMonthFeeValue)}` : '-'}
+                  </p>
+                  <p className="text-sm text-[var(--foreground)]">
+                    Taxa administracao: {form.rent_admin_fee_enabled && rentAdminFeeValue > 0 ? `R$ ${formatBRL(rentAdminFeeValue)}` : '-'}
+                  </p>
+                </div>
               </div>
             </div>
-          </div>
+          ) : null}
+
 
           <div className="space-y-3">
             <SectionHeader
@@ -1845,6 +1927,22 @@ export default function PropertyFullEditorClient({
                     setForm((prev) => ({ ...prev, authorization_expires_at: event.target.value }))
                   }
                 />
+                <Input
+                  label="Foro (cidade)"
+                  value={form.contract_forum_city}
+                  disabled={!isEditing}
+                  onChange={(event) =>
+                    setForm((prev) => ({ ...prev, contract_forum_city: event.target.value }))
+                  }
+                />
+                <Input
+                  label="Foro (UF)"
+                  value={form.contract_forum_state}
+                  disabled={!isEditing}
+                  onChange={(event) =>
+                    setForm((prev) => ({ ...prev, contract_forum_state: event.target.value.toUpperCase() }))
+                  }
+                />
                 <label className="flex items-center gap-2 text-sm text-[var(--foreground)]">
                   <input
                     type="checkbox"
@@ -1854,7 +1952,7 @@ export default function PropertyFullEditorClient({
                       setForm((prev) => ({ ...prev, authorization_is_exclusive: event.target.checked }))
                     }
                   />
-                  Autorização exclusiva
+                  Gestao centralizada
                 </label>
                 <MoneyInput
                   label="IPTU (valor)"
