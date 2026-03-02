@@ -1,4 +1,4 @@
-﻿begin;
+begin;
 
 -- Sprint B: deal financial snapshot + commission lifecycle integration
 
