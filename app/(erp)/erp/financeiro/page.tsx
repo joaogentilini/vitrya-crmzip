@@ -1,6 +1,7 @@
 import { requireRole, type UserProfile } from '@/lib/auth'
 import { createClient } from '@/lib/supabaseServer'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card'
+import DealFinancialActionsClient from './DealFinancialActionsClient'
 
 export const dynamic = 'force-dynamic'
 
@@ -127,6 +128,13 @@ function formatCurrency(value: number): string {
 
 function formatPercent(value: number): string {
   return PERCENT.format(value / 100)
+}
+
+function formatDealCommissionStatus(value: string): string {
+  const normalized = value.toLowerCase()
+  if (normalized === 'payable') return 'A pagar'
+  if (normalized === 'paid') return 'Paga'
+  return 'Aguardando recebimento'
 }
 
 function isReceivedStatus(status: string): boolean {
@@ -514,6 +522,183 @@ export default async function ErpFinanceiroPage({ searchParams }: PageProps) {
     .sort((a, b) => b.value - a.value)
     .slice(0, 8)
 
+  let dealSnapshotsTableAvailable = true
+  let dealSnapshotsError: string | null = null
+  type DealFinancialRow = {
+    dealId: string
+    propertyTitle: string
+    brokerName: string
+    closedAt: string | null
+    grossValue: number
+    totalCommissionValue: number
+    brokerCommissionValue: number
+    companyCommissionValue: number
+    partnerCommissionValue: number
+    snapshotStatus: 'waiting_receipt' | 'payable' | 'paid'
+    receivableId: string | null
+    receivableStatus: string | null
+    brokerDistributionCount: number
+    brokerDistributionReleased: number
+    brokerDistributionPaid: number
+    brokerPayablesOpen: number
+    brokerPayablesPaid: number
+  }
+  let dealFinancialRows: DealFinancialRow[] = []
+
+  const snapshotsRes = await supabase
+    .from('deal_commission_snapshots')
+    .select(
+      'id, deal_id, property_id, broker_user_id, gross_value, total_commission_value, broker_commission_value, company_commission_value, partner_commission_value, status, created_at'
+    )
+    .order('created_at', { ascending: false })
+    .limit(200)
+
+  if (snapshotsRes.error) {
+    if (isMissingRelationError(snapshotsRes.error)) {
+      dealSnapshotsTableAvailable = false
+    } else {
+      dealSnapshotsError = snapshotsRes.error.message || 'Erro ao carregar snapshots de comissao por deal.'
+    }
+  } else {
+    const snapshotRows = ((snapshotsRes.data ?? []) as Array<Record<string, unknown>>).filter((row) => {
+      if (!selectedBrokerId) return true
+      return String(row.broker_user_id || '') === selectedBrokerId
+    })
+
+    const dealIds = Array.from(new Set(snapshotRows.map((row) => String(row.deal_id || '')).filter(Boolean)))
+    const brokerIds = Array.from(new Set(snapshotRows.map((row) => String(row.broker_user_id || '')).filter(Boolean)))
+    const propertyIdsForDeals = Array.from(new Set(snapshotRows.map((row) => String(row.property_id || '')).filter(Boolean)))
+
+    const [dealRowsRes, brokerRowsRes, propertyRowsRes, receivableRowsRes, distributionRowsRes] = await Promise.all([
+      dealIds.length > 0
+        ? supabase.from('deals').select('id, closed_at, property_id').in('id', dealIds)
+        : Promise.resolve({ data: [], error: null }),
+      brokerIds.length > 0
+        ? supabase.from('profiles').select('id, full_name, email').in('id', brokerIds)
+        : Promise.resolve({ data: [], error: null }),
+      propertyIdsForDeals.length > 0
+        ? supabase.from('properties').select('id, title').in('id', propertyIdsForDeals)
+        : Promise.resolve({ data: [], error: null }),
+      dealIds.length > 0
+        ? supabase
+            .from('receivables')
+            .select('id, origin_id, status')
+            .eq('origin_type', 'deal')
+            .in('origin_id', dealIds)
+        : Promise.resolve({ data: [], error: null }),
+      dealIds.length > 0
+        ? supabase
+            .from('finance_distributions')
+            .select('id, deal_id, role, amount, payout_status')
+            .in('deal_id', dealIds)
+            .eq('role', 'broker')
+        : Promise.resolve({ data: [], error: null }),
+    ])
+
+    const dealMap = new Map(
+      ((dealRowsRes.data ?? []) as Array<{ id: string; closed_at: string | null; property_id: string | null }>).map((row) => [
+        row.id,
+        row,
+      ])
+    )
+
+    const brokerMap = new Map(
+      ((brokerRowsRes.data ?? []) as Array<{ id: string; full_name: string | null; email: string | null }>).map((row) => [
+        row.id,
+        row,
+      ])
+    )
+
+    const propertyMap = new Map(
+      ((propertyRowsRes.data ?? []) as Array<{ id: string; title: string | null }>).map((row) => [row.id, row])
+    )
+
+    const receivableMap = new Map(
+      ((receivableRowsRes.data ?? []) as Array<{ id: string; origin_id: string | null; status: string | null }>)
+        .filter((row) => !!row.origin_id)
+        .map((row) => [String(row.origin_id), row])
+    )
+
+    const distributionRows = (distributionRowsRes.data ?? []) as Array<{
+      id: string
+      deal_id: string | null
+      role: string | null
+      amount: number | null
+      payout_status: string | null
+    }>
+    const distributionByDeal = new Map<string, Array<typeof distributionRows[number]>>()
+    for (const row of distributionRows) {
+      const key = String(row.deal_id || '')
+      if (!key) continue
+      const list = distributionByDeal.get(key) ?? []
+      list.push(row)
+      distributionByDeal.set(key, list)
+    }
+
+    const distributionIds = distributionRows.map((row) => row.id).filter(Boolean)
+    const payableRowsRes =
+      distributionIds.length > 0
+        ? await supabase
+            .from('payables')
+            .select('id, origin_id, status')
+            .eq('origin_type', 'deal_commission_distribution')
+            .in('origin_id', distributionIds)
+        : { data: [], error: null as { message?: string } | null }
+
+    const payablesByDistribution = new Map<string, Array<{ id: string; origin_id: string | null; status: string | null }>>()
+    for (const row of (payableRowsRes.data ?? []) as Array<{ id: string; origin_id: string | null; status: string | null }>) {
+      const key = String(row.origin_id || '')
+      if (!key) continue
+      const list = payablesByDistribution.get(key) ?? []
+      list.push(row)
+      payablesByDistribution.set(key, list)
+    }
+
+    dealFinancialRows = snapshotRows.map((row) => {
+      const dealId = String(row.deal_id || '')
+      const brokerId = String(row.broker_user_id || '')
+      const propertyId = String(row.property_id || '')
+      const deal = dealMap.get(dealId)
+      const broker = brokerMap.get(brokerId)
+      const propertyFromMap = propertyMap.get(propertyId)
+      const receivable = receivableMap.get(dealId)
+      const distributions = distributionByDeal.get(dealId) ?? []
+      const brokerDistributionCount = distributions.length
+      const brokerDistributionReleased = distributions.filter(
+        (item) => String(item.payout_status || '').toLowerCase() === 'released'
+      ).length
+      const brokerDistributionPaid = distributions.filter((item) => String(item.payout_status || '').toLowerCase() === 'paid').length
+
+      const payableRows = distributions.flatMap((item) => payablesByDistribution.get(item.id) ?? [])
+      const brokerPayablesOpen = payableRows.filter((item) => String(item.status || '').toLowerCase() !== 'paid').length
+      const brokerPayablesPaid = payableRows.filter((item) => String(item.status || '').toLowerCase() === 'paid').length
+
+      const snapshotStatusRaw = String(row.status || '').toLowerCase()
+      const snapshotStatus: 'waiting_receipt' | 'payable' | 'paid' =
+        snapshotStatusRaw === 'payable' ? 'payable' : snapshotStatusRaw === 'paid' ? 'paid' : 'waiting_receipt'
+
+      return {
+        dealId,
+        propertyTitle: propertyFromMap?.title || `Imovel ${propertyId.slice(0, 8)}`,
+        brokerName: broker?.full_name || broker?.email || (brokerId ? `Corretor ${brokerId.slice(0, 8)}` : 'Nao informado'),
+        closedAt: deal?.closed_at ?? null,
+        grossValue: Math.max(toFiniteNumber(row.gross_value) ?? 0, 0),
+        totalCommissionValue: Math.max(toFiniteNumber(row.total_commission_value) ?? 0, 0),
+        brokerCommissionValue: Math.max(toFiniteNumber(row.broker_commission_value) ?? 0, 0),
+        companyCommissionValue: Math.max(toFiniteNumber(row.company_commission_value) ?? 0, 0),
+        partnerCommissionValue: Math.max(toFiniteNumber(row.partner_commission_value) ?? 0, 0),
+        snapshotStatus,
+        receivableId: receivable?.id ?? null,
+        receivableStatus: receivable?.status ?? null,
+        brokerDistributionCount,
+        brokerDistributionReleased,
+        brokerDistributionPaid,
+        brokerPayablesOpen,
+        brokerPayablesPaid,
+      }
+    })
+  }
+
   return (
     <div className="space-y-6">
       <div className="space-y-2">
@@ -645,6 +830,88 @@ export default async function ErpFinanceiroPage({ searchParams }: PageProps) {
             <div className="text-xs text-slate-500">Media de comissão</div>
             <div className="text-2xl font-bold text-slate-900">{formatPercent(intervalCommissionAverage)}</div>
           </div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base">Fechamentos e comissoes (deals)</CardTitle>
+          <p className="text-xs text-slate-500">
+            Ao confirmar recebimento, a comissao do corretor muda de aguardando recebimento para a pagar.
+          </p>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          {dealSnapshotsError ? (
+            <p className="rounded-md border border-red-200 bg-red-50 p-3 text-xs text-red-700">{dealSnapshotsError}</p>
+          ) : null}
+
+          {!dealSnapshotsTableAvailable ? (
+            <p className="rounded-md border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800">
+              A tabela `deal_commission_snapshots` ainda nao esta disponivel neste banco.
+            </p>
+          ) : null}
+
+          {dealSnapshotsTableAvailable && !dealSnapshotsError && dealFinancialRows.length === 0 ? (
+            <p className="rounded-md border border-slate-200 bg-slate-50 p-3 text-sm text-slate-600">
+              Nenhum deal confirmado com snapshot de comissao no intervalo atual.
+            </p>
+          ) : null}
+
+          {dealSnapshotsTableAvailable && !dealSnapshotsError && dealFinancialRows.length > 0 ? (
+            <div className="space-y-3">
+              {dealFinancialRows.slice(0, 30).map((row) => (
+                <div key={row.dealId} className="rounded-xl border border-slate-200 p-3">
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div className="space-y-1">
+                      <div className="text-sm font-semibold text-slate-900">{row.propertyTitle}</div>
+                      <div className="text-xs text-slate-500">
+                        Deal {row.dealId.slice(0, 8)} • Corretor: {row.brokerName}
+                      </div>
+                      <div className="text-xs text-slate-500">
+                        Fechado em: {row.closedAt ? new Date(row.closedAt).toLocaleDateString('pt-BR') : '-'}
+                      </div>
+                    </div>
+
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="rounded-full bg-slate-100 px-2 py-1 text-[11px] font-semibold text-slate-700">
+                        {formatDealCommissionStatus(row.snapshotStatus)}
+                      </span>
+                      <span className="rounded-full bg-indigo-50 px-2 py-1 text-[11px] font-semibold text-indigo-700">
+                        Recebivel: {row.receivableStatus ? row.receivableStatus : 'nao criado'}
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="mt-3 grid grid-cols-1 gap-2 text-xs text-slate-600 md:grid-cols-3">
+                    <div className="rounded-md border border-slate-200 bg-slate-50 p-2">
+                      <div>Valor do negocio</div>
+                      <div className="text-sm font-bold text-slate-900">{formatCurrency(row.grossValue)}</div>
+                    </div>
+                    <div className="rounded-md border border-slate-200 bg-slate-50 p-2">
+                      <div>Comissao total</div>
+                      <div className="text-sm font-bold text-slate-900">{formatCurrency(row.totalCommissionValue)}</div>
+                    </div>
+                    <div className="rounded-md border border-slate-200 bg-slate-50 p-2">
+                      <div>Comissao do corretor</div>
+                      <div className="text-sm font-bold text-slate-900">{formatCurrency(row.brokerCommissionValue)}</div>
+                    </div>
+                  </div>
+
+                  <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
+                    <div className="text-xs text-slate-500">
+                      Distribuicoes broker: {row.brokerDistributionCount} • liberadas: {row.brokerDistributionReleased} •
+                      pagas: {row.brokerDistributionPaid} • payables em aberto: {row.brokerPayablesOpen}
+                    </div>
+                    <DealFinancialActionsClient
+                      dealId={row.dealId}
+                      canManage={isManager}
+                      snapshotStatus={row.snapshotStatus}
+                    />
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : null}
         </CardContent>
       </Card>
 
