@@ -8,6 +8,7 @@
     "start": "next start -H 0.0.0.0 -p 3000",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
+    "migrations:check-duplicates": "node scripts/migrations/check-duplicate-versions.mjs",
     "seed:alto-padrao": "tsx scripts/seed_alto_padrao_from_csv.ts",
     "seed:template:alto-padrao": "tsx scripts/seed_template_alto_padrao_from_csv.ts"
   },
