@@ -24,6 +24,7 @@ import {
   type PropertyConfirmedDealRow,
   type PropertyPersonOption,
   type PropertyContractInProgressRow,
+  type PropertyDealCommissionSnapshotRow,
   type PersonSearchRow,
 } from '../actions'
 
@@ -222,6 +223,13 @@ function getContractStatusLabel(status: string | null | undefined): string {
   }
 }
 
+function getDealCommissionStatusLabel(status: string | null | undefined): string {
+  const normalized = String(status || '').toLowerCase()
+  if (normalized === 'payable') return 'A pagar'
+  if (normalized === 'paid') return 'Paga'
+  return 'Aguardando recebimento'
+}
+
 function getProposalEventKey(row: NegotiationRow): string | null {
   if (!row.proposal?.id) return null
   const stamp = row.proposal.sent_at ?? row.proposal.updated_at ?? row.proposal.created_at
@@ -269,6 +277,7 @@ export default function PropertyNegotiationsTabClient({
   const [defaultSellerPersonId, setDefaultSellerPersonId] = useState<string | null>(null)
   const [contractInProgress, setContractInProgress] = useState<PropertyContractInProgressRow | null>(null)
   const [latestConfirmedDeal, setLatestConfirmedDeal] = useState<PropertyConfirmedDealRow | null>(null)
+  const [latestCommissionSnapshot, setLatestCommissionSnapshot] = useState<PropertyDealCommissionSnapshotRow | null>(null)
 
   // comissão (UI)
   const [commissionGross, setCommissionGross] = useState<number>(0)
@@ -519,6 +528,7 @@ export default function PropertyNegotiationsTabClient({
       setDefaultBuyerPersonId(dealContext.defaultBuyerPersonId ?? null)
       setDefaultSellerPersonId(dealContext.defaultSellerPersonId ?? null)
       setContractInProgress(dealContext.contractInProgress ?? null)
+      setLatestCommissionSnapshot(dealContext.latestCommissionSnapshot ?? null)
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Erro ao carregar negociações.'
       setError(message)
@@ -1171,7 +1181,7 @@ export default function PropertyNegotiationsTabClient({
             </div>
           ) : null}
 
-          <div className="grid grid-cols-1 gap-3 md:grid-cols-4">
+          <div className="grid grid-cols-1 gap-3 md:grid-cols-5">
             <div className="rounded-[var(--radius)] border border-[var(--border)] p-3">
               <div className="text-xs text-[var(--muted-foreground)]">Valor referencia</div>
               <div className="text-lg font-extrabold text-[var(--foreground)]">{formatCurrency(propertyValue)}</div>
@@ -1204,6 +1214,23 @@ export default function PropertyNegotiationsTabClient({
               {latestConfirmedDeal && latestConfirmedDeal.gross_value !== null ? (
                 <div className="mt-1 text-xs font-semibold text-[var(--foreground)]">
                   {formatCurrency(latestConfirmedDeal.gross_value)}
+                </div>
+              ) : null}
+            </div>
+
+            <div className="rounded-[var(--radius)] border border-[var(--border)] p-3">
+              <div className="text-xs text-[var(--muted-foreground)]">Comissao (deal)</div>
+              <div className="text-sm font-extrabold text-[var(--foreground)]">
+                {latestCommissionSnapshot
+                  ? getDealCommissionStatusLabel(latestCommissionSnapshot.status)
+                  : 'Nao gerada'}
+              </div>
+              <div className="mt-1 text-xs text-[var(--muted-foreground)]">
+                Recebivel: {latestCommissionSnapshot?.receivable_status || '-'}
+              </div>
+              {latestCommissionSnapshot ? (
+                <div className="mt-1 text-xs font-semibold text-[var(--foreground)]">
+                  Corretor: {formatCurrency(latestCommissionSnapshot.broker_commission_value)}
                 </div>
               ) : null}
             </div>

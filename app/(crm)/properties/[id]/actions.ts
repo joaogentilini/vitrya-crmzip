@@ -11,7 +11,7 @@ import {
 import { requireActiveUser, requireRole } from '@/lib/auth'
 import { buildAmenitiesSnapshot } from '@/lib/maps/googlePlaces'
 import type { AmenitiesSnapshotData, PropertyLocationSource } from '@/lib/maps/types'
-import { ensureReceivablesForProposal } from '@/lib/finance/distributions'
+import { ensureDealFinancials, ensureReceivablesForProposal } from '@/lib/finance/distributions'
 import {
   AUTHORIZATION_TEMPLATE_CODES,
   buildAuthorizationSnapshot,
@@ -2950,6 +2950,19 @@ export type PropertyContractInProgressRow = {
   gross_value: number | null
 }
 
+export type PropertyDealCommissionSnapshotRow = {
+  id: string
+  deal_id: string
+  status: 'waiting_receipt' | 'payable' | 'paid' | string
+  gross_value: number | null
+  total_commission_value: number | null
+  broker_commission_value: number | null
+  company_commission_value: number | null
+  partner_commission_value: number | null
+  receivable_id: string | null
+  receivable_status: string | null
+}
+
 export async function getPropertyDealCloseContext(propertyId: string): Promise<{
   proposals: PropertyDealProposalOption[]
   latestConfirmedDeal: PropertyDealRow | null
@@ -2958,6 +2971,7 @@ export async function getPropertyDealCloseContext(propertyId: string): Promise<{
   defaultBuyerPersonId: string | null
   defaultSellerPersonId: string | null
   contractInProgress: PropertyContractInProgressRow | null
+  latestCommissionSnapshot: PropertyDealCommissionSnapshotRow | null
 }> {
   await requireActiveUser()
 
@@ -3130,6 +3144,53 @@ export async function getPropertyDealCloseContext(propertyId: string): Promise<{
     }
   }
 
+  let latestCommissionSnapshot: PropertyDealCommissionSnapshotRow | null = null
+  const targetDealId = latestConfirmedDeal?.id ?? null
+  if (targetDealId) {
+    const snapshotRes = await supabase
+      .from('deal_commission_snapshots')
+      .select(
+        'id, deal_id, status, gross_value, total_commission_value, broker_commission_value, company_commission_value, partner_commission_value'
+      )
+      .eq('deal_id', targetDealId)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle()
+
+    if (!snapshotRes.error && snapshotRes.data?.id) {
+      const snapshot = snapshotRes.data as {
+        id: string
+        deal_id: string
+        status: string | null
+        gross_value: number | null
+        total_commission_value: number | null
+        broker_commission_value: number | null
+        company_commission_value: number | null
+        partner_commission_value: number | null
+      }
+
+      const receivableRes = await supabase
+        .from('receivables')
+        .select('id, status')
+        .eq('origin_type', 'deal')
+        .eq('origin_id', targetDealId)
+        .maybeSingle()
+
+      latestCommissionSnapshot = {
+        id: snapshot.id,
+        deal_id: snapshot.deal_id,
+        status: snapshot.status ?? 'waiting_receipt',
+        gross_value: snapshot.gross_value ?? null,
+        total_commission_value: snapshot.total_commission_value ?? null,
+        broker_commission_value: snapshot.broker_commission_value ?? null,
+        company_commission_value: snapshot.company_commission_value ?? null,
+        partner_commission_value: snapshot.partner_commission_value ?? null,
+        receivable_id: (receivableRes.data as { id?: string } | null)?.id ?? null,
+        receivable_status: (receivableRes.data as { status?: string } | null)?.status ?? null,
+      }
+    }
+  }
+
   return {
     proposals,
     latestConfirmedDeal: (latestConfirmedDeal as PropertyDealRow | null) ?? null,
@@ -3138,6 +3199,7 @@ export async function getPropertyDealCloseContext(propertyId: string): Promise<{
     defaultBuyerPersonId,
     defaultSellerPersonId,
     contractInProgress,
+    latestCommissionSnapshot,
   }
 }
 
@@ -3779,7 +3841,7 @@ export async function markAsSold(input: {
 
   const { data: property, error: propertyErr } = await supabase
     .from('properties')
-    .select('id, owner_user_id, purpose, price, rent_price')
+    .select('id, owner_user_id, purpose, price, rent_price, deal_status')
     .eq('id', propertyId)
     .maybeSingle()
 
@@ -3927,8 +3989,36 @@ export async function markAsSold(input: {
     return { success: false, error: soldResult.error || 'Nao foi possivel marcar o imovel como vendido.' }
   }
 
+  const financialSync = await ensureDealFinancials({
+    dealId: targetDeal.id,
+    actorUserId: actorId,
+  })
+  if (!financialSync.ok) {
+    const previousCommercialStatus =
+      property.deal_status === 'sold' ? 'sold' : property.deal_status === 'reserved' ? 'reserved' : null
+
+    await updatePropertyDealStatus(propertyId, previousCommercialStatus)
+    if (updatedDealInThisFlow) {
+      await supabase
+        .from('deals')
+        .update({
+          status: previousStatus,
+          closed_at: previousClosedAt,
+          gross_value: previousGrossValue,
+        })
+        .eq('id', targetDeal.id)
+    }
+
+    return {
+      success: false,
+      error: `Deal confirmado, mas falhou ao gerar financeiro/comissao: ${financialSync.error}`,
+    }
+  }
+
   revalidatePath(`/properties/${propertyId}`)
   revalidatePath('/properties')
+  revalidatePath('/erp/financeiro')
+  revalidatePath('/perfil/financeiro')
 
   return { success: true, deal: targetDeal }
 }
