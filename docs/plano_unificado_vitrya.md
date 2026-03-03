@@ -260,4 +260,119 @@ Palavra-chave de retomada:
 RETOMAR: VITRYA-MASTERDOC
 ```
 
+---
 
+## 14. PLANO V1 EXECUTAVEL (2026-03-02)
+
+### Opiniao tecnica sincera (antes de executar)
+
+1. O diagnostico do produto esta correto: CRM forte, Vitrine forte, gap principal no ERP.
+2. O plano anterior cobre bem o "o que", mas mistura demais o "como" e o "quando".
+3. Para V1 real, o risco maior nao e UI, e integracao omnichannel + operacao diaria (SLA, fila, ownership e qualidade de dados).
+4. Sem gate de aceite por fase, o projeto alonga e nao fecha V1 de verdade.
+
+### Escopo V1 (o que precisa estar pronto)
+
+1. ERP sem placeholders:
+   - Visao Geral
+   - Negociacoes
+   - Contratos/Vendas
+   - Relatorios (DRE simplificada + Fluxo de Caixa)
+2. Chat unificado operacional para corretor:
+   - WhatsApp
+   - Instagram
+   - Facebook
+   - Portais (OLX/Grupo OLX)
+3. Automacao de qualificacao e follow-up com regras editaveis.
+4. Portal do Cliente funcional (login + acompanhamento basico).
+5. Higiene de publicacao (sem imovel incompleto na vitrine publica).
+
+### Ordem de execucao recomendada (sequencia obrigatoria)
+
+1. Fase 0 - Trava de escopo e criterio de pronto (3 dias)
+   - Definir o que entra em V1 e o que fica para V1.1.
+   - Definir KPI de aceite por modulo.
+   - Congelar backlog paralelo durante execucao V1.
+
+2. Fase 1 - ERP base visivel (2 semanas)
+   - Implementar `app/(erp)/erp/page.tsx` com KPIs executivos reais.
+   - Implementar `app/(erp)/erp/negociacoes/page.tsx` com lista, filtro e status machine.
+   - Implementar `app/(erp)/erp/contratos/page.tsx` com deals confirmados e status financeiro.
+   - Implementar `app/(erp)/erp/relatorios/page.tsx` com DRE simplificada + Fluxo de Caixa.
+   - Reusar tabelas ja existentes: `deals`, `deal_commission_snapshots`, `receivables`, `payables`, `payments`.
+
+3. Fase 2 - Higiene de dados e vitrine (3 dias)
+   - Bloquear publicacao sem foto, bairro/cidade e lat/lng.
+   - Ajustar `v_public_properties`/`v_public_properties_ext` para filtrar imovel incompleto.
+   - Limpar dados de teste da vitrine.
+
+4. Fase 3 - Chat unificado (Sprint 1: fundacao, 2 semanas)
+   - Criar schema de inbox (`conversations`, `messages`, `conversation_participants`, `conversation_labels`).
+   - Criar tela Inbox no CRM com lista de conversas + painel de contexto (lead/imovel/historico).
+   - Integrar WhatsApp primeiro (canal piloto).
+   - Garantir tempo real via Realtime e trilha de auditoria.
+
+5. Fase 4 - Chat unificado (Sprint 2: multicanal, 2 semanas)
+   - Integrar Instagram e Facebook via Graph API.
+   - Conectar ingestao de portais ao mesmo pipeline de conversa (base de portal ja existe).
+   - Implementar roteamento por corretor com ownership claro.
+
+6. Fase 5 - IA de qualificacao e follow-up (2 semanas)
+   - Bot de qualificacao por origem/canal (compra x locacao, faixa de preco, urgencia).
+   - Preencher campos do lead automaticamente.
+   - Regras de follow-up por tempo sem resposta.
+   - Painel admin para templates e regras (aproveitar base de automations existente).
+
+7. Fase 6 - Portal do Cliente (1 semana)
+   - Entregar rota publica real para "Acesso Cliente".
+   - Login (magic link) + timeline de proposta/negociacao + documentos + boletos.
+
+8. Fase 7 - Locacao MVP financeiro (2 semanas)
+   - Contrato de locacao com parcelas mensais.
+   - Baixa automatica por webhook e repasse ao proprietario.
+   - Extrato simples de repasse.
+
+9. Fase 8 - Go-live V1 (1 semana)
+   - Testes E2E dos fluxos criticos.
+   - Hardening de RLS, logs e monitoramento.
+   - Treinamento rapido do time e checklist de operacao.
+
+### Prazos realistas
+
+1. Equipe enxuta (1 dev full-time): 14 a 18 semanas.
+2. Equipe pequena (2 devs full-time): 10 a 12 semanas.
+3. O maior risco de prazo esta em APIs de canais (Meta/WhatsApp) e governanca operacional.
+
+### Gates de aceite (Definition of Done)
+
+1. Gate ERP: nenhuma rota ERP em placeholder.
+2. Gate Publico: nenhum imovel incompleto listado em `/imoveis`.
+3. Gate Chat: 100% das entradas dos canais chegam no Inbox com dono.
+4. Gate IA: automacao cria acao de follow-up sem intervenção manual.
+5. Gate Cliente: botao "Acesso Cliente" leva para fluxo funcional.
+
+Documento de execucao atual:
+- `docs/FASE0_FASE1_EXECUCAO.md`
+- `docs/FASE2_EXECUCAO.md`
+
+### Endpoint de kickoff da Fase 1
+
+1. Readiness (o que ja esta pronto para producao):
+   - `GET /api/admin/phases/phase1`
+2. Iniciar oficialmente a Fase 1:
+   - `POST /api/admin/phases/phase1`
+   - Body: `{ "confirm": true, "note": "Iniciando Fase 1 ERP V1" }`
+3. Resultado:
+   - Gera `checkpoint_id` e registra em `user_audit_logs` com action `phase1_kickoff`.
+
+### Endpoint da Fase 2 (higiene de vitrine)
+
+1. Readiness e diagnostico de limpeza:
+   - `GET /api/admin/phases/phase2`
+2. Dry-run e execucao da limpeza:
+   - `POST /api/admin/phases/phase2`
+   - Body exemplo (dry-run): `{ "confirm": true, "dry_run": true }`
+   - Body exemplo (execucao): `{ "confirm": true, "dry_run": false }`
+3. Resultado:
+   - Rebaixa para `draft` os ativos incompletos/test-like.
+   - Registra auditoria em `user_audit_logs` com action `phase2_cleanup_vitrine`.

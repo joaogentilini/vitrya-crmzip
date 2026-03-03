@@ -7,6 +7,7 @@ import {
   hasAuthorizationSnapshotMismatch,
   isDigitalAuthorizationRequired,
 } from '@/lib/documents/esign'
+import { evaluatePublicationChecklist } from '@/lib/publicationChecklist'
 
 const VALID_STATUSES = new Set(['validated', 'valid', 'approved', 'active', 'signed'])
 
@@ -32,6 +33,22 @@ export type AuthorizationPublicationState = {
   signedAt: string | null
   dataChangedAfterSignature: boolean
   reason: string | null
+}
+
+export type PublicationChecklistState = {
+  canPublish: boolean
+  missing: string[]
+  media: {
+    ok: boolean
+    count: number
+  }
+  location: {
+    cityOk: boolean
+    neighborhoodOk: boolean
+    addressOk: boolean
+    coordinatesOk: boolean
+  }
+  authorization: AuthorizationPublicationState
 }
 
 function isSchemaError(message: string): boolean {
@@ -293,6 +310,81 @@ export async function getAuthorizationPublicationState(
 export async function hasValidatedAuthorizationDoc(propertyId: string): Promise<boolean> {
   const state = await getAuthorizationPublicationState(propertyId)
   return state.hasAuthorization
+}
+
+export async function getPropertyPublicationChecklist(
+  propertyId: string
+): Promise<PublicationChecklistState> {
+  const supabase = await createClient()
+
+  const [authorizationState, propertyRes, mediaRes] = await Promise.all([
+    getAuthorizationPublicationState(propertyId),
+    supabase
+      .from('properties')
+      .select('id, city, neighborhood, address, latitude, longitude')
+      .eq('id', propertyId)
+      .maybeSingle(),
+    supabase
+      .from('property_media')
+      .select('id', { count: 'exact', head: true })
+      .eq('property_id', propertyId)
+      .eq('kind', 'image'),
+  ])
+
+  if (propertyRes.error || !propertyRes.data) {
+    const message = propertyRes.error?.message || 'Imóvel não encontrado para validar publicação.'
+    return {
+      canPublish: false,
+      missing: [message],
+      media: { ok: false, count: 0 },
+      location: {
+        cityOk: false,
+        neighborhoodOk: false,
+        addressOk: false,
+        coordinatesOk: false,
+      },
+      authorization: authorizationState,
+    }
+  }
+
+  let mediaCount = typeof mediaRes.count === 'number' ? mediaRes.count : 0
+  if (mediaRes.error || typeof mediaRes.count !== 'number') {
+    const mediaFallback = await supabase
+      .from('property_media')
+      .select('id')
+      .eq('property_id', propertyId)
+      .eq('kind', 'image')
+    mediaCount = mediaFallback.data?.length ?? mediaCount
+  }
+
+  const checklist = evaluatePublicationChecklist({
+    mediaCount,
+    city: propertyRes.data.city,
+    neighborhood: propertyRes.data.neighborhood,
+    address: propertyRes.data.address,
+    latitude: propertyRes.data.latitude,
+    longitude: propertyRes.data.longitude,
+    hasAuthorization: authorizationState.hasAuthorization,
+    authorizationReason: authorizationState.reason,
+    requireAddressLine: true,
+    requireCoordinates: true,
+  })
+
+  return {
+    canPublish: checklist.canPublish,
+    missing: checklist.publishMissing,
+    media: {
+      ok: checklist.mediaOk,
+      count: mediaCount,
+    },
+    location: {
+      cityOk: checklist.cityOk,
+      neighborhoodOk: checklist.neighborhoodOk,
+      addressOk: checklist.addressOk,
+      coordinatesOk: checklist.coordinatesOk,
+    },
+    authorization: authorizationState,
+  }
 }
 
 function isContractLikeType(docType: unknown): boolean {

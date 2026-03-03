@@ -5,6 +5,12 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { createPublicClient } from '@/lib/supabase/publicServer'
 import { getSignedIncorporationMediaUrlMap } from '@/lib/incorporations/media'
 import { getSignedImageUrlMap } from '@/lib/media/getPublicImageUrl'
+import {
+  evaluatePublicVisibility,
+  isLikelyTestListing,
+  shouldRequireCoordinatesFromRow,
+  shouldRequireStreetAddressFromRow,
+} from '@/lib/publicationChecklist'
 
 import { ThumbCarousel } from './ThumbCarousel'
 
@@ -18,7 +24,9 @@ type PublicProperty = {
   title: string | null
   city: string | null
   neighborhood: string | null
-  address: string | null
+  address?: string | null
+  latitude?: number | string | null
+  longitude?: number | string | null
   price: number | null
   rent_price: number | null
   area_m2: number | null
@@ -103,10 +111,10 @@ type PlanShowcaseItem = PlanShowcaseRow & {
 }
 
 const PUBLIC_PROPERTIES_SELECT =
-  'id,public_code,status,purpose,title,city,neighborhood,address,price,rent_price,area_m2,bedrooms,bathrooms,parking,cover_media_url,created_at,property_category_id,property_category_name,broker_id,broker_public_name,broker_full_name'
+  'id,public_code,status,purpose,title,city,neighborhood,address,latitude,longitude,price,rent_price,area_m2,bedrooms,bathrooms,parking,cover_media_url,created_at,property_category_id,property_category_name,broker_id,broker_public_name,broker_full_name'
 
 const PUBLIC_PROPERTIES_SELECT_BASE =
-  'id,public_code,status,purpose,title,city,neighborhood,address,price,rent_price,area_m2,bedrooms,bathrooms,parking,cover_media_url,created_at,property_category_id'
+  'id,public_code,status,purpose,title,city,neighborhood,price,rent_price,area_m2,bedrooms,bathrooms,parking,cover_media_url,created_at,property_category_id'
 
 function fmtMoney(value: number | null): string | null {
   if (value == null) return null
@@ -172,9 +180,15 @@ const getPublicResultsCached = unstable_cache(
 
       if (filters.query) {
         const searchTerm = `%${filters.query}%`
-        query = query.or(
-          `public_code.ilike.${searchTerm},city.ilike.${searchTerm},neighborhood.ilike.${searchTerm},address.ilike.${searchTerm}`
-        )
+        if (view === 'v_public_properties_ext') {
+          query = query.or(
+            `public_code.ilike.${searchTerm},city.ilike.${searchTerm},neighborhood.ilike.${searchTerm},address.ilike.${searchTerm}`
+          )
+        } else {
+          query = query.or(
+            `public_code.ilike.${searchTerm},city.ilike.${searchTerm},neighborhood.ilike.${searchTerm}`
+          )
+        }
       }
 
       if (filters.min != null) {
@@ -308,8 +322,31 @@ const getPublicResultsCached = unstable_cache(
       }
     })
 
+    const visibleProperties = propertiesWithImages.filter((property) => {
+      if (
+        isLikelyTestListing({
+          title: property.title,
+          publicCode: property.public_code,
+        })
+      ) {
+        return false
+      }
+
+      const visibility = evaluatePublicVisibility({
+        mediaCount: property.imageUrls.length,
+        city: property.city,
+        neighborhood: property.neighborhood,
+        address: property.address,
+        latitude: property.latitude,
+        longitude: property.longitude,
+        requireAddressLine: shouldRequireStreetAddressFromRow(property),
+        requireCoordinates: shouldRequireCoordinatesFromRow(property),
+      })
+      return visibility.publicReady
+    })
+
     return {
-      properties: propertiesWithImages,
+      properties: visibleProperties,
       error: null,
     }
   },

@@ -4,11 +4,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { supabase } from "@/lib/supabaseClient";
 
-import {
-  publishProperty,
-  unpublishProperty,
-  getPublishAuthorizationState,
-} from "./actions";
+import { getPublishChecklistState, publishProperty, unpublishProperty } from "./actions";
 
 type PublishAuthorizationState = {
   hasAuthorization: boolean;
@@ -18,6 +14,43 @@ type PublishAuthorizationState = {
   signedAt: string | null;
   dataChangedAfterSignature: boolean;
   reason: string | null;
+};
+
+type PublishChecklistState = {
+  canPublish: boolean;
+  missing: string[];
+  media: {
+    ok: boolean;
+    count: number;
+  };
+  location: {
+    cityOk: boolean;
+    neighborhoodOk: boolean;
+    addressOk: boolean;
+    coordinatesOk: boolean;
+  };
+  authorization: PublishAuthorizationState;
+};
+
+const DEFAULT_CHECKLIST_STATE: PublishChecklistState = {
+  canPublish: false,
+  missing: [],
+  media: { ok: false, count: 0 },
+  location: {
+    cityOk: false,
+    neighborhoodOk: false,
+    addressOk: false,
+    coordinatesOk: false,
+  },
+  authorization: {
+    hasAuthorization: false,
+    source: null,
+    status: null,
+    documentInstanceId: null,
+    signedAt: null,
+    dataChangedAfterSignature: false,
+    reason: null,
+  },
 };
 
 type UserRole = "admin" | "gestor" | "corretor" | string;
@@ -36,16 +69,9 @@ export default function PublishPanel({
   viewerIsActive: boolean | null;
 }) {
   const [status, setStatus] = useState(initialStatus);
-  const [mediaCount, setMediaCount] = useState<number>(0);
-  const [authorizationState, setAuthorizationState] = useState<PublishAuthorizationState>({
-    hasAuthorization: false,
-    source: null,
-    status: null,
-    documentInstanceId: null,
-    signedAt: null,
-    dataChangedAfterSignature: false,
-    reason: null,
-  });
+  const [checklistState, setChecklistState] = useState<PublishChecklistState>(
+    DEFAULT_CHECKLIST_STATE
+  );
   const [loading, setLoading] = useState<boolean>(true);
   const [busy, setBusy] = useState<boolean>(false);
   const [error, setError] = useState<string>("");
@@ -60,62 +86,50 @@ export default function PublishPanel({
     setError("");
 
     try {
-      // status do imóvel
       const statusPromise = supabase
         .from("properties")
         .select("status")
         .eq("id", propertyId)
         .maybeSingle();
+      const checklistPromise = getPublishChecklistState(propertyId);
 
-      // count de mídias (head + count)
-      const mediaPromise = supabase
-        .from("property_media")
-        .select("id", { count: "exact", head: true })
-        .eq("property_id", propertyId);
+      const [statusRes, checklistRes] = await Promise.all([statusPromise, checklistPromise]);
 
-      // server action do doc
-      const authPromise = getPublishAuthorizationState(propertyId);
+      const parsedChecklist: PublishChecklistState = {
+        canPublish: Boolean(checklistRes?.canPublish),
+        missing: Array.isArray(checklistRes?.missing) ? checklistRes.missing : [],
+        media: {
+          ok: Boolean(checklistRes?.media?.ok),
+          count: typeof checklistRes?.media?.count === "number" ? checklistRes.media.count : 0,
+        },
+        location: {
+          cityOk: Boolean(checklistRes?.location?.cityOk),
+          neighborhoodOk: Boolean(checklistRes?.location?.neighborhoodOk),
+          addressOk: Boolean(checklistRes?.location?.addressOk),
+          coordinatesOk: Boolean(checklistRes?.location?.coordinatesOk),
+        },
+        authorization: {
+          hasAuthorization: Boolean(checklistRes?.authorization?.hasAuthorization),
+          source: checklistRes?.authorization?.source ?? null,
+          status: checklistRes?.authorization?.status ?? null,
+          documentInstanceId: checklistRes?.authorization?.documentInstanceId ?? null,
+          signedAt: checklistRes?.authorization?.signedAt ?? null,
+          dataChangedAfterSignature: Boolean(
+            checklistRes?.authorization?.dataChangedAfterSignature
+          ),
+          reason: checklistRes?.authorization?.reason ?? null,
+        },
+      };
 
-      const [statusRes, mediaRes, authState] = await Promise.all([
-        statusPromise,
-        mediaPromise,
-        authPromise,
-      ]);
+      setChecklistState(parsedChecklist);
 
-      // resolve count robusto
-      let mediaCountResolved = 0;
-      const count = (mediaRes as any)?.count;
-
-      if (typeof count === "number") {
-        mediaCountResolved = count;
-      } else {
-        // fallback: lista ids
-        const { data: listData } = await supabase
-          .from("property_media")
-          .select("id")
-          .eq("property_id", propertyId);
-        mediaCountResolved = (listData ?? []).length;
-      }
-
-      setMediaCount(mediaCountResolved);
-      setAuthorizationState({
-        hasAuthorization: !!authState?.hasAuthorization,
-        source: authState?.source ?? null,
-        status: authState?.status ?? null,
-        documentInstanceId: authState?.documentInstanceId ?? null,
-        signedAt: authState?.signedAt ?? null,
-        dataChangedAfterSignature: !!authState?.dataChangedAfterSignature,
-        reason: authState?.reason ?? null,
-      });
-
-      // status
       const nextStatus = statusRes?.data?.status;
       if (nextStatus) {
         setStatus(nextStatus);
         onStatusChange(nextStatus);
       }
     } catch (e: any) {
-      setError(e?.message ?? "Falha ao carregar dados de publicação.");
+      setError(e?.message ?? "Falha ao carregar dados de publicacao.");
     } finally {
       setLoading(false);
     }
@@ -125,9 +139,14 @@ export default function PublishPanel({
     refresh();
   }, [propertyId]);
 
-  const mediaOk = mediaCount > 0;
-  const authOk = authorizationState.hasAuthorization;
-  const checklistOk = mediaOk && authOk;
+  const mediaOk = checklistState.media.ok;
+  const addressOk =
+    checklistState.location.cityOk &&
+    checklistState.location.neighborhoodOk &&
+    checklistState.location.addressOk;
+  const coordinatesOk = checklistState.location.coordinatesOk;
+  const authOk = checklistState.authorization.hasAuthorization;
+  const checklistOk = checklistState.canPublish;
 
   const approveEnabled = !loading && !busy && canApprove && checklistOk;
   const rejectEnabled = !loading && !busy && canApprove;
@@ -138,15 +157,21 @@ export default function PublishPanel({
 
     try {
       if (!canApprove) throw new Error("Apenas admin/gestor pode aprovar.");
-      if (!mediaOk) throw new Error("Adicione pelo menos 1 mídia.");
+      if (!mediaOk) throw new Error("Adicione pelo menos 1 midia.");
+      if (!addressOk) throw new Error("Preencha cidade, bairro e endereco.");
+      if (!coordinatesOk) throw new Error("Defina latitude e longitude validas no mapa.");
       if (!authOk) {
         throw new Error(
-          authorizationState.reason ||
-            "A autorização digital assinada é obrigatória para publicar."
+          checklistState.authorization.reason ||
+            "A autorizacao digital assinada e obrigatoria para publicar."
         );
       }
 
-      await publishProperty(propertyId);
+      const result = await publishProperty(propertyId);
+      if (!result.success) {
+        throw new Error(result.error || "Nao foi possivel publicar.");
+      }
+
       await refresh();
     } catch (e: any) {
       setError(e?.message ?? "Falha ao aprovar/publicar.");
@@ -161,8 +186,10 @@ export default function PublishPanel({
 
     try {
       if (!canApprove) throw new Error("Apenas admin/gestor pode reprovar.");
-
-      await unpublishProperty(propertyId);
+      const result = await unpublishProperty(propertyId);
+      if (!result.success) {
+        throw new Error(result.error || "Nao foi possivel reprovar.");
+      }
       await refresh();
     } catch (e: any) {
       setError(e?.message ?? "Falha ao reprovar (voltar para rascunho).");
@@ -175,67 +202,85 @@ export default function PublishPanel({
     <section className="rounded-2xl border border-[var(--border)] bg-[var(--card)] p-4 shadow-sm">
       <div className="flex items-start justify-between gap-4">
         <div className="min-w-0">
-          <h2 className="text-base font-semibold text-[var(--foreground)]">
-            Publicação
-          </h2>
+          <h2 className="text-base font-semibold text-[var(--foreground)]">Publicacao</h2>
           <p className="mt-1 text-xs text-[var(--muted-foreground)]">
-            Regra Vitrya: para publicar, precisa ter pelo menos 1 mídia e
-            autorização digital assinada (válida para este cadastro).
+            Regra Vitrya: para publicar, precisa ter midia, endereco completo,
+            coordenadas no mapa e autorizacao digital assinada.
           </p>
         </div>
 
         <div className="text-xs text-[var(--muted-foreground)]">
           <span>
             Status atual:{" "}
-            <span className="font-semibold text-[var(--foreground)]">
-              {status}
-            </span>
+            <span className="font-semibold text-[var(--foreground)]">{status}</span>
           </span>
         </div>
       </div>
 
       <div className="mt-4">
         {loading ? (
-          <p className="text-sm text-[var(--muted-foreground)]">
-            Carregando status...
-          </p>
+          <p className="text-sm text-[var(--muted-foreground)]">Carregando status...</p>
         ) : (
           <div className="grid gap-2">
             <ChecklistRow
-              label="Mídias (≥ 1)"
+              label="Midias (>= 1)"
               ok={mediaOk}
-              detail={`Encontradas: ${mediaCount}`}
+              detail={`Encontradas: ${checklistState.media.count}`}
             />
             <ChecklistRow
-              label="Autorização digital"
+              label="Endereco completo"
+              ok={addressOk}
+              detail={
+                addressOk
+                  ? "Cidade, bairro e endereco preenchidos."
+                  : "Preencha cidade, bairro e endereco."
+              }
+            />
+            <ChecklistRow
+              label="Coordenadas do mapa"
+              ok={coordinatesOk}
+              detail={
+                coordinatesOk
+                  ? "Latitude/longitude validas."
+                  : "Defina latitude e longitude no mapa."
+              }
+            />
+            <ChecklistRow
+              label="Autorizacao digital"
               ok={authOk}
               detail={
                 authOk
                   ? `Assinada${
-                      authorizationState.signedAt
+                      checklistState.authorization.signedAt
                         ? ` em ${new Date(
-                            authorizationState.signedAt
+                            checklistState.authorization.signedAt
                           ).toLocaleDateString("pt-BR")}`
                         : ""
                     }`
-                  : authorizationState.reason || "Pendente"
+                  : checklistState.authorization.reason || "Pendente"
               }
             />
           </div>
         )}
       </div>
 
-      {!loading && authorizationState.dataChangedAfterSignature ? (
+      {!loading && checklistState.authorization.dataChangedAfterSignature ? (
         <div className="mt-3 rounded-xl border border-amber-500/30 bg-amber-500/10 p-3 text-xs text-[var(--foreground)]">
-          Dados do imóvel foram alterados após a assinatura. Reenvie a
-          autorização digital antes de publicar.
+          Dados do imovel foram alterados apos a assinatura. Reenvie a autorizacao
+          digital antes de publicar.
+        </div>
+      ) : null}
+
+      {!loading && checklistState.missing.length > 0 ? (
+        <div className="mt-3 rounded-xl border border-[var(--border)] bg-[var(--accent)] p-3 text-xs text-[var(--muted-foreground)]">
+          <span className="font-semibold text-[var(--foreground)]">Pendencias: </span>
+          <span>{checklistState.missing.join(" ")}</span>
         </div>
       ) : null}
 
       {error ? (
         <div className="mt-3 rounded-xl border border-red-500/20 bg-red-500/10 p-3 text-sm text-[var(--foreground)]">
-          <span className="font-semibold">Erro:</span>{" "}
-          <span>{error}</span>
+          <span className="font-semibold">Erro:</span> <span>{error}</span>
         </div>
       ) : null}
 
@@ -282,9 +327,7 @@ export default function PublishPanel({
           disabled={busy}
           className={[
             "px-4 py-2 rounded-xl text-sm font-semibold border border-[var(--border)] transition",
-            busy
-              ? "opacity-60 cursor-not-allowed"
-              : "hover:bg-[var(--accent)]",
+            busy ? "opacity-60 cursor-not-allowed" : "hover:bg-[var(--accent)]",
           ].join(" ")}
         >
           <span>Recarregar</span>
@@ -329,10 +372,7 @@ function ChecklistRow({
   return (
     <div className="flex items-center gap-3 rounded-xl border border-[var(--border)] bg-[var(--accent)] px-3 py-2">
       <div
-        className={[
-          "w-2.5 h-2.5 rounded-full",
-          ok ? "bg-emerald-600" : "bg-red-600",
-        ].join(" ")}
+        className={["w-2.5 h-2.5 rounded-full", ok ? "bg-emerald-600" : "bg-red-600"].join(" ")}
         aria-hidden="true"
       />
       <div className="min-w-0 flex-1">

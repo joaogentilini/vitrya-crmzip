@@ -1,5 +1,11 @@
 import { createPublicClient } from "@/lib/supabase/publicServer";
 import { getSignedImageUrlMap } from "@/lib/media/getPublicImageUrl";
+import {
+  evaluatePublicVisibility,
+  isLikelyTestListing,
+  shouldRequireCoordinatesFromRow,
+  shouldRequireStreetAddressFromRow,
+} from "@/lib/publicationChecklist";
 import SimilarCarouselClient from "./SimilarCarouselClient";
 
 function formatBRL(value: number | null | undefined) {
@@ -13,6 +19,20 @@ function formatBRL(value: number | null | undefined) {
 }
 
 type ViewName = "v_public_properties_ext" | "v_public_properties";
+
+type SimilarItem = {
+  id: string;
+  href: string;
+  title: string;
+  location: string;
+  price: string | null;
+  purposeLabel: string | null;
+  area_m2: number | null;
+  bedrooms: number | null;
+  bathrooms: number | null;
+  parking: number | null;
+  coverUrl: string | null;
+};
 
 export default async function SimilarProperties({
   propertyId,
@@ -30,7 +50,7 @@ export default async function SimilarProperties({
   const SELECT_EXT = `
     id, title, city, neighborhood, purpose, price, rent_price,
     property_category_id, cover_media_url, created_at, status,
-    area_m2, bedrooms, bathrooms, parking
+    area_m2, bedrooms, bathrooms, parking, address, latitude, longitude
   `;
 
   const SELECT_BASE = `
@@ -106,29 +126,54 @@ export default async function SimilarProperties({
     .filter(Boolean);
   const signedCoverMap = await getSignedImageUrlMap(coverPaths);
 
-  const items = rows.map((p) => {
-    const location = [p.neighborhood, p.city].filter(Boolean).join(" • ") || "Localização";
-    const price = p.purpose === "rent" ? formatBRL(p.rent_price) : formatBRL(p.price);
-    const purposeLabel =
-      p.purpose === "sale" ? "Venda" : p.purpose === "rent" ? "Locação" : p.purpose ?? null;
+  const items: SimilarItem[] = rows
+    .map((p) => {
+      if (
+        isLikelyTestListing({
+          title: p.title,
+          description: p.description,
+          publicCode: p.public_code,
+        })
+      ) {
+        return null;
+      }
 
-    const coverPath = p.cover_media_url ? String(p.cover_media_url) : "";
-    const coverUrl = coverPath ? signedCoverMap.get(coverPath) || null : null;
+      const coverPath = p.cover_media_url ? String(p.cover_media_url) : "";
+      const coverUrl = coverPath ? signedCoverMap.get(coverPath) || null : null;
 
-    return {
-      id: String(p.id),
-      href: `/imoveis/${p.id}`,
-      title: p.title ?? "Imóvel",
-      location,
-      price,
-      purposeLabel,
-      area_m2: typeof p.area_m2 === "number" ? p.area_m2 : null,
-      bedrooms: typeof p.bedrooms === "number" ? p.bedrooms : null,
-      bathrooms: typeof p.bathrooms === "number" ? p.bathrooms : null,
-      parking: typeof p.parking === "number" ? p.parking : null,
-      coverUrl,
-    };
-  });
+      const visibility = evaluatePublicVisibility({
+        mediaCount: coverUrl ? 1 : 0,
+        city: p.city,
+        neighborhood: p.neighborhood,
+        address: p.address,
+        latitude: p.latitude,
+        longitude: p.longitude,
+        requireAddressLine: shouldRequireStreetAddressFromRow(p),
+        requireCoordinates: shouldRequireCoordinatesFromRow(p),
+      });
+
+      if (!visibility.publicReady) return null;
+
+      const location = [p.neighborhood, p.city].filter(Boolean).join(" / ") || "Localizacao";
+      const price = p.purpose === "rent" ? formatBRL(p.rent_price) : formatBRL(p.price);
+      const purposeLabel =
+        p.purpose === "sale" ? "Venda" : p.purpose === "rent" ? "Locacao" : p.purpose ?? null;
+
+      return {
+        id: String(p.id),
+        href: `/imoveis/${p.id}`,
+        title: p.title ?? "Imovel",
+        location,
+        price,
+        purposeLabel,
+        area_m2: typeof p.area_m2 === "number" ? p.area_m2 : null,
+        bedrooms: typeof p.bedrooms === "number" ? p.bedrooms : null,
+        bathrooms: typeof p.bathrooms === "number" ? p.bathrooms : null,
+        parking: typeof p.parking === "number" ? p.parking : null,
+        coverUrl,
+      };
+    })
+    .filter((item): item is SimilarItem => Boolean(item));
 
   const whatsappE164 =
     process.env.NEXT_PUBLIC_VITRYA_WHATSAPP_E164 ||
@@ -147,7 +192,7 @@ export default async function SimilarProperties({
         boxShadow: "0 16px 40px rgba(0, 0, 0, 0)",
       }}
     >
-      <h2 style={{ margin: "0 0 12px 0", fontSize: 20, textAlign: "center" }}>Imóveis similares</h2>
+      <h2 style={{ margin: "0 0 12px 0", fontSize: 20, textAlign: "center" }}>Imoveis similares</h2>
 
       <div
         style={{
@@ -171,7 +216,7 @@ export default async function SimilarProperties({
             />
 
             <div className="pv-cardbody">
-              <h3 className="pv-cardtitle">Anuncie seu imóvel na Vitrya</h3>
+              <h3 className="pv-cardtitle">Anuncie seu imovel na Vitrya</h3>
               <div className="pv-cardmeta" style={{ opacity: 0.8 }}>
                 Fale com nosso time pelo WhatsApp.
               </div>
@@ -203,4 +248,3 @@ export default async function SimilarProperties({
     </div>
   );
 }
-

@@ -4,9 +4,11 @@ import { createClient } from '@/lib/supabaseServer'
 import { revalidatePath } from 'next/cache'
 import {
   getAuthorizationPublicationState,
+  getPropertyPublicationChecklist,
   hasSignedContractDoc,
   hasValidatedAuthorizationDoc,
   type AuthorizationPublicationState,
+  type PublicationChecklistState,
 } from './publish-guard'
 import { requireActiveUser, requireRole } from '@/lib/auth'
 import { buildAmenitiesSnapshot } from '@/lib/maps/googlePlaces'
@@ -50,15 +52,15 @@ export async function publishProperty(propertyId: string): Promise<PublishResult
     return { success: false, error: 'Apenas admin/gestor podem aprovar publicações' }
   }
 
-  const authorizationState = await getAuthorizationPublicationState(propertyId)
-  const hasAuthorization = authorizationState.hasAuthorization
-
-  if (!hasAuthorization) {
+  const checklist = await getPropertyPublicationChecklist(propertyId)
+  if (!checklist.canPublish) {
+    const checklistMessage =
+      checklist.missing.length > 0
+        ? checklist.missing.join(' ')
+        : 'Checklist de publicação incompleto.'
     return {
       success: false,
-      error:
-        authorizationState.reason ||
-        'Para publicar o imovel, envie a autorizacao digital e aguarde status assinado.',
+      error: checklistMessage,
     }
   }
 
@@ -132,6 +134,12 @@ export async function getPublishAuthorizationState(
   propertyId: string
 ): Promise<AuthorizationPublicationState> {
   return getAuthorizationPublicationState(propertyId)
+}
+
+export async function getPublishChecklistState(
+  propertyId: string
+): Promise<PublicationChecklistState> {
+  return getPropertyPublicationChecklist(propertyId)
 }
 
 export interface PropertyFeatureCatalogItem {
@@ -554,7 +562,7 @@ export async function updatePropertyBasics(propertyId: string, payload: UpdatePr
   const { data: propertyOwner, error: propertyError } = await supabase
     .from('properties')
     .select(
-      'owner_user_id,registry_number,address,address_number,address_complement,neighborhood,city,state,postal_code,price,commission_percent,sale_commission_percent,authorization_started_at,authorization_expires_at,authorization_is_exclusive,rent_commission_percent,rent_first_month_fee_enabled,rent_first_month_fee_percent,rent_admin_fee_enabled,rent_admin_fee_percent,contract_forum_city,contract_forum_state'
+      'owner_user_id,status,registry_number,address,address_number,address_complement,neighborhood,city,state,postal_code,price,commission_percent,sale_commission_percent,authorization_started_at,authorization_expires_at,authorization_is_exclusive,rent_commission_percent,rent_first_month_fee_enabled,rent_first_month_fee_percent,rent_admin_fee_enabled,rent_admin_fee_percent,contract_forum_city,contract_forum_state'
     )
     .eq('id', propertyId)
     .maybeSingle()
@@ -940,6 +948,16 @@ export async function updatePropertyBasics(propertyId: string, payload: UpdatePr
   for (const key of Object.keys(updatePayload)) {
     if (typeof updatePayload[key] === 'undefined') {
       delete updatePayload[key]
+    }
+  }
+
+  if (Object.prototype.hasOwnProperty.call(updatePayload, 'status')) {
+    const activeStates = new Set(['active', 'published'])
+    const currentStatus = String(propertyOwner.status ?? '').toLowerCase()
+    const requestedStatus = String(updatePayload.status ?? '').toLowerCase()
+
+    if (activeStates.has(requestedStatus) && !activeStates.has(currentStatus)) {
+      throw new Error('Para publicar o imóvel, use a aba Publicação e conclua o checklist obrigatório.')
     }
   }
 

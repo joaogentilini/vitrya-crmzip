@@ -5,6 +5,12 @@ import { Suspense } from "react";
 import { createPublicClient } from "@/lib/supabase/publicServer";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getSignedImageUrlMap } from "@/lib/media/getPublicImageUrl";
+import {
+  evaluatePublicVisibility,
+  isLikelyTestListing,
+  shouldRequireCoordinatesFromRow,
+  shouldRequireStreetAddressFromRow,
+} from "@/lib/publicationChecklist";
 import type { AmenitiesSnapshotData } from "@/lib/maps/types";
 import PublicPropertyMapCard from "@/components/maps/PublicPropertyMapCard";
 
@@ -480,6 +486,29 @@ export default async function PublicPropertyPage({
   if (coverSignedUrl && !mediaItems.some((m) => m.url === coverSignedUrl)) {
     mediaItems.unshift({ id: "cover", url: coverSignedUrl, kind: "image" });
   }
+
+  const visibility = evaluatePublicVisibility({
+    mediaCount: mediaItems.length,
+    city: property.city,
+    neighborhood: property.neighborhood,
+    address: property.address,
+    latitude: property.latitude,
+    longitude: property.longitude,
+    requireAddressLine: shouldRequireStreetAddressFromRow(property),
+    requireCoordinates: shouldRequireCoordinatesFromRow(property),
+  });
+
+  if (
+    isLikelyTestListing({
+      title: property.title,
+      description: property.description,
+      publicCode: property.public_code,
+    })
+  ) {
+    return notFound();
+  }
+
+  if (!visibility.publicReady) return notFound();
 
   const heroBgUrl = coverSignedUrl || mediaItems[0]?.url || null;
 
