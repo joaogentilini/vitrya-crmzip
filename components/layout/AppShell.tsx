@@ -632,6 +632,24 @@ export function AppShell({
           ...(isManager
             ? [
                 {
+                  href: '/settings/whatsapp',
+                  label: 'WhatsApp',
+                  icon: (
+                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M8 10h.01M12 10h.01M16 10h.01M21 12a9 9 0 11-3.4-7.06A9 9 0 0121 12zM8 16l-3 3"
+                      />
+                    </svg>
+                  ),
+                },
+              ]
+            : []),
+          ...(isManager
+            ? [
+                {
                   href: '/settings/campaigns',
                   label: 'Editor de Campanhas',
                   icon: (

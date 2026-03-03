@@ -1,0 +1,63 @@
+version: '3.9'
+
+services:
+  evolution-api:
+    # Ajuste o nome/tag conforme docs oficiais da sua versao:
+    # https://doc.evolution-api.com/
+    image: atendai/evolution-api:latest
+    container_name: evolution-api
+    restart: unless-stopped
+    env_file:
+      - .env
+    ports:
+      - '${EVOLUTION_PORT:-8080}:8080'
+    depends_on:
+      - evolution-postgres
+      - evolution-redis
+    networks:
+      - evolution-net
+
+  evolution-postgres:
+    image: postgres:16-alpine
+    container_name: evolution-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: evolution
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    volumes:
+      - evolution-postgres-data:/var/lib/postgresql/data
+    networks:
+      - evolution-net
+
+  evolution-redis:
+    image: redis:7-alpine
+    container_name: evolution-redis
+    restart: unless-stopped
+    command: ['redis-server', '--appendonly', 'yes']
+    volumes:
+      - evolution-redis-data:/data
+    networks:
+      - evolution-net
+
+  # Opcional: painel visual da Evolution (Manager)
+  # evolution-manager:
+  #   image: evoapicloud/evolution-manager-v2:latest
+  #   container_name: evolution-manager
+  #   restart: unless-stopped
+  #   environment:
+  #     NEXT_PUBLIC_EVOLUTION_API_URL: http://evolution-api:8080
+  #   ports:
+  #     - '8090:3000'
+  #   depends_on:
+  #     - evolution-api
+  #   networks:
+  #     - evolution-net
+
+volumes:
+  evolution-postgres-data:
+  evolution-redis-data:
+
+networks:
+  evolution-net:
+    driver: bridge
