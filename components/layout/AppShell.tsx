@@ -344,6 +344,21 @@ export function AppShell({
       },
 
       {
+        href: '/inbox',
+        label: 'Inbox',
+        icon: (
+          <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth={2}
+              d="M7 8h10M7 12h6m-8 8h14a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2zm0 0l3-3h8l3 3"
+            />
+          </svg>
+        ),
+      },
+
+      {
         href: '/pessoas',
         label: 'Pessoas',
         icon: (
@@ -634,7 +649,7 @@ export function AppShell({
     ]
 
     return items
-  }, [canAccessErp, isBroker, isManager])
+  }, [canAccessErp, isBroker, isManager, userRole])
 
   const [settingsOpen, setSettingsOpen] = useState(() => pathname?.startsWith('/settings') || false)
   const [leadsOpen, setLeadsOpen] = useState(() => pathname?.startsWith('/leads') || false)

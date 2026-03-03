@@ -1,4 +1,5 @@
 import { createAdminClient } from '@/lib/supabase/admin'
+import { upsertInboundConversationMessage } from '@/lib/chat/inbox'
 import { createLogger } from '@/lib/logger'
 import { normalizeBrazilianPhone } from '@/lib/phone'
 
@@ -729,6 +730,41 @@ export async function ingestPortalLeadEvent(input: PortalLeadIngestionInput): Pr
       leadFingerprint,
       leadId: leadInsert.id,
       propertyId: propertyContext.propertyId,
+    })
+
+    const inboundText =
+      message ||
+      compactText(
+        `Lead recebido via ${providerLabel(input.provider)}${
+          propertyContext.propertyTitle ? ` para o imóvel "${propertyContext.propertyTitle}"` : ''
+        }.`,
+        400
+      ) ||
+      'Lead recebido via portal.'
+
+    await upsertInboundConversationMessage({
+      channel: input.provider,
+      externalConversationId,
+      externalLeadId,
+      leadId: leadInsert.id,
+      personId,
+      propertyId: propertyContext.propertyId,
+      brokerUserId: propertyContext.propertyOwnerUserId,
+      subject: buildLeadTitle(input.provider, rawName, propertyContext.propertyTitle),
+      text: inboundText,
+      providerMessageId: externalEventId,
+      senderName: rawName,
+      senderExternalId: externalLeadId,
+      occurredAt: new Date().toISOString(),
+      payload: {
+        provider: input.provider,
+        event_type: eventType,
+        external_event_id: externalEventId,
+      },
+      metadata: {
+        source: 'portal_webhook',
+        provider: input.provider,
+      },
     })
 
     await admin.from('lead_audit_logs').insert({
