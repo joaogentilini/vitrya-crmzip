@@ -35,6 +35,8 @@ type EnvSummary = {
   base_url_set: boolean
   api_key_set: boolean
   webhook_url_set: boolean
+  webhook_token_set?: boolean
+  webhook_enabled?: boolean
   base_url_preview: string | null
 }
 
@@ -321,6 +323,10 @@ export function WhatsappSettingsClient({
             <Badge variant={env.base_url_set ? 'success' : 'warning'}>EVOLUTION_API_BASE_URL</Badge>
             <Badge variant={env.api_key_set ? 'success' : 'warning'}>EVOLUTION_API_KEY</Badge>
             <Badge variant={env.webhook_url_set ? 'success' : 'secondary'}>EVOLUTION_WEBHOOK_URL</Badge>
+            <Badge variant={env.webhook_enabled === false ? 'warning' : 'success'}>
+              EVOLUTION_WEBHOOK_ENABLED: {env.webhook_enabled === false ? 'OFF' : 'ON'}
+            </Badge>
+            <Badge variant={env.webhook_token_set ? 'success' : 'warning'}>EVOLUTION_WEBHOOK_TOKEN</Badge>
           </div>
           <p className="text-xs text-[var(--muted-foreground)]">
             Base: <code>{env.base_url_preview || 'nao configurada'}</code>

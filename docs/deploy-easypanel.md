@@ -26,6 +26,9 @@ EVOLUTION_API_ENABLED=0
 EVOLUTION_API_BASE_URL=https://whatsapp.seu-dominio.com
 EVOLUTION_API_KEY=troque-este-token
 EVOLUTION_WEBHOOK_URL=https://crm.seu-dominio.com/api/integrations/whatsapp/evolution/webhook
+EVOLUTION_WEBHOOK_ENABLED=1
+EVOLUTION_WEBHOOK_TOKEN=troque-este-token-webhook
+EVOLUTION_SEND_TEXT_PATH=/message/sendText/{instance}
 # Futuro (OAuth OLX)
 # OLX_CLIENT_ID=...
 # OLX_CLIENT_SECRET=...

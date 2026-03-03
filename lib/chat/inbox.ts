@@ -1,4 +1,9 @@
 import { createAdminClient } from '@/lib/supabase/admin'
+import {
+  isEvolutionApiEnabled,
+  normalizeEvolutionInstanceName,
+  sendEvolutionTextMessage,
+} from '@/lib/integrations/evolution/client'
 import { createClient } from '@/lib/supabaseServer'
 
 export type ChatChannel = 'whatsapp' | 'instagram' | 'facebook' | 'olx' | 'grupoolx' | 'meta' | 'other'
@@ -19,6 +24,11 @@ function compactText(value: string | null | undefined, limit = 180): string | nu
     .trim()
   if (!text) return null
   return text.slice(0, limit)
+}
+
+function asRecord(value: unknown): Record<string, unknown> {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return {}
+  return value as Record<string, unknown>
 }
 
 function asIsoDate(value: string | Date | null | undefined): string {
@@ -430,6 +440,224 @@ export async function loadConversationMessages(conversationId: string, limit = 2
   return { data: (res.data || []) as Array<Record<string, unknown>>, error: null }
 }
 
+type OutboundConversationRow = {
+  id: string
+  channel: string | null
+  external_conversation_id: string | null
+  broker_user_id: string | null
+  metadata: Record<string, unknown> | null
+}
+
+type WhatsappDispatchResult = {
+  ok: boolean
+  status: 'sent' | 'skipped' | 'failed'
+  providerMessageId: string | null
+  payload: Record<string, unknown>
+  error: string | null
+}
+
+function normalizeDigits(value: string | null | undefined): string | null {
+  const digits = String(value || '').replace(/\D/g, '')
+  return digits || null
+}
+
+function normalizeWhatsappDestinationDigits(value: string | null | undefined): string | null {
+  const digits = normalizeDigits(value)
+  if (!digits) return null
+
+  if (digits.startsWith('55') && digits.length >= 12) return digits
+  if (digits.length === 10 || digits.length === 11) return `55${digits}`
+  if (digits.length >= 12) return digits
+  return null
+}
+
+function extractDigitsFromJid(value: string | null | undefined): string | null {
+  const raw = String(value || '').trim()
+  if (!raw) return null
+  const withoutSuffix = raw.includes('@') ? raw.split('@')[0] : raw
+  return normalizeDigits(withoutSuffix)
+}
+
+function parseConversationExternalId(value: string | null | undefined): {
+  instanceName: string | null
+  remoteRef: string | null
+} {
+  const externalId = compactText(value || '', 240)
+  if (!externalId) {
+    return { instanceName: null, remoteRef: null }
+  }
+
+  const idx = externalId.indexOf(':')
+  if (idx > 0) {
+    const left = compactText(externalId.slice(0, idx), 120)
+    const right = compactText(externalId.slice(idx + 1), 160)
+    return {
+      instanceName: left,
+      remoteRef: right,
+    }
+  }
+
+  return {
+    instanceName: null,
+    remoteRef: externalId,
+  }
+}
+
+async function resolveWhatsappInstanceName(conversation: OutboundConversationRow): Promise<string | null> {
+  const metadata = asRecord(conversation.metadata)
+  const fromMetadata =
+    compactText(String(metadata.instance_name || ''), 80) ||
+    compactText(String(metadata.instanceName || ''), 80)
+
+  const fromExternal = parseConversationExternalId(conversation.external_conversation_id).instanceName
+  const normalizedMetadata = fromMetadata ? normalizeEvolutionInstanceName(fromMetadata) : null
+  const normalizedExternal = fromExternal ? normalizeEvolutionInstanceName(fromExternal) : null
+  if (normalizedMetadata) return normalizedMetadata
+  if (normalizedExternal) return normalizedExternal
+
+  const brokerUserId = compactText(conversation.broker_user_id, 80)
+  const admin = createAdminClient()
+
+  if (brokerUserId) {
+    const byBroker = await admin
+      .from('chat_channel_accounts')
+      .select('provider_account_id')
+      .eq('channel', 'whatsapp')
+      .eq('broker_user_id', brokerUserId)
+      .eq('is_active', true)
+      .order('updated_at', { ascending: false })
+      .limit(1)
+      .maybeSingle()
+
+    if (byBroker.data?.provider_account_id) {
+      return normalizeEvolutionInstanceName(String(byBroker.data.provider_account_id))
+    }
+  }
+
+  const fallback = await admin
+    .from('chat_channel_accounts')
+    .select('provider_account_id')
+    .eq('channel', 'whatsapp')
+    .is('broker_user_id', null)
+    .eq('is_active', true)
+    .order('updated_at', { ascending: false })
+    .limit(1)
+    .maybeSingle()
+
+  if (fallback.data?.provider_account_id) {
+    return normalizeEvolutionInstanceName(String(fallback.data.provider_account_id))
+  }
+
+  return null
+}
+
+function resolveWhatsappRecipientNumber(conversation: OutboundConversationRow): string | null {
+  const metadata = asRecord(conversation.metadata)
+  const external = parseConversationExternalId(conversation.external_conversation_id)
+
+  const phoneCandidates = [
+    normalizeWhatsappDestinationDigits(compactText(String(metadata.phone_e164 || ''), 40)),
+    normalizeWhatsappDestinationDigits(extractDigitsFromJid(compactText(String(metadata.remote_jid || ''), 120))),
+    normalizeWhatsappDestinationDigits(extractDigitsFromJid(external.remoteRef)),
+    normalizeWhatsappDestinationDigits(compactText(external.remoteRef || '', 120)),
+    normalizeWhatsappDestinationDigits(compactText(conversation.external_conversation_id || '', 120)),
+  ]
+
+  for (const candidate of phoneCandidates) {
+    if (candidate) return candidate
+  }
+
+  return null
+}
+
+async function dispatchWhatsappEvolutionMessage(input: {
+  conversation: OutboundConversationRow
+  text: string
+  payload: Record<string, unknown>
+}): Promise<WhatsappDispatchResult> {
+  if (!isEvolutionApiEnabled()) {
+    return {
+      ok: true,
+      status: 'skipped',
+      providerMessageId: null,
+      payload: {
+        ...(input.payload || {}),
+        provider: 'local_only',
+        reason: 'EVOLUTION_API_ENABLED desabilitado',
+      },
+      error: null,
+    }
+  }
+
+  const instanceName = await resolveWhatsappInstanceName(input.conversation)
+  if (!instanceName) {
+    return {
+      ok: false,
+      status: 'failed',
+      providerMessageId: null,
+      payload: {
+        ...(input.payload || {}),
+        provider: 'evolution',
+        reason: 'instance_not_found',
+      },
+      error: 'Nao foi possivel resolver a instancia Evolution para esta conversa.',
+    }
+  }
+
+  const toNumber = resolveWhatsappRecipientNumber(input.conversation)
+  if (!toNumber) {
+    return {
+      ok: false,
+      status: 'failed',
+      providerMessageId: null,
+      payload: {
+        ...(input.payload || {}),
+        provider: 'evolution',
+        instance_name: instanceName,
+        reason: 'recipient_not_found',
+      },
+      error: 'Nao foi possivel identificar o numero destino desta conversa.',
+    }
+  }
+
+  const sendRes = await sendEvolutionTextMessage({
+    instanceName,
+    toNumber,
+    text: input.text,
+  })
+
+  if (!sendRes.ok || !sendRes.data) {
+    return {
+      ok: false,
+      status: 'failed',
+      providerMessageId: null,
+      payload: {
+        ...(input.payload || {}),
+        provider: 'evolution',
+        instance_name: instanceName,
+        to_number: toNumber,
+        response: sendRes.raw,
+      },
+      error: sendRes.error || 'Falha ao enviar mensagem pela Evolution.',
+    }
+  }
+
+  return {
+    ok: true,
+    status: 'sent',
+    providerMessageId: compactText(sendRes.data.providerMessageId, 190),
+    payload: {
+      ...(input.payload || {}),
+      provider: 'evolution',
+      instance_name: instanceName,
+      to_number: toNumber,
+      remote_jid: sendRes.data.remoteJid,
+      response: sendRes.data.raw,
+    },
+    error: null,
+  }
+}
+
 export async function appendOutboundMessage(params: {
   conversationId: string
   actorProfileId: string
@@ -442,7 +670,7 @@ export async function appendOutboundMessage(params: {
 
   const conversationRes = await supabase
     .from('chat_conversations')
-    .select('id, channel')
+    .select('id, channel, external_conversation_id, broker_user_id, metadata')
     .eq('id', params.conversationId)
     .limit(1)
     .maybeSingle()
@@ -457,20 +685,49 @@ export async function appendOutboundMessage(params: {
     return { ok: false as const, error: 'Mensagem vazia.' }
   }
 
+  const conversation = conversationRes.data as OutboundConversationRow
+  const channel = normalizeChannel(conversation.channel || '')
   const messageType: ChatMessageType = params.messageType || (mediaUrl ? 'document' : 'text')
   const occurredAt = new Date().toISOString()
+  let status: 'sent' | 'failed' | 'queued' = 'sent'
+  let providerMessageId: string | null = null
+  let payload: Record<string, unknown> = params.payload || {}
+  let dispatchError: string | null = null
+
+  if (channel === 'whatsapp' && text) {
+    const dispatch = await dispatchWhatsappEvolutionMessage({
+      conversation,
+      text,
+      payload,
+    })
+    status = dispatch.status === 'failed' ? 'failed' : dispatch.status === 'skipped' ? 'sent' : 'sent'
+    providerMessageId = dispatch.providerMessageId
+    payload = dispatch.payload
+    dispatchError = dispatch.error
+  }
+
+  if (channel === 'whatsapp' && !text && mediaUrl) {
+    status = 'failed'
+    dispatchError = 'Envio de midia via Evolution ainda nao foi habilitado neste fluxo.'
+    payload = {
+      ...(payload || {}),
+      provider: 'evolution',
+      reason: 'media_not_supported',
+    }
+  }
 
   const insertRes = await supabase
     .from('chat_messages')
     .insert({
       conversation_id: params.conversationId,
       direction: 'outbound',
-      channel: normalizeChannel(conversationRes.data.channel as string),
+      channel,
       message_type: messageType,
       content_text: text,
       media_url: mediaUrl,
-      status: 'sent',
-      payload: params.payload || {},
+      provider_message_id: providerMessageId,
+      status,
+      payload,
       occurred_at: occurredAt,
       created_by_profile_id: params.actorProfileId,
     })
@@ -492,6 +749,13 @@ export async function appendOutboundMessage(params: {
 
   if (updateRes.error) {
     return { ok: false as const, error: updateRes.error.message || 'Mensagem enviada, mas falha ao atualizar conversa.' }
+  }
+
+  if (status === 'failed') {
+    return {
+      ok: false as const,
+      error: dispatchError || 'Mensagem registrada, mas falha no envio pelo provedor.',
+    }
   }
 
   return {

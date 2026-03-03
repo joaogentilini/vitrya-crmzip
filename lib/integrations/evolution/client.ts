@@ -23,6 +23,12 @@ export type EvolutionApiResult<T> = {
   raw: unknown
 }
 
+export type EvolutionSendTextResult = {
+  providerMessageId: string | null
+  remoteJid: string | null
+  raw: unknown
+}
+
 function asRecord(value: unknown): PayloadRecord {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return {}
   return value as PayloadRecord
@@ -56,6 +62,21 @@ function buildUrl(path: string): string | null {
   const baseUrl = normalizeBaseUrl(process.env.EVOLUTION_API_BASE_URL)
   if (!baseUrl) return null
   return `${baseUrl}${path}`
+}
+
+function withOptionalWebhookToken(url: string): string {
+  const token = String(process.env.EVOLUTION_WEBHOOK_TOKEN || '').trim()
+  if (!token) return url
+
+  try {
+    const parsed = new URL(url)
+    if (!parsed.searchParams.get('token')) {
+      parsed.searchParams.set('token', token)
+    }
+    return parsed.toString()
+  } catch {
+    return url
+  }
 }
 
 function instanceNameFromRow(row: PayloadRecord): string | null {
@@ -206,6 +227,30 @@ function buildErrorMessage(status: number, body: unknown): string {
   )
 }
 
+function extractProviderMessageId(body: unknown): string | null {
+  const root = asRecord(body)
+  return (
+    compactText(root.id, 220) ||
+    compactText(asRecord(root.key).id, 220) ||
+    compactText(asRecord(root.data).id, 220) ||
+    compactText(asRecord(asRecord(root.data).key).id, 220) ||
+    compactText(asRecord(asRecord(root.response).key).id, 220) ||
+    null
+  )
+}
+
+function extractRemoteJid(body: unknown): string | null {
+  const root = asRecord(body)
+  return (
+    compactText(root.remoteJid, 220) ||
+    compactText(asRecord(root.key).remoteJid, 220) ||
+    compactText(asRecord(root.data).remoteJid, 220) ||
+    compactText(asRecord(asRecord(root.data).key).remoteJid, 220) ||
+    compactText(asRecord(asRecord(root.response).key).remoteJid, 220) ||
+    null
+  )
+}
+
 export function isEvolutionApiEnabled(): boolean {
   const hasFlag = String(process.env.EVOLUTION_API_ENABLED || '').trim().length > 0
   if (!hasFlag) return false
@@ -216,11 +261,16 @@ export function getEvolutionEnvSummary() {
   const baseUrl = normalizeBaseUrl(process.env.EVOLUTION_API_BASE_URL)
   const apiKey = String(process.env.EVOLUTION_API_KEY || '').trim()
   const webhookUrl = String(process.env.EVOLUTION_WEBHOOK_URL || '').trim()
+  const webhookToken = String(process.env.EVOLUTION_WEBHOOK_TOKEN || '').trim()
+  const webhookEnabledFlag = String(process.env.EVOLUTION_WEBHOOK_ENABLED || '').trim()
+  const webhookEnabled = webhookEnabledFlag ? boolFromEnv('EVOLUTION_WEBHOOK_ENABLED') : true
   return {
     enabled: isEvolutionApiEnabled(),
     base_url_set: Boolean(baseUrl),
     api_key_set: Boolean(apiKey),
     webhook_url_set: Boolean(webhookUrl),
+    webhook_token_set: Boolean(webhookToken),
+    webhook_enabled: webhookEnabled,
     base_url_preview: baseUrl ? baseUrl.replace(/^https?:\/\//, '') : null,
   }
 }
@@ -317,6 +367,7 @@ export async function createEvolutionInstance(input: {
 }): Promise<EvolutionApiResult<PayloadRecord>> {
   const createPath = normalizePath(process.env.EVOLUTION_CREATE_INSTANCE_PATH, '/instance/create')
   const webhookUrl = String(process.env.EVOLUTION_WEBHOOK_URL || '').trim()
+  const webhookUrlWithToken = webhookUrl ? withOptionalWebhookToken(webhookUrl) : null
 
   const body: Record<string, unknown> = {
     instanceName: input.instanceName,
@@ -324,8 +375,8 @@ export async function createEvolutionInstance(input: {
     integration: 'WHATSAPP-BAILEYS',
   }
 
-  if (webhookUrl) {
-    body.webhook = webhookUrl
+  if (webhookUrlWithToken) {
+    body.webhook = webhookUrlWithToken
     body.webhook_by_events = true
     body.events = ['MESSAGES_UPSERT', 'CONNECTION_UPDATE']
   }
@@ -396,4 +447,29 @@ export async function deleteEvolutionInstance(instanceName: string): Promise<Evo
     parser: (raw) => asRecord(raw),
   })
   return byPost.ok ? byPost : byDelete
+}
+
+export async function sendEvolutionTextMessage(input: {
+  instanceName: string
+  toNumber: string
+  text: string
+}): Promise<EvolutionApiResult<EvolutionSendTextResult>> {
+  const sendPathTemplate = normalizePath(process.env.EVOLUTION_SEND_TEXT_PATH, '/message/sendText/{instance}')
+  const sendPath = sendPathTemplate.replace('{instance}', encodeURIComponent(input.instanceName))
+
+  const body: Record<string, unknown> = {
+    number: input.toNumber,
+    text: input.text,
+  }
+
+  return evolutionRequest<EvolutionSendTextResult>({
+    path: sendPath,
+    method: 'POST',
+    body,
+    parser: (raw) => ({
+      providerMessageId: extractProviderMessageId(raw),
+      remoteJid: extractRemoteJid(raw),
+      raw,
+    }),
+  })
 }

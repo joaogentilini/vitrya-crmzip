@@ -17,9 +17,12 @@ Executar os dois primeiros passos do WhatsApp Evolution:
 3. Tela no CRM:
    - `app/(crm)/settings/whatsapp/page.tsx`
    - `app/(crm)/settings/whatsapp/WhatsappSettingsClient.tsx`
-4. Navegacao:
+4. Webhook inbound Evolution para Inbox:
+   - `app/api/integrations/whatsapp/evolution/webhook/route.ts`
+   - `app/api/integrations/whatsapp/evolution/webhook/[event]/route.ts`
+5. Navegacao:
    - item `Configuracoes > WhatsApp` em `components/layout/AppShell.tsx`
-5. Infra self-hosted:
+6. Infra self-hosted:
    - `deploy/evolution/.env.example`
    - `deploy/evolution/docker-compose.yml`
 
@@ -32,6 +35,8 @@ EVOLUTION_API_ENABLED=1
 EVOLUTION_API_BASE_URL=https://whatsapp.seudominio.com
 EVOLUTION_API_KEY=troque-para-a-chave-da-evolution
 EVOLUTION_WEBHOOK_URL=https://crm.seudominio.com/api/integrations/whatsapp/evolution/webhook
+EVOLUTION_WEBHOOK_ENABLED=1
+EVOLUTION_WEBHOOK_TOKEN=troque-este-token-webhook
 ```
 
 Opcional (se sua instalacao usa rotas diferentes):
@@ -42,6 +47,7 @@ EVOLUTION_CREATE_INSTANCE_PATH=/instance/create
 EVOLUTION_CONNECT_INSTANCE_PATH=/instance/connect/{instance}
 EVOLUTION_CONNECTION_STATE_PATH=/instance/connectionState/{instance}
 EVOLUTION_DELETE_INSTANCE_PATH=/instance/delete/{instance}
+EVOLUTION_SEND_TEXT_PATH=/message/sendText/{instance}
 ```
 
 ## 4. Subida da Evolution (servidor proprio)
@@ -70,7 +76,57 @@ curl -sS http://SEU_HOST:8080/ | head
    - `QR` para regenerar QR,
    - `Estado` para consultar estado remoto.
 
-## 6. Observacoes
+## 6. Testes de ponta a ponta
 
-1. Esta entrega cobre setup + provisionamento/QR.
-2. O webhook inbound da Evolution para alimentar o Inbox sera conectado no proximo passo.
+1. Teste inbound (webhook -> Inbox):
+   - Envie mensagem do WhatsApp conectado para o numero da instancia.
+   - Verifique a conversa em `CRM > Inbox` com canal `WhatsApp`.
+2. Teste outbound (Inbox -> Evolution):
+   - Abra a conversa e envie texto pelo composer.
+   - A mensagem deve chegar no WhatsApp do cliente e ficar com status `sent` no historico.
+3. Health do webhook:
+
+```bash
+curl -X GET "https://crm.seudominio.com/api/integrations/whatsapp/evolution/webhook"
+```
+
+4. Teste rapido de webhook autenticado:
+
+```bash
+curl -X POST "https://crm.seudominio.com/api/integrations/whatsapp/evolution/webhook?token=SEU_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"event":"CONNECTION_UPDATE","instance":"teste"}'
+```
+
+## 7. Observacoes
+
+1. Esta entrega cobre setup + provisionamento/QR + inbound/outbound WhatsApp via Evolution.
+2. O endpoint aceita:
+   - `/api/integrations/whatsapp/evolution/webhook`
+   - `/api/integrations/whatsapp/evolution/webhook/messages-upsert`
+3. Se `EVOLUTION_WEBHOOK_TOKEN` estiver configurado, o token pode ser enviado via query `?token=...`, header `x-webhook-token`, `apikey` ou `Bearer`.
+
+## 8. Troubleshooting rapido
+
+Erro comum no log da Evolution:
+
+```txt
+[Redis] redis disconnected
+```
+
+Ajuste no `.env` da Evolution:
+
+```env
+CACHE_REDIS_ENABLED=true
+CACHE_REDIS_URI=redis://evolution-redis:6379/6
+CACHE_REDIS_PREFIX_KEY=evolution
+CACHE_LOCAL_ENABLED=false
+```
+
+Depois reinicie a stack:
+
+```bash
+docker compose down
+docker compose up -d
+docker logs evolution-api --tail 200
+```
