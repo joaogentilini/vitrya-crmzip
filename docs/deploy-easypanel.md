@@ -18,6 +18,10 @@ PORTAL_INTEGRATIONS_ENABLED=0
 GRUPO_OLX_WEBHOOK_TOKEN=troque-este-token
 GRUPO_OLX_FEED_TOKEN=troque-este-token
 OLX_WEBHOOK_TOKEN=troque-este-token
+META_WEBHOOK_ENABLED=1
+META_WEBHOOK_VERIFY_TOKEN=troque-este-token
+META_APP_SECRET=troque-este-secret
+META_WEBHOOK_TOKEN=opcional-token-extra
 # Futuro (OAuth OLX)
 # OLX_CLIENT_ID=...
 # OLX_CLIENT_SECRET=...

@@ -355,6 +355,7 @@ Documento de execucao atual:
 - `docs/FASE0_FASE1_EXECUCAO.md`
 - `docs/FASE2_EXECUCAO.md`
 - `docs/FASE3_SPRINT1_EXECUCAO.md`
+- `docs/FASE3_SPRINT2_EXECUCAO.md`
 
 ### Endpoint de kickoff da Fase 1
 
