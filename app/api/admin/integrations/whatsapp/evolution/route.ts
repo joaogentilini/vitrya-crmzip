@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import QRCode from 'qrcode'
 
 import { createAdminClient } from '@/lib/supabase/admin'
 import {
@@ -146,11 +147,28 @@ async function readExistingMapping(instanceName: string): Promise<ChatChannelAcc
   return res.data as ChatChannelAccountRow
 }
 
-function toQrDataUri(base64: string | null): string | null {
-  const qr = compactText(base64, 250000)
+function looksLikeBase64(value: string): boolean {
+  const normalized = value.replace(/\s+/g, '')
+  if (!normalized || normalized.length < 32 || normalized.length % 4 !== 0) return false
+  return /^[a-zA-Z0-9+/=]+$/.test(normalized)
+}
+
+async function toQrDataUri(value: string | null): Promise<string | null> {
+  const qr = compactText(value, 250000)
   if (!qr) return null
   if (qr.startsWith('data:image')) return qr
-  return `data:image/png;base64,${qr}`
+  if (looksLikeBase64(qr)) return `data:image/png;base64,${qr}`
+
+  try {
+    // Evolution 2.x pode retornar apenas o payload textual em `code`.
+    return await QRCode.toDataURL(qr, {
+      errorCorrectionLevel: 'M',
+      margin: 1,
+      width: 384,
+    })
+  } catch {
+    return null
+  }
 }
 
 async function writeAuditLog(input: {
@@ -269,7 +287,7 @@ async function handleCreateInstance(authUserId: string, body: PayloadRecord) {
     mapping: upsertRes.data || null,
     qr: {
       base64: qrRes.data?.qrCodeBase64 || null,
-      data_uri: toQrDataUri(qrRes.data?.qrCodeBase64 || null),
+      data_uri: await toQrDataUri(qrRes.data?.qrCodeBase64 || null),
       pairing_code: qrRes.data?.pairingCode || null,
       status: qrRes.data?.connectionStatus || null,
       error: qrRes.ok ? null : qrRes.error,
@@ -300,7 +318,7 @@ async function handleFetchQr(body: PayloadRecord) {
     instance_name: normalizedInstanceName,
     qr: {
       base64: qrRes.data?.qrCodeBase64 || null,
-      data_uri: toQrDataUri(qrRes.data?.qrCodeBase64 || null),
+      data_uri: await toQrDataUri(qrRes.data?.qrCodeBase64 || null),
       pairing_code: qrRes.data?.pairingCode || null,
       status: qrRes.data?.connectionStatus || null,
     },

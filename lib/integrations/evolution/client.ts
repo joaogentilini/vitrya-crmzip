@@ -123,15 +123,21 @@ function extractQrBase64(body: unknown): string | null {
   const root = asRecord(body)
   const candidates = [
     root.base64,
+    root.code,
     root.qrcode,
     root.qr,
     asRecord(root.qrcode).base64,
+    asRecord(root.qrcode).code,
     asRecord(root.qrCode).base64,
+    asRecord(root.qrCode).code,
     asRecord(root.data).base64,
+    asRecord(root.data).code,
     asRecord(root.data).qrcode,
     asRecord(asRecord(root.data).qrcode).base64,
+    asRecord(asRecord(root.data).qrcode).code,
     asRecord(root.instance).qrcode,
     asRecord(asRecord(root.instance).qrcode).base64,
+    asRecord(asRecord(root.instance).qrcode).code,
   ]
 
   for (const candidate of candidates) {
@@ -413,7 +419,9 @@ async function connectWithMethod(
 
 export async function fetchEvolutionQr(instanceName: string): Promise<EvolutionApiResult<EvolutionQrResult>> {
   const byGet = await connectWithMethod(instanceName, 'GET')
-  if (byGet.ok) return byGet
+  const hasUsefulDataByGet =
+    Boolean(byGet.data?.qrCodeBase64) || Boolean(byGet.data?.pairingCode) || Boolean(byGet.data?.connectionStatus)
+  if (byGet.ok && hasUsefulDataByGet) return byGet
 
   const byPost = await connectWithMethod(instanceName, 'POST')
   if (byPost.ok) return byPost
