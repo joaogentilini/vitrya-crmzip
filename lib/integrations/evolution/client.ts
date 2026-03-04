@@ -15,6 +15,13 @@ export type EvolutionQrResult = {
   raw: unknown
 }
 
+export type EvolutionCreateInstanceResult = {
+  qrCodeBase64: string | null
+  pairingCode: string | null
+  connectionStatus: string | null
+  raw: PayloadRecord
+}
+
 export type EvolutionApiResult<T> = {
   ok: boolean
   status: number
@@ -124,20 +131,30 @@ function extractQrBase64(body: unknown): string | null {
   const candidates = [
     root.base64,
     root.code,
+    root.qrOrCode,
+    root.qr_or_code,
     root.qrcode,
     root.qr,
     asRecord(root.qrcode).base64,
     asRecord(root.qrcode).code,
+    asRecord(root.qrcode).qrOrCode,
     asRecord(root.qrCode).base64,
     asRecord(root.qrCode).code,
+    asRecord(root.qrCode).qrOrCode,
+    asRecord(root.response).base64,
+    asRecord(root.response).code,
+    asRecord(root.response).qrOrCode,
     asRecord(root.data).base64,
     asRecord(root.data).code,
+    asRecord(root.data).qrOrCode,
     asRecord(root.data).qrcode,
     asRecord(asRecord(root.data).qrcode).base64,
     asRecord(asRecord(root.data).qrcode).code,
+    asRecord(asRecord(root.data).qrcode).qrOrCode,
     asRecord(root.instance).qrcode,
     asRecord(asRecord(root.instance).qrcode).base64,
     asRecord(asRecord(root.instance).qrcode).code,
+    asRecord(asRecord(root.instance).qrcode).qrOrCode,
   ]
 
   for (const candidate of candidates) {
@@ -153,9 +170,16 @@ function extractPairingCode(body: unknown): string | null {
     root.pairingCode,
     root.pairing_code,
     root.code,
+    root.pairingcode,
+    asRecord(root.response).pairingCode,
+    asRecord(root.response).pairing_code,
+    asRecord(root.response).code,
     asRecord(root.data).pairingCode,
     asRecord(root.data).pairing_code,
     asRecord(root.data).code,
+    asRecord(asRecord(root.data).response).pairingCode,
+    asRecord(asRecord(root.data).response).pairing_code,
+    asRecord(asRecord(root.data).response).code,
   ]
   for (const candidate of candidates) {
     const normalized = compactText(candidate, 240)
@@ -171,10 +195,17 @@ function extractConnectionStatus(body: unknown): string | null {
     root.connection_status,
     root.status,
     asRecord(root.state).status,
+    asRecord(root.response).connectionStatus,
+    asRecord(root.response).connection_status,
+    asRecord(root.response).status,
     asRecord(root.instance).connectionStatus,
     asRecord(root.instance).status,
+    asRecord(asRecord(root.instance).state).status,
     asRecord(root.data).connectionStatus,
     asRecord(root.data).status,
+    asRecord(asRecord(root.data).instance).connectionStatus,
+    asRecord(asRecord(root.data).instance).status,
+    asRecord(asRecord(root.data).state).status,
   ]
   for (const candidate of candidates) {
     const normalized = compactText(candidate, 80)
@@ -370,7 +401,7 @@ export async function listEvolutionInstances(): Promise<EvolutionApiResult<Evolu
 
 export async function createEvolutionInstance(input: {
   instanceName: string
-}): Promise<EvolutionApiResult<PayloadRecord>> {
+}): Promise<EvolutionApiResult<EvolutionCreateInstanceResult>> {
   const createPath = normalizePath(process.env.EVOLUTION_CREATE_INSTANCE_PATH, '/instance/create')
   const webhookUrl = String(process.env.EVOLUTION_WEBHOOK_URL || '').trim()
   const webhookUrlWithToken = webhookUrl ? withOptionalWebhookToken(webhookUrl) : null
@@ -391,22 +422,32 @@ export async function createEvolutionInstance(input: {
     }
   }
 
-  return evolutionRequest<PayloadRecord>({
+  return evolutionRequest<EvolutionCreateInstanceResult>({
     path: createPath,
     method: 'POST',
     body,
-    parser: (raw) => asRecord(raw),
+    parser: (raw) => ({
+      qrCodeBase64: extractQrBase64(raw),
+      pairingCode: extractPairingCode(raw),
+      connectionStatus: extractConnectionStatus(raw),
+      raw: asRecord(raw),
+    }),
   })
 }
 
 async function connectWithMethod(
   instanceName: string,
-  method: 'GET' | 'POST'
+  method: 'GET' | 'POST',
+  phoneNumber?: string | null
 ): Promise<EvolutionApiResult<EvolutionQrResult>> {
   const connectPathTemplate = normalizePath(process.env.EVOLUTION_CONNECT_INSTANCE_PATH, '/instance/connect/{instance}')
   const connectPath = connectPathTemplate.replace('{instance}', encodeURIComponent(instanceName))
+  const normalizedNumber = compactText(phoneNumber, 40)
+  const pathWithQuery = normalizedNumber
+    ? `${connectPath}${connectPath.includes('?') ? '&' : '?'}number=${encodeURIComponent(normalizedNumber)}`
+    : connectPath
   return evolutionRequest<EvolutionQrResult>({
-    path: connectPath,
+    path: pathWithQuery,
     method,
     parser: (raw) => ({
       qrCodeBase64: extractQrBase64(raw),
@@ -417,13 +458,22 @@ async function connectWithMethod(
   })
 }
 
-export async function fetchEvolutionQr(instanceName: string): Promise<EvolutionApiResult<EvolutionQrResult>> {
-  const byGet = await connectWithMethod(instanceName, 'GET')
+function hasUsefulQrData(value: EvolutionQrResult | null | undefined): boolean {
+  return Boolean(value?.qrCodeBase64) || Boolean(value?.pairingCode) || Boolean(value?.connectionStatus)
+}
+
+export async function fetchEvolutionQr(
+  instanceName: string,
+  phoneNumber?: string | null
+): Promise<EvolutionApiResult<EvolutionQrResult>> {
+  const byGet = await connectWithMethod(instanceName, 'GET', phoneNumber)
   const hasUsefulDataByGet =
-    Boolean(byGet.data?.qrCodeBase64) || Boolean(byGet.data?.pairingCode) || Boolean(byGet.data?.connectionStatus)
+    hasUsefulQrData(byGet.data)
   if (byGet.ok && hasUsefulDataByGet) return byGet
 
-  const byPost = await connectWithMethod(instanceName, 'POST')
+  const byPost = await connectWithMethod(instanceName, 'POST', phoneNumber)
+  if (byPost.ok && hasUsefulQrData(byPost.data)) return byPost
+  if (byGet.ok) return byGet
   if (byPost.ok) return byPost
 
   return byGet

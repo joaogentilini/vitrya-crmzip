@@ -94,6 +94,11 @@ function statusVariant(status: string | null): 'success' | 'warning' | 'destruct
   return 'secondary'
 }
 
+function isConnectedStatus(status: string | null): boolean {
+  const normalized = String(status || '').trim().toLowerCase()
+  return normalized === 'open' || normalized === 'connected' || normalized === 'online' || normalized === 'ready'
+}
+
 export function WhatsappSettingsClient({
   schemaMissing,
   schemaErrorMessage,
@@ -216,15 +221,17 @@ export function WhatsappSettingsClient({
     }
   }
 
-  async function fetchQr(instanceName: string) {
+  async function fetchQr(instanceName: string, phoneNumber?: string | null) {
     setRowBusy(instanceName)
     try {
+      const normalizedPhone = compactText(String(phoneNumber || ''), 40)
       const res = await fetch('/api/admin/integrations/whatsapp/evolution', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           action: 'fetch_qr',
           instance_name: instanceName,
+          phone_number: normalizedPhone || null,
         }),
       })
       const json = await res.json().catch(() => ({}))
@@ -400,7 +407,9 @@ export function WhatsappSettingsClient({
               />
             ) : (
               <p className="text-sm text-[var(--muted-foreground)]">
-                QR nao retornado pela API. Use o pairing code (se disponivel) ou tente atualizar QR.
+                {isConnectedStatus(qr.status)
+                  ? 'A instancia parece conectada; a Evolution pode nao disponibilizar QR enquanto estiver online.'
+                  : 'QR nao retornado pela API. Use o pairing code (se disponivel) ou tente atualizar QR.'}
               </p>
             )}
           </CardContent>
@@ -444,6 +453,10 @@ export function WhatsappSettingsClient({
                     const broker = row.broker_user_id ? brokerById.get(row.broker_user_id) : null
                     const remote = remoteByInstance.get(instanceName)
                     const remoteStatus = remote?.connectionStatus || null
+                    const mappedPhone =
+                      row.settings && typeof row.settings.phone_number === 'string'
+                        ? compactText(String(row.settings.phone_number), 40)
+                        : ''
                     return (
                       <tr key={row.id} className="border-t border-[var(--border)]">
                         <td className="px-2 py-2">
@@ -479,7 +492,7 @@ export function WhatsappSettingsClient({
                               size="sm"
                               variant="outline"
                               loading={rowBusy === instanceName}
-                              onClick={() => fetchQr(instanceName)}
+                              onClick={() => fetchQr(instanceName, mappedPhone)}
                             >
                               QR
                             </Button>

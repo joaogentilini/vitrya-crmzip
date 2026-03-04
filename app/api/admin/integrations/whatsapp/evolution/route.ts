@@ -50,6 +50,20 @@ function compactText(value: unknown, limit = 240): string | null {
   return normalized.slice(0, limit)
 }
 
+function connectionStatusFromPayload(value: unknown): string | null {
+  const root = asRecord(value)
+  return (
+    compactText(root.connectionStatus, 80) ||
+    compactText(root.connection_status, 80) ||
+    compactText(root.status, 80) ||
+    compactText(asRecord(root.instance).connectionStatus, 80) ||
+    compactText(asRecord(root.instance).status, 80) ||
+    compactText(asRecord(root.state).status, 80) ||
+    compactText(asRecord(root.data).connectionStatus, 80) ||
+    compactText(asRecord(root.data).status, 80)
+  )
+}
+
 function isSchemaMissingError(code: string | null | undefined, message: string | null | undefined): boolean {
   const normalizedCode = String(code || '')
   const normalizedMessage = String(message || '').toLowerCase()
@@ -236,8 +250,12 @@ async function handleCreateInstance(authUserId: string, body: PayloadRecord) {
     return NextResponse.json({ error: createRes.error || 'Falha ao criar instancia na Evolution.' }, { status: 502 })
   }
 
-  const qrRes = await fetchEvolutionQr(normalizedInstanceName)
+  const qrRes = await fetchEvolutionQr(normalizedInstanceName, phoneNumber)
   const stateRes = await fetchEvolutionConnectionState(normalizedInstanceName)
+  const stateStatus = stateRes.ok ? connectionStatusFromPayload(stateRes.data) : null
+  const qrPayload = qrRes.data?.qrCodeBase64 || createRes.data?.qrCodeBase64 || null
+  const qrPairingCode = qrRes.data?.pairingCode || createRes.data?.pairingCode || null
+  const qrStatus = qrRes.data?.connectionStatus || createRes.data?.connectionStatus || stateStatus
 
   const existing = await readExistingMapping(normalizedInstanceName)
   const mergedSettings: PayloadRecord = {
@@ -286,10 +304,10 @@ async function handleCreateInstance(authUserId: string, body: PayloadRecord) {
     instance_name: normalizedInstanceName,
     mapping: upsertRes.data || null,
     qr: {
-      base64: qrRes.data?.qrCodeBase64 || null,
-      data_uri: await toQrDataUri(qrRes.data?.qrCodeBase64 || null),
-      pairing_code: qrRes.data?.pairingCode || null,
-      status: qrRes.data?.connectionStatus || null,
+      base64: qrPayload,
+      data_uri: await toQrDataUri(qrPayload),
+      pairing_code: qrPairingCode,
+      status: qrStatus,
       error: qrRes.ok ? null : qrRes.error,
     },
     connection_state: stateRes.ok ? stateRes.data : null,
@@ -306,8 +324,10 @@ async function handleFetchQr(body: PayloadRecord) {
     return NextResponse.json({ error: 'EVOLUTION_API_ENABLED desabilitado.' }, { status: 503 })
   }
 
-  const qrRes = await fetchEvolutionQr(normalizedInstanceName)
+  const phoneNumber = compactText(body.phone_number, 40)
+  const qrRes = await fetchEvolutionQr(normalizedInstanceName, phoneNumber)
   const stateRes = await fetchEvolutionConnectionState(normalizedInstanceName)
+  const stateStatus = stateRes.ok ? connectionStatusFromPayload(stateRes.data) : null
 
   if (!qrRes.ok) {
     return NextResponse.json({ error: qrRes.error || 'Falha ao buscar QR da instancia.' }, { status: 502 })
@@ -320,7 +340,7 @@ async function handleFetchQr(body: PayloadRecord) {
       base64: qrRes.data?.qrCodeBase64 || null,
       data_uri: await toQrDataUri(qrRes.data?.qrCodeBase64 || null),
       pairing_code: qrRes.data?.pairingCode || null,
-      status: qrRes.data?.connectionStatus || null,
+      status: qrRes.data?.connectionStatus || stateStatus,
     },
     connection_state: stateRes.ok ? stateRes.data : null,
   })
