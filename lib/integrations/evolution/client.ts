@@ -376,9 +376,13 @@ export async function createEvolutionInstance(input: {
   }
 
   if (webhookUrlWithToken) {
-    body.webhook = webhookUrlWithToken
-    body.webhook_by_events = true
-    body.events = ['MESSAGES_UPSERT', 'CONNECTION_UPDATE']
+    body.webhook = {
+      enabled: true,
+      url: webhookUrlWithToken,
+      byEvents: true,
+      base64: false,
+      events: ['MESSAGES_UPSERT', 'CONNECTION_UPDATE'],
+    }
   }
 
   return evolutionRequest<PayloadRecord>({
