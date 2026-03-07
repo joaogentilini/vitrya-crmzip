@@ -521,6 +521,15 @@ export function AppShell({
                   ),
                 },
                 {
+                  href: '/erp/financeiro/locacoes',
+                  label: 'Locacoes',
+                  icon: (
+                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10l9-7 9 7v10a1 1 0 01-1 1h-5v-6H9v6H4a1 1 0 01-1-1V10z" />
+                    </svg>
+                  ),
+                },
+                {
                   href: '/erp/relatorios',
                   label: 'Relatórios',
                   icon: (
