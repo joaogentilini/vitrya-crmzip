@@ -4,6 +4,11 @@ import {
   normalizeEvolutionInstanceName,
   sendEvolutionTextMessage,
 } from '@/lib/integrations/evolution/client'
+import {
+  isOpenClawApiEnabled,
+  normalizeOpenClawAccountId,
+  sendOpenClawTextMessage,
+} from '@/lib/integrations/openclaw/client'
 import { createClient } from '@/lib/supabaseServer'
 
 export type ChatChannel = 'whatsapp' | 'instagram' | 'facebook' | 'olx' | 'grupoolx' | 'meta' | 'other'
@@ -456,6 +461,14 @@ type WhatsappDispatchResult = {
   error: string | null
 }
 
+type OpenClawDispatchResult = {
+  ok: boolean
+  status: 'sent' | 'skipped' | 'failed'
+  providerMessageId: string | null
+  payload: Record<string, unknown>
+  error: string | null
+}
+
 function normalizeDigits(value: string | null | undefined): string | null {
   const digits = String(value || '').replace(/\D/g, '')
   return digits || null
@@ -500,6 +513,143 @@ function parseConversationExternalId(value: string | null | undefined): {
   return {
     instanceName: null,
     remoteRef: externalId,
+  }
+}
+
+function shouldUseOpenClawProvider(conversation: OutboundConversationRow): boolean {
+  const metadata = asRecord(conversation.metadata)
+  const provider = compactText(String(metadata.provider || ''), 40)
+  const source = compactText(String(metadata.source || ''), 80)
+
+  return (
+    String(provider || '').trim().toLowerCase() === 'openclaw' ||
+    String(source || '').trim().toLowerCase() === 'openclaw' ||
+    String(source || '').trim().toLowerCase() === 'openclaw_webhook'
+  )
+}
+
+function resolveOpenClawAccountId(conversation: OutboundConversationRow): string | null {
+  const metadata = asRecord(conversation.metadata)
+
+  const accountCandidates = [
+    compactText(String(metadata.account_id || ''), 120),
+    compactText(String(metadata.accountId || ''), 120),
+    compactText(String(metadata.recipient_account_id || ''), 120),
+    compactText(String(metadata.recipientAccountId || ''), 120),
+    compactText(String(metadata.channel_account_id || ''), 120),
+  ]
+
+  const external = parseConversationExternalId(conversation.external_conversation_id)
+  if (external.instanceName) {
+    accountCandidates.push(compactText(external.instanceName, 120))
+  }
+
+  for (const raw of accountCandidates) {
+    const normalized = normalizeOpenClawAccountId(String(raw || ''))
+    if (!normalized) continue
+    return normalized.startsWith('openclaw:') ? normalized.slice('openclaw:'.length) : normalized
+  }
+
+  return null
+}
+
+function resolveOpenClawRecipient(conversation: OutboundConversationRow): string | null {
+  const metadata = asRecord(conversation.metadata)
+  const external = parseConversationExternalId(conversation.external_conversation_id)
+
+  const candidates = [
+    compactText(String(metadata.sender_external_id || ''), 180),
+    compactText(String(metadata.senderExternalId || ''), 180),
+    compactText(String(metadata.remote_jid || ''), 180),
+    compactText(String(metadata.phone_e164 || ''), 180),
+    compactText(external.remoteRef || '', 180),
+  ]
+
+  for (const candidate of candidates) {
+    if (!candidate) continue
+    if (candidate.includes(':')) continue
+    return candidate
+  }
+
+  return null
+}
+
+async function dispatchOpenClawMessage(input: {
+  conversation: OutboundConversationRow
+  channel: ChatChannel
+  text: string
+  payload: Record<string, unknown>
+}): Promise<OpenClawDispatchResult> {
+  if (!isOpenClawApiEnabled()) {
+    return {
+      ok: true,
+      status: 'skipped',
+      providerMessageId: null,
+      payload: {
+        ...(input.payload || {}),
+        provider: 'local_only',
+        reason: 'OPENCLAW_API_ENABLED desabilitado',
+      },
+      error: null,
+    }
+  }
+
+  const accountId = resolveOpenClawAccountId(input.conversation)
+  const toExternalId = resolveOpenClawRecipient(input.conversation)
+  const externalConversationId = compactText(input.conversation.external_conversation_id, 180)
+
+  if (!externalConversationId && !toExternalId) {
+    return {
+      ok: false,
+      status: 'failed',
+      providerMessageId: null,
+      payload: {
+        ...(input.payload || {}),
+        provider: 'openclaw',
+        reason: 'conversation_or_recipient_not_found',
+      },
+      error: 'Nao foi possivel identificar conversa ou destinatario da mensagem.',
+    }
+  }
+
+  const sendRes = await sendOpenClawTextMessage({
+    channel: input.channel,
+    text: input.text,
+    accountId,
+    externalConversationId,
+    toExternalId,
+  })
+
+  if (!sendRes.ok || !sendRes.data) {
+    return {
+      ok: false,
+      status: 'failed',
+      providerMessageId: null,
+      payload: {
+        ...(input.payload || {}),
+        provider: 'openclaw',
+        account_id: accountId,
+        conversation_id: externalConversationId,
+        to_external_id: toExternalId,
+        response: sendRes.raw,
+      },
+      error: sendRes.error || 'Falha ao enviar mensagem pela OpenClaw.',
+    }
+  }
+
+  return {
+    ok: true,
+    status: 'sent',
+    providerMessageId: compactText(sendRes.data.providerMessageId, 190),
+    payload: {
+      ...(input.payload || {}),
+      provider: 'openclaw',
+      account_id: accountId,
+      conversation_id: sendRes.data.externalConversationId || externalConversationId,
+      to_external_id: toExternalId,
+      response: sendRes.data.raw,
+    },
+    error: null,
   }
 }
 
@@ -694,7 +844,18 @@ export async function appendOutboundMessage(params: {
   let payload: Record<string, unknown> = params.payload || {}
   let dispatchError: string | null = null
 
-  if (channel === 'whatsapp' && text) {
+  if (text && shouldUseOpenClawProvider(conversation)) {
+    const dispatch = await dispatchOpenClawMessage({
+      conversation,
+      channel,
+      text,
+      payload,
+    })
+    status = dispatch.status === 'failed' ? 'failed' : dispatch.status === 'skipped' ? 'sent' : 'sent'
+    providerMessageId = dispatch.providerMessageId
+    payload = dispatch.payload
+    dispatchError = dispatch.error
+  } else if (channel === 'whatsapp' && text) {
     const dispatch = await dispatchWhatsappEvolutionMessage({
       conversation,
       text,
@@ -706,7 +867,15 @@ export async function appendOutboundMessage(params: {
     dispatchError = dispatch.error
   }
 
-  if (channel === 'whatsapp' && !text && mediaUrl) {
+  if (shouldUseOpenClawProvider(conversation) && !text && mediaUrl) {
+    status = 'failed'
+    dispatchError = 'Envio de midia via OpenClaw ainda nao foi habilitado neste fluxo.'
+    payload = {
+      ...(payload || {}),
+      provider: 'openclaw',
+      reason: 'media_not_supported',
+    }
+  } else if (channel === 'whatsapp' && !text && mediaUrl) {
     status = 'failed'
     dispatchError = 'Envio de midia via Evolution ainda nao foi habilitado neste fluxo.'
     payload = {

@@ -29,6 +29,13 @@ EVOLUTION_WEBHOOK_URL=https://crm.seu-dominio.com/api/integrations/whatsapp/evol
 EVOLUTION_WEBHOOK_ENABLED=1
 EVOLUTION_WEBHOOK_TOKEN=troque-este-token-webhook
 EVOLUTION_SEND_TEXT_PATH=/message/sendText/{instance}
+OPENCLAW_API_ENABLED=0
+OPENCLAW_API_BASE_URL=https://api.openclaw.seu-dominio.com
+OPENCLAW_API_KEY=troque-este-token
+OPENCLAW_SEND_TEXT_PATH=/messages/send
+OPENCLAW_WEBHOOK_ENABLED=1
+OPENCLAW_WEBHOOK_TOKEN=troque-este-token-webhook
+# OPENCLAW_WEBHOOK_SECRET=opcional-hmac-secret
 # Futuro (OAuth OLX)
 # OLX_CLIENT_ID=...
 # OLX_CLIENT_SECRET=...
