@@ -1,0 +1,22 @@
+{
+  "permissions": {
+    "allow": [
+      "WebFetch(domain:github.com)",
+      "Bash(find /c/Users/Usuario/Documents/vitrya/app -type d -name \"\\(crm\\)\")",
+      "Bash(ls -la /c/Users/Usuario/Documents/vitrya/app/\\\\\\(crm\\\\\\)/)",
+      "Bash(ls -la /c/Users/Usuario/Documents/vitrya/app/\\\\\\(crm\\\\\\)/dashboard/)",
+      "Bash(ls -la /c/Users/Usuario/Documents/vitrya/app/\\\\\\(crm\\\\\\)/settings/)",
+      "Bash(cat /c/Users/Usuario/Documents/vitrya/app/\\\\\\(crm\\\\\\)/dashboard/page.tsx)",
+      "Bash(grep -l \"chat_channel_accounts\" /c/Users/Usuario/Documents/vitrya/.claude/worktrees/modest-mayer/supabase/migrations/*.sql)",
+      "Bash(find /c/Users/Usuario/Documents/vitrya/.claude/worktrees/modest-mayer/app -type d -name \"\\(crm\\)\")",
+      "Bash(ls -la /c/Users/Usuario/Documents/vitrya/.claude/worktrees/modest-mayer/app/\\\\\\(crm\\\\\\)/)",
+      "Bash(grep -l \"chat_conversations\\\\|chat_messages\" /c/Users/Usuario/Documents/vitrya/.claude/worktrees/modest-mayer/supabase/migrations/*.sql)",
+      "Bash(ls -la /c/Users/Usuario/Documents/vitrya/.claude/worktrees/modest-mayer/app/\\\\\\(crm\\\\\\)/settings/)",
+      "Bash(grep -l \"portal_lead_links\" /c/Users/Usuario/Documents/vitrya/.claude/worktrees/modest-mayer/supabase/migrations/*.sql)",
+      "Bash(wc -l /c/Users/Usuario/Documents/vitrya/.claude/worktrees/modest-mayer/app/\\\\\\(crm\\\\\\)/dashboard/DashboardClient.tsx)",
+      "Bash(git add app/\\\\\\(crm\\\\\\)/operacional/)",
+      "Bash(git add components/layout/AppShell.tsx)",
+      "Bash(curl -s http://localhost:3000/operacional)"
+    ]
+  }
+}
