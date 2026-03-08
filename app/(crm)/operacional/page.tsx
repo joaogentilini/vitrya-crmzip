@@ -148,7 +148,7 @@ async function getOperacionalData(userId: string, isManager: boolean, filterBrok
             grupoolx: false,
             meta: false,
           }
-          data?.forEach((integration) => {
+          data?.forEach((integration: any) => {
             status[integration.provider] = integration.is_enabled
           })
           return status
