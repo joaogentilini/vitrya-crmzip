@@ -15,7 +15,8 @@
       "Bash(grep -l \"portal_lead_links\" /c/Users/Usuario/Documents/vitrya/.claude/worktrees/modest-mayer/supabase/migrations/*.sql)",
       "Bash(wc -l /c/Users/Usuario/Documents/vitrya/.claude/worktrees/modest-mayer/app/\\\\\\(crm\\\\\\)/dashboard/DashboardClient.tsx)",
       "Bash(git add app/\\\\\\(crm\\\\\\)/operacional/)",
-      "Bash(git add components/layout/AppShell.tsx)"
+      "Bash(git add components/layout/AppShell.tsx)",
+      "Bash(curl -s http://localhost:3000/operacional)"
     ]
   }
 }
