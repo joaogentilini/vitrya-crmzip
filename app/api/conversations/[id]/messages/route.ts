@@ -4,13 +4,13 @@ import { requireActiveUser } from '@/lib/auth'
 
 export async function GET(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const user = await requireActiveUser()
     const supabase = await createClient()
 
-    const { id: conversationId } = params
+    const { id: conversationId } = await params
 
     // Fetch conversation to verify access
     const { data: conversation, error: convError } = await supabase
