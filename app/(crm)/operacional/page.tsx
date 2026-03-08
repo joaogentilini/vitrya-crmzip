@@ -32,7 +32,7 @@ async function getOperacionalData(userId: string, isManager: boolean, filterBrok
         .then(({ count: newLeads }: { count: number | null }) => ({
           newLeads: newLeads || 0,
         }))
-        .then(async (kpi) => {
+        .then(async (kpi: { newLeads: number }) => {
           const { count: openConversations } = (await supabase
             .from('chat_conversations')
             .select('id', { count: 'exact' })
