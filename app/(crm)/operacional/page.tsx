@@ -77,7 +77,8 @@ async function getOperacionalData(userId: string, isManager: boolean, filterBrok
         .in('status', ['open', 'pending'])
         .order('last_message_at', { ascending: false })
         .limit(50)
-        .then(({ data, error }) => {
+        .then((result: any) => {
+          const { data, error } = result
           if (error) {
             console.error('Error fetching conversations:', error)
             return []
@@ -115,7 +116,8 @@ async function getOperacionalData(userId: string, isManager: boolean, filterBrok
         .gte('created_at', new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString())
         .order('created_at', { ascending: false })
         .limit(20)
-        .then(({ data, error }) => {
+        .then((result: any) => {
+          const { data, error } = result
           if (error) {
             console.error('Error fetching portal leads:', error)
             return []
@@ -137,7 +139,8 @@ async function getOperacionalData(userId: string, isManager: boolean, filterBrok
       supabase
         .from('portal_integrations')
         .select('provider, is_enabled')
-        .then(({ data, error }) => {
+        .then((result: any) => {
+          const { data, error } = result
           if (error) return {}
           const status: Record<string, boolean> = {
             evolution: true, // Assume habilitado se está rodando
@@ -157,7 +160,7 @@ async function getOperacionalData(userId: string, isManager: boolean, filterBrok
             .from('profiles')
             .select('id, email, full_name')
             .eq('role', 'corretor')
-            .then(({ data }) => data || [])
+            .then((result: any) => result.data || [])
         : Promise.resolve([]),
 
       // Properties para converter leads
@@ -165,7 +168,8 @@ async function getOperacionalData(userId: string, isManager: boolean, filterBrok
         .from('properties')
         .select('id, title')
         .limit(100)
-        .then(({ data, error }) => {
+        .then((result: any) => {
+          const { data, error } = result
           if (error) {
             console.error('Error fetching properties:', error)
             return []
@@ -178,7 +182,8 @@ async function getOperacionalData(userId: string, isManager: boolean, filterBrok
         .from('profiles')
         .select('id, full_name, email')
         .eq('role', 'corretor')
-        .then(({ data, error }) => {
+        .then((result: any) => {
+          const { data, error } = result
           if (error) {
             console.error('Error fetching brokers:', error)
             return []
