@@ -1,6 +1,7 @@
 'use client'
 
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect } from 'react'
+import { sendQuickReplyAction } from '../actions'
 
 interface Conversation {
   id: string
@@ -15,6 +16,15 @@ interface Conversation {
   leadTitle?: string
   personName?: string
   propertyTitle?: string
+}
+
+interface Message {
+  id: string
+  content: string
+  direction: 'inbound' | 'outbound'
+  senderId: string
+  occurredAt: string
+  senderName?: string
 }
 
 interface UnifiedInboxProps {
@@ -41,6 +51,10 @@ export function UnifiedInbox({
   const [filterChannel, setFilterChannel] = useState<string>('all')
   const [filterStatus, setFilterStatus] = useState<string>('all')
   const [searchQuery, setSearchQuery] = useState('')
+  const [messages, setMessages] = useState<Message[]>([])
+  const [loading, setLoading] = useState(false)
+  const [replyText, setReplyText] = useState('')
+  const [sending, setSending] = useState(false)
 
   // Filtrar conversas
   const filteredConversations = useMemo(() => {
@@ -58,6 +72,46 @@ export function UnifiedInbox({
   }, [conversations, filterChannel, filterStatus, searchQuery])
 
   const selectedConversation = conversations.find((c) => c.id === selectedConversationId)
+
+  // Carregar mensagens quando conversa é selecionada
+  useEffect(() => {
+    if (!selectedConversationId) {
+      setMessages([])
+      return
+    }
+
+    setLoading(true)
+    // Simular carregamento de mensagens (Fase 2: integrar com API real)
+    fetch(`/api/conversations/${selectedConversationId}/messages`)
+      .then((res) => res.json())
+      .then((data) => {
+        setMessages(data.messages || [])
+      })
+      .catch((error) => {
+        console.error('Erro ao carregar mensagens:', error)
+        // Fallback: mostrar mensagem vazia
+        setMessages([])
+      })
+      .finally(() => setLoading(false))
+  }, [selectedConversationId])
+
+  const handleSendReply = async () => {
+    if (!replyText.trim() || !selectedConversationId) return
+
+    setSending(true)
+    try {
+      const result = await sendQuickReplyAction(selectedConversationId, replyText)
+      if (result.success) {
+        setReplyText('')
+        // Recarregar mensagens
+        const res = await fetch(`/api/conversations/${selectedConversationId}/messages`)
+        const data = await res.json()
+        setMessages(data.messages || [])
+      }
+    } finally {
+      setSending(false)
+    }
+  }
 
   return (
     <div className="flex h-full overflow-hidden">
@@ -174,22 +228,62 @@ export function UnifiedInbox({
               )}
             </div>
 
-            {/* Mensagens (placeholder - Fase 2) */}
-            <div className="flex-1 flex items-center justify-center text-center text-[var(--muted-foreground)]">
-              <div>
-                <p className="text-2xl mb-2">💭</p>
-                <p className="text-sm">Histórico de mensagens será carregado na Fase 2</p>
-              </div>
+            {/* Mensagens */}
+            <div className="flex-1 overflow-y-auto space-y-3 mb-3">
+              {loading ? (
+                <div className="flex h-full items-center justify-center text-[var(--muted-foreground)]">
+                  <div className="text-center">
+                    <p className="text-2xl mb-2">⏳</p>
+                    <p className="text-sm">Carregando mensagens...</p>
+                  </div>
+                </div>
+              ) : messages.length === 0 ? (
+                <div className="flex h-full items-center justify-center text-[var(--muted-foreground)]">
+                  <div className="text-center">
+                    <p className="text-2xl mb-2">💬</p>
+                    <p className="text-sm">Nenhuma mensagem ainda</p>
+                  </div>
+                </div>
+              ) : (
+                messages.map((msg) => (
+                  <div
+                    key={msg.id}
+                    className={`flex ${msg.direction === 'outbound' ? 'justify-end' : 'justify-start'}`}
+                  >
+                    <div
+                      className={`max-w-xs rounded-lg px-3 py-2 text-sm ${
+                        msg.direction === 'outbound'
+                          ? 'bg-[var(--ring)] text-white'
+                          : 'bg-[var(--accent)] text-[var(--foreground)]'
+                      }`}
+                    >
+                      <p>{msg.content}</p>
+                      <p className={`text-xs mt-1 ${msg.direction === 'outbound' ? 'text-white/70' : 'text-[var(--muted-foreground)]'}`}>
+                        {new Date(msg.occurredAt).toLocaleTimeString('pt-BR')}
+                      </p>
+                    </div>
+                  </div>
+                ))
+              )}
             </div>
 
-            {/* Input resposta (placeholder - Fase 2) */}
-            <div className="border-t border-[var(--border)] pt-3">
+            {/* Input resposta */}
+            <div className="border-t border-[var(--border)] pt-3 space-y-2">
               <textarea
-                placeholder="Enviar resposta... (ativado na Fase 2)"
-                disabled
-                className="w-full rounded border border-[var(--border)] bg-[var(--accent)] px-3 py-2 text-sm text-[var(--muted-foreground)] placeholder-[var(--muted-foreground)]"
+                placeholder="Digitar resposta..."
+                value={replyText}
+                onChange={(e) => setReplyText(e.target.value)}
+                disabled={sending}
+                className="w-full rounded border border-[var(--border)] bg-[var(--card)] px-3 py-2 text-sm text-[var(--foreground)] placeholder-[var(--muted-foreground)] disabled:opacity-50"
                 rows={3}
               />
+              <button
+                onClick={handleSendReply}
+                disabled={sending || !replyText.trim()}
+                className="w-full rounded bg-[var(--ring)] px-4 py-2 text-sm font-medium text-white hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {sending ? 'Enviando...' : 'Enviar'}
+              </button>
             </div>
           </>
         ) : (

@@ -46,6 +46,15 @@ interface OperacionalClientProps {
       email: string
       full_name: string
     }>
+    properties: Array<{
+      id: string
+      title: string
+    }>
+    brokers: Array<{
+      id: string
+      full_name: string
+      email: string
+    }>
   }
   isManager: boolean
   filterBrokerId?: string
@@ -132,7 +141,13 @@ export function OperacionalClient({
             />
           )}
 
-          {activeTab === 'leads' && <LeadsConverter portalLeads={data.portalLeads} />}
+          {activeTab === 'leads' && (
+            <LeadsConverter
+              portalLeads={data.portalLeads}
+              properties={data.properties}
+              brokers={data.brokers}
+            />
+          )}
 
           {activeTab === 'templates' && (
             <QuickActions

@@ -21,6 +21,8 @@ async function getOperacionalData(userId: string, isManager: boolean, filterBrok
       portalLeadsData,
       integrationStatusData,
       profilesData,
+      propertiesData,
+      brokersData,
     ] = await Promise.all([
       // KPI Data
       supabase
@@ -157,6 +159,32 @@ async function getOperacionalData(userId: string, isManager: boolean, filterBrok
             .eq('role', 'corretor')
             .then(({ data }) => data || [])
         : Promise.resolve([]),
+
+      // Properties para converter leads
+      supabase
+        .from('properties')
+        .select('id, title')
+        .limit(100)
+        .then(({ data, error }) => {
+          if (error) {
+            console.error('Error fetching properties:', error)
+            return []
+          }
+          return data || []
+        }),
+
+      // Corretores para atribuir leads
+      supabase
+        .from('profiles')
+        .select('id, full_name, email')
+        .eq('role', 'corretor')
+        .then(({ data, error }) => {
+          if (error) {
+            console.error('Error fetching brokers:', error)
+            return []
+          }
+          return data || []
+        }),
     ])
 
     return {
@@ -165,6 +193,8 @@ async function getOperacionalData(userId: string, isManager: boolean, filterBrok
       portalLeads: portalLeadsData,
       integrations: integrationStatusData,
       profiles: profilesData,
+      properties: propertiesData,
+      brokers: brokersData,
     }
   } catch (error) {
     console.error('Error fetching operacional data:', error)
