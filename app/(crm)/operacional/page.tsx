@@ -1,5 +1,5 @@
 import { Suspense } from 'react'
-import { requireActiveUser } from '@/lib/auth/server'
+import { requireActiveUser } from '@/lib/auth'
 import { createClient } from '@/lib/supabase/server'
 import { OperacionalClient } from './OperacionalClient'
 import { OperacionalSkeleton } from './components/OperacionalSkeleton'

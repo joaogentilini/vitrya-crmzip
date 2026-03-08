@@ -2,7 +2,7 @@
 
 import { revalidatePath } from 'next/cache'
 import { createClient } from '@/lib/supabase/server'
-import { requireActiveUser } from '@/lib/auth/server'
+import { requireActiveUser } from '@/lib/auth'
 
 export async function convertLeadAction(leadId: string, propertyId: string, brokerId: string) {
   const user = await requireActiveUser()
