@@ -84,7 +84,7 @@ async function getOperacionalData(userId: string, isManager: boolean, filterBrok
             return []
           }
           return (
-            data?.map((conv) => ({
+            data?.map((conv: any) => ({
               id: conv.id,
               channel: conv.channel,
               status: conv.status,
@@ -123,7 +123,7 @@ async function getOperacionalData(userId: string, isManager: boolean, filterBrok
             return []
           }
           return (
-            data?.map((link) => ({
+            data?.map((link: any) => ({
               id: link.id,
               provider: link.provider,
               externalLeadId: link.external_lead_id,
