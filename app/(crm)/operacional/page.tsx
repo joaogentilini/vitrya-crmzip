@@ -29,25 +29,25 @@ async function getOperacionalData(userId: string, isManager: boolean, filterBrok
         .from('leads')
         .select('id', { count: 'exact' })
         .gte('created_at', new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString())
-        .then(({ count: newLeads }) => ({
+        .then(({ count: newLeads }: { count: number | null }) => ({
           newLeads: newLeads || 0,
         }))
         .then(async (kpi) => {
-          const { count: openConversations } = await supabase
+          const { count: openConversations } = (await supabase
             .from('chat_conversations')
             .select('id', { count: 'exact' })
             .in('status', ['open', 'pending'])
-            .eq('broker_user_id', effectiveUserId)
-          const { count: pendingMessages } = await supabase
+            .eq('broker_user_id', effectiveUserId)) as { count: number | null }
+          const { count: pendingMessages } = (await supabase
             .from('chat_messages')
             .select('id', { count: 'exact' })
             .eq('direction', 'inbound')
-            .gte('created_at', new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString())
-          const { count: closedDeals } = await supabase
+            .gte('created_at', new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString())) as { count: number | null }
+          const { count: closedDeals } = (await supabase
             .from('property_proposals')
             .select('id', { count: 'exact' })
             .eq('status', 'approved')
-            .gte('updated_at', new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString())
+            .gte('updated_at', new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString())) as { count: number | null }
           return {
             newLeads: kpi.newLeads,
             openConversations: openConversations || 0,
