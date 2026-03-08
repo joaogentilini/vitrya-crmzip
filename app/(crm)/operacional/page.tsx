@@ -209,6 +209,8 @@ async function getOperacionalData(userId: string, isManager: boolean, filterBrok
       portalLeads: [],
       integrations: {},
       profiles: [],
+      properties: [],
+      brokers: [],
     }
   }
 }
